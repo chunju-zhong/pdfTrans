@@ -21,10 +21,15 @@ def merge_semantic_blocks(all_blocks):
     # 获取第一个块的TextBlock对象和文本
     first_block = all_blocks[0]
     first_text_block = first_block['text_block']
+    first_bbox = first_text_block.block_bbox
+    first_width = first_bbox[2] - first_bbox[0]  # x1 - x0
+    first_height = first_bbox[3] - first_bbox[1]  # y1 - y0
     
     current_merged = {
         'block_text': first_text_block.block_text,
-        'original_blocks': [first_block]  # 保留完整的块信息
+        'original_blocks': [first_block],  # 保留完整的块信息
+        'max_width': first_width,  # 初始化为第一个块的宽度
+        'max_height': first_height  # 初始化为第一个块的高度
     }
     
     for i in range(1, len(all_blocks)):
@@ -61,14 +66,27 @@ def merge_semantic_blocks(all_blocks):
                 current_merged['block_text'] = prev_text + curr_text
             
             current_merged['original_blocks'].append(curr_block_info)
+            
+            # 计算当前块的宽度和高度
+            curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
+            curr_height = curr_bbox[3] - curr_bbox[1]  # y1 - y0
+            
+            # 更新最大宽度和高度
+            current_merged['max_width'] = max(current_merged['max_width'], curr_width)
+            current_merged['max_height'] = max(current_merged['max_height'], curr_height)
         else:
             # 保存当前合并块
             merged_blocks.append(current_merged)
             block_mapping.append(current_merged['original_blocks'])
+            
             # 开始新的合并块
+            curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
+            curr_height = curr_bbox[3] - curr_bbox[1]  # y1 - y0
             current_merged = {
                 'block_text': curr_text_block.block_text,
-                'original_blocks': [curr_block_info]
+                'original_blocks': [curr_block_info],
+                'max_width': curr_width,
+                'max_height': curr_height
             }
     
     # 添加最后一个合并块

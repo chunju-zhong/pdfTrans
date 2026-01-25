@@ -1,5 +1,8 @@
 import threading
 import os
+import shutil
+import fitz  # PyMuPDF
+
 from modules.pdf_extractor import pdf_extractor
 from modules.baidu_translator import BaiduTranslator
 from modules.aiping_translator import AipingTranslator
@@ -16,8 +19,51 @@ logger = get_logger(__name__)
 
 # 翻译业务服务
 class TranslationService:
+    """翻译业务服务类，负责处理PDF文档的翻译流程"""
+    
     def __init__(self):
+        """初始化TranslationService对象"""
         pass
+    
+    def parse_page_range(self, page_range_str, total_pages):
+        """解析页码范围字符串，返回页码集合
+        
+        Args:
+            page_range_str (str): 页码范围字符串，格式如"1-5,7,9-10"
+            total_pages (int): PDF总页数
+            
+        Returns:
+            set: 包含所有指定页码的集合
+        """
+        if not page_range_str:
+            return set(range(1, total_pages + 1))
+        
+        pages = set()
+        ranges = page_range_str.split(',')
+        
+        for r in ranges:
+            r = r.strip()
+            if '-' in r:
+                # 处理页码范围，如1-5
+                try:
+                    start, end = map(int, r.split('-'))
+                    # 确保页码在有效范围内
+                    start = max(1, start)
+                    end = min(total_pages, end)
+                    if start <= end:
+                        pages.update(range(start, end + 1))
+                except ValueError:
+                    continue
+            else:
+                # 处理单个页码，如7
+                try:
+                    page = int(r)
+                    if 1 <= page <= total_pages:
+                        pages.add(page)
+                except ValueError:
+                    continue
+        
+        return pages
     
     def get_translator(self, translator_type):
         """根据翻译服务类型创建翻译器实例
@@ -65,6 +111,65 @@ class TranslationService:
             logger.info(f"开始处理任务 {task.task_id}，文件: {filename}")
             # 更新任务状态为处理中
             task.set_status('processing')
+            
+            # 优化：如果目标语言和源语言相同，直接拷贝原始页
+            if source_lang == target_lang:
+                logger.info(f"任务 {task.task_id} 源语言和目标语言相同，直接拷贝原始页")
+                task.update_progress(30, '正在准备输出文件...')
+                
+                # 生成输出文件路径
+                output_filename = f"translated_{unique_id}_{filename}"
+                output_filepath = os.path.join(config.OUTPUT_FOLDER, output_filename)
+                
+                # 提取PDF文本以获取总页数
+                extracted_content = pdf_extractor.extract_text(input_filepath)
+                total_pages = extracted_content.total_pages
+                
+                # 解析页码范围，获取需要拷贝的页码集合
+                target_pages = self.parse_page_range(page_range, total_pages)
+                logger.info(f"任务 {task.task_id} 总页数: {total_pages}, 需要拷贝的页码: {sorted(target_pages)}")
+                
+                # 如果页码范围为空或包含所有页面，直接拷贝整个文件
+                if len(target_pages) == 0 or len(target_pages) == total_pages:
+                    logger.info(f"任务 {task.task_id} 页码范围为空或包含所有页面，直接拷贝整个文件")
+                    shutil.copy(input_filepath, output_filepath)
+                else:
+                    # 使用PyMuPDF库只拷贝指定的页面
+                    logger.info(f"任务 {task.task_id} 开始拷贝指定页码的页面")
+                    
+                    # 打开原始PDF
+                    with fitz.open(input_filepath) as original_doc:
+                        # 创建新的PDF文档
+                        new_doc = fitz.open()
+                        
+                        # 拷贝指定的页面
+                        for page_num in sorted(target_pages):
+                            # 转换为原始文档的索引（从0开始）
+                            original_page_idx = page_num - 1
+                            # 跳过超出范围的页码
+                            if original_page_idx < 0 or original_page_idx >= len(original_doc):
+                                logger.warning(f"任务 {task.task_id} 页码 {page_num} 超出原始文档范围，跳过")
+                                continue
+                            # 克隆页面到新文档
+                            new_doc.insert_pdf(original_doc, from_page=original_page_idx, to_page=original_page_idx)
+                        
+                        # 保存新文档
+                        new_doc.save(output_filepath)
+                        new_doc.close()
+                    
+                    logger.info(f"任务 {task.task_id} 拷贝指定页码的页面完成，共拷贝 {len(target_pages)} 页")
+                
+                task.update_progress(90, '正在清理临时文件...')
+                # 清理临时文件
+                remove_file(input_filepath)
+                logger.info(f"任务 {task.task_id} 已清理临时文件")
+                
+                task.update_progress(100, '翻译完成！')
+                # 设置任务结果
+                task.set_result(output_filename)
+                logger.info(f"任务 {task.task_id} 完成，输出文件: {output_filename}")
+                return
+            
             task.update_progress(20, '正在提取PDF文本...')
             
             # 1. 提取PDF文本
@@ -78,50 +183,9 @@ class TranslationService:
                 logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
                 return
             
-            # 解析页码范围
-            def parse_page_range(page_range_str, total_pages):
-                """解析页码范围字符串，返回页码集合
-                
-                Args:
-                    page_range_str: 页码范围字符串，格式如"1-5,7,9-10"
-                    total_pages: PDF总页数
-                    
-                Returns:
-                    set: 包含所有指定页码的集合
-                """
-                if not page_range_str:
-                    return set(range(1, total_pages + 1))
-                
-                pages = set()
-                ranges = page_range_str.split(',')
-                
-                for r in ranges:
-                    r = r.strip()
-                    if '-' in r:
-                        # 页码范围，如1-5
-                        try:
-                            start, end = map(int, r.split('-'))
-                            # 确保页码在有效范围内
-                            start = max(1, start)
-                            end = min(total_pages, end)
-                            if start <= end:
-                                pages.update(range(start, end + 1))
-                        except ValueError:
-                            continue
-                    else:
-                        # 单个页码，如7
-                        try:
-                            page = int(r)
-                            if 1 <= page <= total_pages:
-                                pages.add(page)
-                        except ValueError:
-                            continue
-                
-                return pages
-            
             # 获取需要翻译的页码集合
             total_pages = extracted_content.total_pages
-            target_pages = parse_page_range(page_range, total_pages)
+            target_pages = self.parse_page_range(page_range, total_pages)
             logger.info(f"任务 {task.task_id} 总页数: {total_pages}, 需要翻译的页码: {sorted(target_pages)}")
             
             # 添加blocks信息日志
@@ -202,26 +266,24 @@ class TranslationService:
                 logger.info(f"任务 {task.task_id} 翻译合并块 {i+1}/{len(merged_blocks)}")
                 logger.info(f"任务 {task.task_id} 合并块 {i+1} 原文: {merged_block['block_text']}")
                 
-                # 检查原语言与目标语言是否一致
-                if source_lang == target_lang:
-                    # 语言一致，直接使用原文本
-                    merged_translation = merged_block['block_text']
-                    logger.info(f"任务 {task.task_id} 合并块 {i+1} 语言一致，直接使用原文")
-                else:
-                    # 调用翻译API
-                    merged_translation = translator.translate(
-                        merged_block['block_text'],
-                        source_lang,
-                        target_lang,
-                        doc_type=doc_type,
-                        glossary=glossary
-                    )
-                    logger.info(f"任务 {task.task_id} 合并块 {i+1} 翻译结果: {merged_translation}")
+                # 调用翻译API
+                merged_translation = translator.translate(
+                    merged_block['block_text'],
+                    source_lang,
+                    target_lang,
+                    doc_type=doc_type,
+                    glossary=glossary
+                )
+                logger.info(f"任务 {task.task_id} 合并块 {i+1} 翻译结果: {merged_translation}")
                 
                 # 拆分翻译结果
                 original_blocks = merged_block['original_blocks']
                 translated_block_texts = split_translated_result(merged_translation, original_blocks)
                 logger.info(f"任务 {task.task_id} 合并块 {i+1} 拆分结果: {translated_block_texts}")
+                
+                # 获取合并块的最大宽度和高度
+                max_width = merged_block.get('max_width', 0)
+                max_height = merged_block.get('max_height', 0)
                 
                 # 将拆分后的结果映射回原始块
                 for j, block_text in enumerate(translated_block_texts):
@@ -233,11 +295,19 @@ class TranslationService:
                     if page_num not in target_pages:
                         continue
                     
-                    # 创建翻译后的TextBlock对象
+                    # 更新原始文本框为合并时得到的最大文本框
+                    original_bbox = text_block.block_bbox
+                    if max_width > 0 and max_height > 0:
+                        # 计算新的边界框，保持左上角坐标不变，使用最大宽度和高度
+                        new_bbox = (original_bbox[0], original_bbox[1], original_bbox[0] + max_width, original_bbox[1] + max_height)
+                    else:
+                        new_bbox = original_bbox
+                    
+                    # 创建翻译后的TextBlock对象，使用更新后的边界框
                     translated_text_block = TextBlock(
                         block_no=text_block.block_no,
                         text=block_text,
-                        bbox=text_block.block_bbox,
+                        bbox=new_bbox,
                         block_type=text_block.block_type
                     )
                     
@@ -309,17 +379,12 @@ class TranslationService:
                                 return
                             
                             if cell:
-                                # 检查原语言与目标语言是否一致
-                                if source_lang == target_lang:
-                                    # 语言一致，直接使用原文本
-                                    translated_cell = cell
-                                else:
-                                    # 调用翻译API
-                                    translated_cell = translator.translate(
-                                        cell,
-                                        source_lang,
-                                        target_lang
-                                    )
+                                # 调用翻译API
+                                translated_cell = translator.translate(
+                                    cell,
+                                    source_lang,
+                                    target_lang
+                                )
                                 translated_row.append(translated_cell)
                             else:
                                 translated_row.append('')

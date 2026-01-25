@@ -22,13 +22,28 @@ class TestSemanticMerge:
             TextBlock(block_no=3, text="这是第三行文本。", bbox=(0, 40, 100, 60))
         ]
         
+        # 将TextBlock对象包装成包含'text_block'和'page_num'键的字典列表
+        all_blocks = []
+        for i, block in enumerate(text_blocks):
+            all_blocks.append({
+                'text_block': block,
+                'page_num': 1
+            })
+        
         # 调用语义合并方法，返回的是一个元组(merged_blocks, block_mapping)
-        merged_blocks, block_mapping = merge_semantic_blocks(text_blocks)
+        merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         # 验证结果
         assert isinstance(merged_blocks, list)
         assert len(merged_blocks) > 0
         assert isinstance(block_mapping, list)
+        
+        # 验证合并块包含max_width和max_height属性
+        for merged_block in merged_blocks:
+            assert 'max_width' in merged_block
+            assert 'max_height' in merged_block
+            assert isinstance(merged_block['max_width'], (int, float))
+            assert isinstance(merged_block['max_height'], (int, float))
     
     def test_split_translated_result(self):
         """测试翻译结果拆分功能
