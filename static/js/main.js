@@ -9,8 +9,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const downloadLink = document.getElementById('download-link');
     const cancelBtn = document.getElementById('cancel-btn');
     
+    // 页码选择相关元素
+    const fileInput = document.getElementById('pdf_file');
+    const totalPagesElement = document.getElementById('total-pages');
+    const selectAllPagesCheckbox = document.getElementById('select-all-pages');
+    const pageRangeInput = document.getElementById('page-range');
+    
     let progressInterval = null;
     let translationTaskId = null;
+    let currentTotalPages = 0;
     
     // 表单提交事件处理
     form.addEventListener('submit', function(e) {
@@ -28,6 +35,11 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 准备表单数据
         const formData = new FormData(form);
+        
+        // 如果全选，则不传递page_range参数或传递空值
+        if (selectAllPagesCheckbox.checked) {
+            formData.delete('page_range');
+        }
         
         // 异步提交表单
         submitForm(formData);
@@ -226,14 +238,74 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 清理资源
         cleanupTask();
+        
+        // 重置页码相关UI
+        resetPageRangeUI();
+    }
+    
+    // 重置页码相关UI
+    function resetPageRangeUI() {
+        currentTotalPages = 0;
+        totalPagesElement.innerHTML = '当前PDF共 <strong>0</strong> 页';
+        selectAllPagesCheckbox.checked = true;
+        pageRangeInput.value = '';
+        pageRangeInput.disabled = true;
+    }
+    
+    // 获取PDF页数
+    function getPdfPageCount(file) {
+        const formData = new FormData();
+        formData.append('pdf_file', file);
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/get_pdf_pages', true);
+        
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        currentTotalPages = response.total_pages;
+                        totalPagesElement.innerHTML = `当前PDF共 <strong>${currentTotalPages}</strong> 页`;
+                    } else {
+                        console.error('获取PDF页数失败:', response.message);
+                    }
+                } catch (error) {
+                    console.error('解析获取PDF页数响应失败:', error);
+                }
+            } else {
+                console.error('获取PDF页数请求失败:', xhr.status);
+            }
+        };
+        
+        xhr.onerror = function() {
+            console.error('获取PDF页数网络错误');
+        };
+        
+        xhr.send(formData);
     }
     
     // 文件选择事件处理
-    const fileInput = document.getElementById('pdf_file');
     fileInput.addEventListener('change', function(e) {
-        const fileName = e.target.files[0]?.name;
-        if (fileName) {
-            console.log('Selected file:', fileName);
+        const file = e.target.files[0];
+        if (file) {
+            console.log('Selected file:', file.name);
+            // 重置页码UI
+            resetPageRangeUI();
+            // 获取PDF页数
+            getPdfPageCount(file);
+        } else {
+            // 重置页码UI
+            resetPageRangeUI();
+        }
+    });
+    
+    // 全选/取消全选事件处理
+    selectAllPagesCheckbox.addEventListener('change', function(e) {
+        const isChecked = e.target.checked;
+        pageRangeInput.disabled = isChecked;
+        if (isChecked) {
+            pageRangeInput.value = '';
         }
     });
     

@@ -84,12 +84,35 @@ class PdfGenerator:
                 # 记录翻译内容概览
                 logger.info(f"翻译内容: 完整文本块 {len(translated_content.get('blocks', []))}, 表格 {len(translated_content.get('tables', []))}")
                 
-                # 处理每一页
-                for page_num in range(len(original_doc)):
-                    logger.info(f"处理第 {page_num+1}/{len(original_doc)} 页")
+                # 收集有翻译内容的页码
+                pages_with_content = set()
+                
+                # 收集有文本块翻译的页码
+                for blocks_content in translated_content.get('blocks', []):
+                    pages_with_content.add(blocks_content.page_num)
+                
+                # 收集有表格翻译的页码
+                for table_content in translated_content.get('tables', []):
+                    pages_with_content.add(table_content['page_num'])
+                
+                # 将页码转换为原始文档的索引（从0开始）
+                pages_to_process = sorted(pages_with_content)
+                logger.info(f"需要处理的页码: {pages_to_process}")
+                
+                # 处理每一页，只处理有翻译内容的页面
+                for page_num in pages_to_process:
+                    # 转换为原始文档的索引（从0开始）
+                    original_page_idx = page_num - 1
+                    
+                    # 跳过超出范围的页码
+                    if original_page_idx < 0 or original_page_idx >= len(original_doc):
+                        logger.warning(f"页码 {page_num} 超出原始文档范围，跳过")
+                        continue
+                    
+                    logger.info(f"处理第 {page_num}/{len(pages_to_process)} 页 (原始页码: {page_num})")
                     
                     # 获取原始页面
-                    original_page = original_doc[page_num]
+                    original_page = original_doc[original_page_idx]
                     logger.info(f"原始页面尺寸: {original_page.rect.width}x{original_page.rect.height}")
                     
                     # 克隆原始页面到新文档
@@ -97,7 +120,7 @@ class PdfGenerator:
                     logger.info("创建新页面成功")
                     
                     # 复制原始页面的内容（背景、图像等）
-                    new_page.show_pdf_page(new_page.rect, original_doc, page_num)
+                    new_page.show_pdf_page(new_page.rect, original_doc, original_page_idx)
                     logger.info("复制原始页面内容成功")
                     
                     # 获取当前页的翻译内容
@@ -105,33 +128,46 @@ class PdfGenerator:
                     
                     # 获取blocks级别翻译文本
                     for blocks_content in translated_content.get('blocks', []):
-                        if blocks_content.page_num == page_num + 1:
+                        if blocks_content.page_num == page_num:
                             page_translated_blocks = blocks_content
                             break
                     
                     if page_translated_blocks:
                         blocks_count = len(page_translated_blocks.text_blocks)
                         
-                        logger.info(f"第 {page_num + 1} 页有 {blocks_count} 个完整文本块")
+                        logger.info(f"第 {page_num} 页有 {blocks_count} 个完整文本块")
                         
                         # 绘制翻译后的文本，直接使用文本块自带的样式信息
                         self._draw_translated_text(new_page, page_translated_blocks, target_lang)
-                        logger.info(f"第 {page_num + 1} 页绘制完成")
-                    else:
-                        logger.warning(f"第 {page_num + 1} 页没有翻译内容")
+                        logger.info(f"第 {page_num} 页绘制完成")
                     
                     # 处理表格（如果有）
-                    page_tables = [table for table in translated_content['tables'] if table['page_num'] == page_num + 1]
-                    logger.info(f"第 {page_num + 1} 页有 {len(page_tables)} 个表格需要处理")
+                    page_tables = [table for table in translated_content['tables'] if table['page_num'] == page_num]
+                    logger.info(f"第 {page_num} 页有 {len(page_tables)} 个表格需要处理")
                     for i, table in enumerate(page_tables):
                         self._draw_translated_table(new_page, table)
-                        logger.info(f"第 {page_num + 1} 页表格 {i+1} 绘制完成")
+                        logger.info(f"第 {page_num} 页表格 {i+1} 绘制完成")
+                
+                # 如果没有需要处理的页面，生成一个空PDF或显示警告
+                if not pages_to_process:
+                    logger.warning("没有需要处理的页面，生成空PDF")
+                    # 创建一个空白页
+                    new_doc.new_page(width=595, height=842)  # A4尺寸
                 
                 # 保存新PDF
                 logger.info(f"开始保存新PDF: {output_pdf_path}")
+                
+                # 在保存文档之前获取总页数
+                total_pages = len(new_doc)
+                
+                # 保存文档
                 new_doc.save(output_pdf_path)
+                
+                # 关闭文档
                 new_doc.close()
-                logger.info(f"PDF生成完成，输出文件: {output_pdf_path}")
+                
+                # 使用预存的总页数记录日志，避免在文档关闭后访问
+                logger.info(f"PDF生成完成，输出文件: {output_pdf_path}, 总页数: {total_pages}")
                 
         except Exception as e:
             logger.error(f"生成PDF时出错: {str(e)}", exc_info=True)

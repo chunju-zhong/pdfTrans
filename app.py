@@ -3,6 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 import uuid
 import threading
+import fitz  # PyMuPDF用于获取PDF页数
 from config import config
 from utils.logging_config import setup_logging, get_logger
 from utils.file_utils import allowed_file, ensure_directory_exists
@@ -52,6 +53,7 @@ def translate():
             translator_type = request.form.get('translator', 'silicon_flow')
             doc_type = request.form.get('doc_type', '技术文档')
             glossary = request.form.get('glossary', '')
+            page_range = request.form.get('page_range', '')
             
             # 保存文件（在主线程中完成）
             filename = secure_filename(file.filename)
@@ -68,7 +70,7 @@ def translate():
             
             # 启动异步翻译任务，传递文件路径、unique_id和filename
             threading.Thread(target=translation_service.process_translation, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range)).start()
             
             # 返回任务ID
             return jsonify({
@@ -120,6 +122,41 @@ def download(filename):
 def download_file(filename):
     """实际文件下载路由"""
     return send_from_directory(app.config['OUTPUT_FOLDER'], filename, as_attachment=True)
+
+@app.route('/get_pdf_pages', methods=['POST'])
+def get_pdf_pages():
+    """获取PDF文件的总页数"""
+    if 'pdf_file' not in request.files:
+        return jsonify({'success': False, 'message': '没有选择文件'})
+    
+    file = request.files['pdf_file']
+    
+    if file.filename == '':
+        return jsonify({'success': False, 'message': '没有选择文件'})
+    
+    if file and allowed_file(file.filename):
+        try:
+            # 保存临时文件
+            temp_filename = secure_filename(file.filename)
+            temp_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_{uuid.uuid4()}_{temp_filename}")
+            file.save(temp_filepath)
+            
+            # 使用PyMuPDF获取PDF页数
+            with fitz.open(temp_filepath) as doc:
+                total_pages = len(doc)
+            
+            # 删除临时文件
+            os.remove(temp_filepath)
+            
+            return jsonify({
+                'success': True,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            logger.error(f"获取PDF页数失败: {str(e)}")
+            return jsonify({'success': False, 'message': f"获取PDF页数失败: {str(e)}"})
+    
+    return jsonify({'success': False, 'message': '不支持的文件类型'})
 
 if __name__ == '__main__':
     import sys

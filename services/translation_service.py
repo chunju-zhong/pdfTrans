@@ -46,7 +46,7 @@ class TranslationService:
         else:
             raise ValueError(f"不支持的翻译服务类型: {translator_type}")
     
-    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type="技术文档", glossary=""):
+    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type="技术文档", glossary="", page_range=""):
         """异步翻译任务处理函数
         
         Args:
@@ -59,6 +59,7 @@ class TranslationService:
             filename: 原始文件名
             doc_type: 文档类型
             glossary: 术语表
+            page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
         """
         try:
             logger.info(f"开始处理任务 {task.task_id}，文件: {filename}")
@@ -77,10 +78,56 @@ class TranslationService:
                 logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
                 return
             
+            # 解析页码范围
+            def parse_page_range(page_range_str, total_pages):
+                """解析页码范围字符串，返回页码集合
+                
+                Args:
+                    page_range_str: 页码范围字符串，格式如"1-5,7,9-10"
+                    total_pages: PDF总页数
+                    
+                Returns:
+                    set: 包含所有指定页码的集合
+                """
+                if not page_range_str:
+                    return set(range(1, total_pages + 1))
+                
+                pages = set()
+                ranges = page_range_str.split(',')
+                
+                for r in ranges:
+                    r = r.strip()
+                    if '-' in r:
+                        # 页码范围，如1-5
+                        try:
+                            start, end = map(int, r.split('-'))
+                            # 确保页码在有效范围内
+                            start = max(1, start)
+                            end = min(total_pages, end)
+                            if start <= end:
+                                pages.update(range(start, end + 1))
+                        except ValueError:
+                            continue
+                    else:
+                        # 单个页码，如7
+                        try:
+                            page = int(r)
+                            if 1 <= page <= total_pages:
+                                pages.add(page)
+                        except ValueError:
+                            continue
+                
+                return pages
+            
+            # 获取需要翻译的页码集合
+            total_pages = extracted_content.total_pages
+            target_pages = parse_page_range(page_range, total_pages)
+            logger.info(f"任务 {task.task_id} 总页数: {total_pages}, 需要翻译的页码: {sorted(target_pages)}")
+            
             # 添加blocks信息日志
             logger.info(f"任务 {task.task_id} 提取到的blocks信息: 总页数={extracted_content.total_pages}")
             # 不再使用'blocks'键，而是直接使用pages属性
-            total_blocks = sum(len(page.text_blocks) for page in extracted_content.pages)
+            total_blocks = sum(len(page.text_blocks) for page in extracted_content.pages if page.page_num in target_pages)
             logger.info(f"任务 {task.task_id} 共提取到 {total_blocks} 个完整文本块")
             
             task.update_progress(30, '正在创建翻译器...')
@@ -113,6 +160,10 @@ class TranslationService:
             all_blocks = []
             block_index = 0
             for page in extracted_content.pages:
+                # 只处理指定页码的页面
+                if page.page_num not in target_pages:
+                    continue
+                
                 # 页面的text_blocks已经是按垂直位置排序的
                 for text_block in page.text_blocks:
                     all_blocks.append({
@@ -121,6 +172,11 @@ class TranslationService:
                         'index': block_index  # 添加序号标识
                     })
                     block_index += 1
+            
+            if not all_blocks:
+                logger.warning(f"任务 {task.task_id} 没有找到需要翻译的文本块")
+                task.update_progress(100, '没有找到需要翻译的文本块')
+                return
             
             # 2. 语义块合并
             logger.info(f"任务 {task.task_id} 开始语义块合并，原始块数量: {len(all_blocks)}")
@@ -139,7 +195,8 @@ class TranslationService:
             # 创建页面级别的翻译结果列表
             page_translated_blocks_dict = {}
             for page in extracted_content.pages:
-                page_translated_blocks_dict[page.page_num] = PdfPage(page.page_num, [])
+                if page.page_num in target_pages:
+                    page_translated_blocks_dict[page.page_num] = PdfPage(page.page_num, [])
             
             for i, merged_block in enumerate(merged_blocks):
                 logger.info(f"任务 {task.task_id} 翻译合并块 {i+1}/{len(merged_blocks)}")
@@ -171,6 +228,10 @@ class TranslationService:
                     original_block_info = original_blocks[j]
                     text_block = original_block_info['text_block']  # 获取TextBlock对象
                     page_num = original_block_info['page_num']
+                    
+                    # 检查当前页是否在目标页码集合中
+                    if page_num not in target_pages:
+                        continue
                     
                     # 创建翻译后的TextBlock对象
                     translated_text_block = TextBlock(
@@ -222,6 +283,10 @@ class TranslationService:
                 
                 logger.info(f"任务 {task.task_id} 开始翻译表格内容")
                 for table in extracted_content.tables:
+                    # 只翻译指定页码的表格
+                    if table.page_num not in target_pages:
+                        continue
+                    
                     translated_table = {
                         'page_num': table.page_num,
                         'table_idx': table.table_idx,
