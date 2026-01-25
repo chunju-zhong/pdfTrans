@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF翻译工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>PDF翻译工具</h1>
+        <p>支持多种翻译API的PDF翻译工具，能够准确提取PDF文本，高质量翻译，并生成格式良好的新PDF。</p>
+        
+        <!-- 显示flash消息 -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <div class="flash-message">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <form id="translate-form" action="{{ url_for('translate') }}" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="pdf_file">选择PDF文件</label>
+                <input type="file" id="pdf_file" name="pdf_file" accept=".pdf" required>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="translator">选择翻译服务</label>
+                    <select id="translator" name="translator">
+                        <option value="baidu" {% if default_translator == 'baidu' %}selected{% endif %}>百度翻译</option>
+                        <option value="aiping" {% if default_translator == 'aiping' %}selected{% endif %}>aiping翻译</option>
+                        <option value="silicon_flow" {% if default_translator == 'silicon_flow' %}selected{% endif %}>硅基流动翻译</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="source_lang">源语言</label>
+                    <select id="source_lang" name="source_lang">
+                        {% for code, name in supported_languages.items() %}
+                            <option value="{{ code }}" {% if code == default_source %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="target_lang">目标语言</label>
+                    <select id="target_lang" name="target_lang">
+                        {% for code, name in supported_languages.items() %}
+                            <option value="{{ code }}" {% if code == default_target %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="doc_type">文档类型</label>
+                <input type="text" id="doc_type" name="doc_type" value="技术文档" placeholder="请输入文档类型">
+            </div>
+            
+            <div class="form-group">
+                <label for="glossary">术语表（格式：术语: 翻译，每行一个）</label>
+                <textarea id="glossary" name="glossary" rows="6" placeholder="请输入术语表">AI agents: AI智能体
+Large Language Model (LLM): 大语言模型（LLM）
+paradigm: 范式
+passive, discrete tasks: 被动式、离散型任务
+prompt: 提示词
+autonomous problem-solving: 自主问题解决</textarea>
+            </div>
+            
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">开始翻译</button>
+            </div>
+        </form>
+        
+        <div id="progress-container" class="progress-container" style="display: none;">
+            <div class="progress">
+                <div id="progress-bar" class="progress-bar" style="width: 0%;">0%</div>
+            </div>
+            <div class="progress-text-container">
+                <div id="progress-text" class="progress-text">准备开始...</div>
+                <button id="cancel-btn" class="btn btn-cancel" style="margin-left: 10px;">取消翻译</button>
+            </div>
+        </div>
+        
+        <div id="result-container" class="result-container" style="display: none;">
+            <h2>翻译完成</h2>
+            <p>您的PDF文件已翻译完成，点击下方链接下载：</p>
+            <a id="download-link" href="#" class="btn btn-success">下载翻译后的PDF</a>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

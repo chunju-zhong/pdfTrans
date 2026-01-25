@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF翻译完成</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>PDF翻译完成</h1>
+        <p>您的PDF文件已成功翻译，点击下方按钮下载：</p>
+        
+        <div class="result-container">
+            <a href="{{ url_for('download_file', filename=filename) }}" class="btn btn-success">下载翻译后的PDF</a>
+        </div>
+        
+        <div class="actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">返回主页</a>
+        </div>
+    </div>
+</body>
+</html>

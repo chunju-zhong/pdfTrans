@@ -1,0 +1,7 @@
+flask
+pymupdf
+pdfplumber
+requests
+python-dotenv
+openai
+pytest
