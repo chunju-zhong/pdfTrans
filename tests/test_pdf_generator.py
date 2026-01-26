@@ -8,6 +8,8 @@ import pytest
 import os
 import tempfile
 from modules.pdf_generator import PdfGenerator
+from models.text_block import TextBlock
+from models.extraction import PdfPage
 
 class TestPdfGenerator:
     """PDF生成模块测试类"""
@@ -259,24 +261,22 @@ class TestPdfGenerator:
             }
             
             for lang in languages:
+                # 创建TextBlock对象
+                text_block = TextBlock(
+                    block_no=1,
+                    text=test_texts[lang],
+                    bbox=(50, 50, 500, 150),
+                    block_type=0
+                )
+                
+                # 创建PdfPage对象
+                pdf_page = PdfPage(
+                    page_num=1,
+                    text_blocks=[text_block]
+                )
+                
                 translated_content = {
-                    'text_content': [
-                        {
-                            'page_num': 1,
-                            'text_blocks': [
-                                {
-                                    'text': test_texts[lang],
-                                    'position': {
-                                        'x0': 50,
-                                        'y0': 50,
-                                        'x1': 500,
-                                        'y1': 150
-                                    },
-                                    'block_type': 0
-                                }
-                            ]
-                        }
-                    ],
+                    'blocks': [pdf_page],
                     'tables': []
                 }
                 

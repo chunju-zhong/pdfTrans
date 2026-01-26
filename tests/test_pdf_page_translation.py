@@ -111,38 +111,41 @@ class TestPdfPageTranslationIntegration:
                                 mock_pdf_gen_instance = MagicMock()
                                 mock_pdf_generator.return_value = mock_pdf_gen_instance
                                 
-                                # 测试1：翻译所有页面（空页码范围）
-                                translation_service.process_translation(
-                                    mock_task, temp_pdf_path, "en", "zh", "silicon_flow", 
-                                    "test_unique_id", "test_file.pdf", "技术文档", "", ""
-                                )
-                                
-                                # 验证PDF生成器被调用
-                                mock_pdf_gen_instance.generate_pdf.assert_called()
-                                
-                                # 重置模拟调用计数
-                                mock_pdf_gen_instance.generate_pdf.reset_mock()
-                                
-                                # 测试2：翻译单个页面（页码1）
-                                translation_service.process_translation(
-                                    mock_task, temp_pdf_path, "en", "zh", "silicon_flow", 
-                                    "test_unique_id", "test_file.pdf", "技术文档", "", "1"
-                                )
-                                
-                                # 验证PDF生成器被调用
-                                mock_pdf_gen_instance.generate_pdf.assert_called()
-                                
-                                # 重置模拟调用计数
-                                mock_pdf_gen_instance.generate_pdf.reset_mock()
-                                
-                                # 测试3：翻译页码范围1-2
-                                translation_service.process_translation(
-                                    mock_task, temp_pdf_path, "en", "zh", "silicon_flow", 
-                                    "test_unique_id", "test_file.pdf", "技术文档", "", "1-2"
-                                )
-                                
-                                # 验证PDF生成器被调用
-                                mock_pdf_gen_instance.generate_pdf.assert_called()
+                                # 模拟remove_file函数，阻止临时文件被删除
+                                with patch('services.translation_service.remove_file') as mock_remove_file:
+                                    
+                                    # 测试1：翻译所有页面（空页码范围）
+                                    translation_service.process_translation(
+                                        mock_task, temp_pdf_path, "en", "zh", "silicon_flow", 
+                                        "test_unique_id", "test_file.pdf", "技术文档", "", ""
+                                    )
+                                    
+                                    # 验证PDF生成器被调用
+                                    mock_pdf_gen_instance.generate_pdf.assert_called()
+                                    
+                                    # 重置模拟调用计数
+                                    mock_pdf_gen_instance.generate_pdf.reset_mock()
+                                    
+                                    # 测试2：翻译单个页面（页码1）
+                                    translation_service.process_translation(
+                                        mock_task, temp_pdf_path, "en", "zh", "silicon_flow", 
+                                        "test_unique_id", "test_file.pdf", "技术文档", "", "1"
+                                    )
+                                    
+                                    # 验证PDF生成器被调用
+                                    mock_pdf_gen_instance.generate_pdf.assert_called()
+                                    
+                                    # 重置模拟调用计数
+                                    mock_pdf_gen_instance.generate_pdf.reset_mock()
+                                    
+                                    # 测试3：翻译页码范围1-2
+                                    translation_service.process_translation(
+                                        mock_task, temp_pdf_path, "en", "zh", "silicon_flow", 
+                                        "test_unique_id", "test_file.pdf", "技术文档", "", "1-2"
+                                    )
+                                    
+                                    # 验证PDF生成器被调用
+                                    mock_pdf_gen_instance.generate_pdf.assert_called()
                                 
         finally:
             # 清理临时文件

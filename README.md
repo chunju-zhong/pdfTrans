@@ -189,21 +189,39 @@ MIT License
 
 ## 更新日志
 
-### 2026-01-25
-- 优化翻译流程：当目标语言和源语言相同时，直接拷贝原始页，跳过所有文本处理和翻译步骤
-- 修复源语言与目标语言相同时页码选择不起作用的问题，支持单个页码、页码范围和多个不连续页码
-- 结构化、简化、清理translation_service.py文件：
-  - 将嵌套的parse_page_range函数提取为类的方法，避免使用嵌套函数
-  - 移除重复的parse_page_range函数，只保留一个实现
-  - 优化导入语句的顺序和组织
-  - 移除重复的语言一致性检查
-  - 增强代码可读性和可维护性
-  - 确保代码符合PEP 8规范
-- 优化分块合并与拆分，为生成PDF保留最大文本框：
-  - 修改了merge_semantic_blocks函数，在合并文本块时计算并记录合并块的最大宽度和高度
-  - 修改了translation_service.py，在创建翻译后的TextBlock对象时使用合并块的最大文本框
-  - 修复了测试用例，确保所有测试通过
-  - 提高PDF生成时的空间利用率，使翻译后的文本能更好地适应原始PDF的布局
+### 2026-01-26
+- 修复文本块丢失问题：
+  - 修复merge_semantic_blocks函数中合并条件的括号位置错误
+  - 原条件逻辑错误导致正文块被错误处理和丢失
+  - 修正括号位置后，所有正文块都能正确合并和翻译
+- 简化PDF翻译工具工作流程：
+  - 在提取文本后直接过滤所有非正文块
+  - 简化merge_semantic_blocks函数，移除所有处理非正文块的逻辑
+  - 后续合并、拆分和翻译流程只需处理正文块，无需考虑非正文块
+  - 提高代码可读性和维护性
+- 添加13个新的语义合并扩展测试用例：
+  - test_merge_consecutive_body_blocks - 测试连续正文块合并
+  - test_merge_blocks_with_sentence_continuation_lowercase - 测试小写字母开头句子延续
+  - test_merge_blocks_with_sentence_continuation_punctuation - 测试标点开头句子延续
+  - test_no_merge_when_sentence_ends - 测试完整句子结尾不合并
+  - test_no_merge_when_vertical_distance_large - 测试垂直距离过大不合并
+  - test_merge_multiple_sequential_blocks - 测试多个连续块合并
+  - test_empty_blocks_list - 测试空列表输入
+  - test_single_block - 测试单个块
+  - test_is_sentence_continuation - 测试句子延续检测函数
+  - test_split_with_english_words - 测试英文单词完整性保护
+  - test_split_with_punctuation_adjustment - 测试标点位置调整
+  - test_split_empty_translation - 测试空翻译结果处理
+  - test_filter_non_body_blocks - 测试非正文块过滤
+- 修复4个失败的测试用例：
+  - test_progress.py - 导入错误修复
+  - test_font_rendering - PDF生成器格式错误修复
+  - test_process_translation_with_page_range - 临时文件问题修复
+  - test_translate_api - 测试数据文件路径和patch路径错误修复
+- 实现100%测试通过率：
+  - 测试总数：98个
+  - 通过：98个
+  - 失败：0个
 
 ### 2026-01-24
 - 优化文本拆分逻辑，确保左引号、括号、书名号等成对出现的字符不出现在句尾
@@ -223,14 +241,19 @@ MIT License
 
 1. 本工具仅支持非扫描版PDF文档，不支持OCR功能
 2. 翻译质量取决于所选翻译API的质量
-3. 处理大型PDF文档可能需要较长时间
+3. 处理大型PDF文档可能需要较长时间，可使用指定翻译页功能分次翻译
 4. 请确保正确配置API密钥，否则翻译功能将无法使用
 
 ## 后续计划
 
-- [ ] 支持命令行使用
-- [ ] 优化Web界面交互
-- [ ] 提高表格提取准确率
+### 短期计划
+- [ ] 优化翻译质量
+- [ ] 支持翻译成Word格式
+- [ ] 支持表格翻译
+
+### 中期计划
 - [ ] 支持更多翻译API
-- [ ] 添加翻译历史记录功能
+
+### 长期计划
 - [ ] 实现文档批量翻译
+- [ ] 支持OCR功能（扫描版PDF）

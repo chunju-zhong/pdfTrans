@@ -18,7 +18,7 @@ def test_pdf_path():
     Returns:
         str: 测试PDF文件的绝对路径
     """
-    return os.path.join(os.path.dirname(__file__), 'data', 'test_data_en.pdf')
+    return os.path.join(os.path.dirname(__file__), 'data', 'test_data_en_text.pdf')
 
 @pytest.fixture
 def invalid_pdf_path():

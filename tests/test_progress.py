@@ -12,7 +12,11 @@ from unittest.mock import patch, MagicMock
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app, Task, tasks, TASK_STATUS
+from app import app
+from models.task import Task, TASK_STATUS
+from services.task_service import task_service
+from services.translation_service import translation_service
+tasks = task_service.tasks  # 访问任务服务中的tasks字典
 
 def test_task_creation():
     """测试Task类的创建"""
@@ -108,7 +112,7 @@ def client():
 def test_translate_api(client):
     """测试翻译API"""
     # 准备测试文件
-    test_file_path = os.path.join(os.path.dirname(__file__), 'data', 'test_data_en.pdf')
+    test_file_path = os.path.join(os.path.dirname(__file__), 'data', 'test_data_en_text.pdf')
     
     with open(test_file_path, 'rb') as f:
         # 模拟表单提交
@@ -119,7 +123,7 @@ def test_translate_api(client):
         }
         
         # 使用patch模拟文件保存和后续处理
-        with patch('app.process_translation') as mock_process:
+        with patch.object(translation_service, 'process_translation') as mock_process:
             # 合并表单数据和文件数据
             form_data = {
                 'source_lang': 'en',

@@ -108,6 +108,49 @@ pdfTrans/
 
 ## 开发进度记录
 
+### 2026-01-26
+- **当前状态**：已修复文本块丢失问题，简化工作流程，添加测试用例，实现100%测试通过率
+- **已完成任务**：
+  - 修复文本块丢失问题：
+    - 发现merge_semantic_blocks函数中合并条件的括号位置错误
+    - 原条件逻辑错误导致正文块被错误处理和丢失
+    - 修正括号位置后，所有正文块都能正确合并和翻译
+  - 简化PDF翻译工具工作流程：
+    - 在提取文本后直接过滤所有非正文块
+    - 简化merge_semantic_blocks函数，移除所有处理非正文块的逻辑
+    - 后续合并、拆分和翻译流程只需处理正文块，无需考虑非正文块
+    - 提高代码可读性和维护性
+  - 添加13个新的语义合并扩展测试用例：
+    - test_merge_consecutive_body_blocks - 测试连续正文块合并
+    - test_merge_blocks_with_sentence_continuation_lowercase - 测试小写字母开头句子延续
+    - test_merge_blocks_with_sentence_continuation_punctuation - 测试标点开头句子延续
+    - test_no_merge_when_sentence_ends - 测试完整句子结尾不合并
+    - test_no_merge_when_vertical_distance_large - 测试垂直距离过大不合并
+    - test_merge_multiple_sequential_blocks - 测试多个连续块合并
+    - test_empty_blocks_list - 测试空列表输入
+    - test_single_block - 测试单个块
+    - test_is_sentence_continuation - 测试句子延续检测函数
+    - test_split_with_english_words - 测试英文单词完整性保护
+    - test_split_with_punctuation_adjustment - 测试标点位置调整
+    - test_split_empty_translation - 测试空翻译结果处理
+    - test_filter_non_body_blocks - 测试非正文块过滤
+  - 修复4个失败的测试用例：
+    - test_progress.py - 导入错误修复
+    - test_font_rendering - PDF生成器格式错误修复
+    - test_process_translation_with_page_range - 临时文件问题修复
+    - test_translate_api - 测试数据文件路径和patch路径错误修复
+  - 实现100%测试通过率：
+    - 测试总数：98个
+    - 通过：98个
+    - 失败：0个
+  - 更新项目文档：
+    - 更新README.md，添加2026-01-26的开发记录
+    - 更新AI开发进度记录
+- **正在进行任务**：
+  - 暂无
+- **待完成任务**：
+  - 暂无
+
 ### 2026-01-25
 - **当前状态**：已完成翻译流程优化、页码选择功能修复、代码清理和分块合并优化工作
 - **已完成任务**：

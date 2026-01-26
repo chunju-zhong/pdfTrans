@@ -17,6 +17,7 @@ class TextBlock:
         self.block_text = text.strip()
         self.block_bbox = bbox
         self.block_type = block_type
+        self.is_body_text = True  # 添加是否为正文的属性，默认为True
         # 样式信息
         self.font = ""
         self.font_size = 0.0
@@ -57,6 +58,7 @@ class TextBlock:
             'block_text': self.block_text,
             'block_bbox': self.block_bbox,
             'block_type': self.block_type,
+            'is_body_text': self.is_body_text,  # 包含是否为正文的属性
             'font': self.font,
             'font_size': self.font_size,
             'color': self.color,

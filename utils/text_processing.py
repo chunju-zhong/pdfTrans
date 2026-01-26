@@ -1,10 +1,33 @@
 # 语义块合并逻辑
 
+def _is_sentence_continuation(curr_text):
+    """检查当前文本是否是前一个句子的延续
+    
+    Args:
+        curr_text (str): 当前文本
+        
+    Returns:
+        bool: 是否是前一个句子的延续
+    """
+    stripped_text = curr_text.strip()
+    if not stripped_text:
+        return False
+    
+    # 检查是否以小写字母开头（英语延续）
+    if stripped_text[0].islower():
+        return True
+    
+    # 检查是否以连字符、逗号或分号开头（句子内部标点）
+    if stripped_text[0] in (',', ';', '-', '—', '、'):
+        return True
+    
+    return False
+
 def merge_semantic_blocks(all_blocks):
     """按语义合并文本块
     
     Args:
-        all_blocks (list): 所有原始块列表（已按垂直位置排序）
+        all_blocks (list): 所有原始块列表（已按垂直位置排序，仅包含正文块）
                           每个元素是包含'text_block'和'page_num'的字典
         
     Returns:
@@ -25,6 +48,7 @@ def merge_semantic_blocks(all_blocks):
     first_width = first_bbox[2] - first_bbox[0]  # x1 - x0
     first_height = first_bbox[3] - first_bbox[1]  # y1 - y0
     
+    # 初始化当前合并块
     current_merged = {
         'block_text': first_text_block.block_text,
         'original_blocks': [first_block],  # 保留完整的块信息
@@ -46,10 +70,17 @@ def merge_semantic_blocks(all_blocks):
         vertical_distance = curr_bbox[1] - prev_bbox[3]  # y0 - previous y1
         
         # 内容完整检查（前一块不是完整句子结束）
-        prev_text = prev_text_block.block_text
-        prev_ends_with_sentence = prev_text.strip().endswith(('.', '!', '?', '。', '！', '？'))
+        prev_merged_text = current_merged['block_text']
+        prev_ends_with_sentence = prev_merged_text.strip().endswith(('.', '!', '?', '。', '！', '？'))
         
-        if vertical_distance < 10 and not prev_ends_with_sentence:
+        # 检查当前块是否延续前一个句子
+        is_continuation = _is_sentence_continuation(curr_text_block.block_text)
+        
+        # 合并条件：
+        # 1. 垂直距离小于10且前一块不是完整句子结束
+        # 2. 或者前一块是不完整句子且当前块是其延续
+        if ((vertical_distance < 10 and not prev_ends_with_sentence) or 
+            (not prev_ends_with_sentence and is_continuation)):
             # 合并块，处理空格
             prev_text = current_merged['block_text']
             curr_text = curr_text_block.block_text
@@ -89,9 +120,10 @@ def merge_semantic_blocks(all_blocks):
                 'max_height': curr_height
             }
     
-    # 添加最后一个合并块
-    merged_blocks.append(current_merged)
-    block_mapping.append(current_merged['original_blocks'])
+    # 添加最后一个合并块（如果存在）
+    if current_merged is not None:
+        merged_blocks.append(current_merged)
+        block_mapping.append(current_merged['original_blocks'])
     
     return merged_blocks, block_mapping
 

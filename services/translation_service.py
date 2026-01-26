@@ -172,10 +172,12 @@ class TranslationService:
             
             task.update_progress(20, '正在提取PDF文本...')
             
-            # 1. 提取PDF文本
-            logger.info(f"任务 {task.task_id} 开始提取PDF文本")
-            extracted_content = pdf_extractor.extract_text(input_filepath)
-            logger.info(f"任务 {task.task_id} PDF文本提取完成")
+            # 1.1 先获取总页数
+            logger.info(f"任务 {task.task_id} 开始获取总页数")
+            # 使用轻量级方式获取总页数
+            with fitz.open(input_filepath) as doc:
+                total_pages = len(doc)
+            logger.info(f"任务 {task.task_id} 获取总页数完成: {total_pages}")
             
             if task.is_canceled():
                 # 清理临时文件
@@ -183,10 +185,14 @@ class TranslationService:
                 logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
                 return
             
-            # 获取需要翻译的页码集合
-            total_pages = extracted_content.total_pages
+            # 1.2 解析页码范围
             target_pages = self.parse_page_range(page_range, total_pages)
-            logger.info(f"任务 {task.task_id} 总页数: {total_pages}, 需要翻译的页码: {sorted(target_pages)}")
+            logger.info(f"任务 {task.task_id} 需要翻译的页码: {sorted(target_pages)}")
+            
+            # 1.3 根据页码范围提取PDF文本
+            logger.info(f"任务 {task.task_id} 开始提取PDF文本")
+            extracted_content = pdf_extractor.extract_text(input_filepath, pages=list(target_pages))
+            logger.info(f"任务 {task.task_id} PDF文本提取完成")
             
             # 添加blocks信息日志
             logger.info(f"任务 {task.task_id} 提取到的blocks信息: 总页数={extracted_content.total_pages}")
@@ -220,7 +226,7 @@ class TranslationService:
             translated_content['blocks'] = []
             
             # 1. 收集所有页面的所有块，方便上下文查找
-            # 直接使用TextBlock对象，不进行字典转换
+            # 只收集正文块，简化后续流程
             all_blocks = []
             block_index = 0
             for page in extracted_content.pages:
@@ -230,12 +236,14 @@ class TranslationService:
                 
                 # 页面的text_blocks已经是按垂直位置排序的
                 for text_block in page.text_blocks:
-                    all_blocks.append({
-                        'text_block': text_block,  # 直接保存TextBlock对象
-                        'page_num': page.page_num,  # 保存页面号
-                        'index': block_index  # 添加序号标识
-                    })
-                    block_index += 1
+                    # 只添加正文块
+                    if text_block.is_body_text:
+                        all_blocks.append({
+                            'text_block': text_block,  # 直接保存TextBlock对象
+                            'page_num': page.page_num,  # 保存页面号
+                            'index': block_index  # 添加序号标识
+                        })
+                        block_index += 1
             
             if not all_blocks:
                 logger.warning(f"任务 {task.task_id} 没有找到需要翻译的文本块")
@@ -263,18 +271,28 @@ class TranslationService:
                     page_translated_blocks_dict[page.page_num] = PdfPage(page.page_num, [])
             
             for i, merged_block in enumerate(merged_blocks):
-                logger.info(f"任务 {task.task_id} 翻译合并块 {i+1}/{len(merged_blocks)}")
+                logger.info(f"任务 {task.task_id} 处理合并块 {i+1}/{len(merged_blocks)}")
                 logger.info(f"任务 {task.task_id} 合并块 {i+1} 原文: {merged_block['block_text']}")
                 
-                # 调用翻译API
-                merged_translation = translator.translate(
-                    merged_block['block_text'],
-                    source_lang,
-                    target_lang,
-                    doc_type=doc_type,
-                    glossary=glossary
-                )
-                logger.info(f"任务 {task.task_id} 合并块 {i+1} 翻译结果: {merged_translation}")
+                # 检查合并块是否包含正文
+                # 检查合并块中的原始块是否有正文
+                is_body_block = any(block['text_block'].is_body_text for block in merged_block['original_blocks'])
+                
+                if is_body_block:
+                    logger.info(f"任务 {task.task_id} 合并块 {i+1} 是正文块，开始翻译")
+                    # 调用翻译API
+                    merged_translation = translator.translate(
+                        merged_block['block_text'],
+                        source_lang,
+                        target_lang,
+                        doc_type=doc_type,
+                        glossary=glossary
+                    )
+                    logger.info(f"任务 {task.task_id} 合并块 {i+1} 翻译结果: {merged_translation}")
+                else:
+                    logger.info(f"任务 {task.task_id} 合并块 {i+1} 是非正文块，直接使用原文")
+                    # 非正文块直接使用原文
+                    merged_translation = merged_block['block_text']
                 
                 # 拆分翻译结果
                 original_blocks = merged_block['original_blocks']
