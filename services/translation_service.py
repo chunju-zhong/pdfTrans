@@ -4,10 +4,10 @@ import shutil
 import fitz  # PyMuPDF
 
 from modules.pdf_extractor import pdf_extractor
-from modules.baidu_translator import BaiduTranslator
 from modules.aiping_translator import AipingTranslator
 from modules.silicon_flow_translator import SiliconFlowTranslator
 from modules.pdf_generator import PdfGenerator
+from modules.docx_generator import DocxGenerator
 from models.text_block import TextBlock
 from models.extraction import PdfPage
 from utils.text_processing import merge_semantic_blocks, split_translated_result
@@ -69,30 +69,25 @@ class TranslationService:
         """根据翻译服务类型创建翻译器实例
         
         Args:
-            translator_type (str): 翻译服务类型（baidu/aiping/silicon_flow）
+            translator_type (str): 翻译服务类型（aiping/silicon_flow）
             
         Returns:
             Translator: 翻译器实例
         """
-        if translator_type == 'baidu':
-            # 创建百度翻译器实例
-            if not config.BAIDU_APP_ID or not config.BAIDU_APP_KEY:
-                raise ValueError("百度翻译API配置不完整")
-            return BaiduTranslator(config.BAIDU_APP_ID, config.BAIDU_APP_KEY)
-        elif translator_type == 'aiping':
+        if translator_type == 'aiping':
             # 创建aiping翻译器实例
             if not config.AIPING_API_KEY:
                 raise ValueError("aiping翻译API配置不完整")
-            return AipingTranslator(config.AIPING_API_KEY, config.AIPING_API_URL)
+            return AipingTranslator(config.AIPING_API_KEY, config.AIPING_API_URL, config.AIPING_MODEL)
         elif translator_type == 'silicon_flow':
             # 创建硅基流动翻译器实例
             if not config.SILICON_FLOW_API_KEY:
                 raise ValueError("硅基流动翻译API配置不完整")
-            return SiliconFlowTranslator(config.SILICON_FLOW_API_KEY, config.SILICON_FLOW_API_URL)
+            return SiliconFlowTranslator(config.SILICON_FLOW_API_KEY, config.SILICON_FLOW_API_URL, config.SILICON_FLOW_MODEL)
         else:
             raise ValueError(f"不支持的翻译服务类型: {translator_type}")
     
-    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type="技术文档", glossary="", page_range=""):
+    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf"):
         """异步翻译任务处理函数
         
         Args:
@@ -103,9 +98,10 @@ class TranslationService:
             translator_type: 翻译服务类型
             unique_id: 唯一ID
             filename: 原始文件名
-            doc_type: 文档类型
+            doc_type: 文档类型 (默认: 配置的DEFAULT_DOC_TYPE)
             glossary: 术语表
             page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
+            output_format: 输出格式，可选值: "pdf", "docx", "both"
         """
         try:
             logger.info(f"开始处理任务 {task.task_id}，文件: {filename}")
@@ -194,6 +190,10 @@ class TranslationService:
             extracted_content = pdf_extractor.extract_text(input_filepath, pages=list(target_pages))
             logger.info(f"任务 {task.task_id} PDF文本提取完成")
             
+            # 保存提取的图像信息
+            extracted_images = extracted_content.images
+            logger.info(f"任务 {task.task_id} 提取到 {len(extracted_images)} 个图像")
+            
             # 添加blocks信息日志
             logger.info(f"任务 {task.task_id} 提取到的blocks信息: 总页数={extracted_content.total_pages}")
             # 不再使用'blocks'键，而是直接使用pages属性
@@ -270,6 +270,9 @@ class TranslationService:
                 if page.page_num in target_pages:
                     page_translated_blocks_dict[page.page_num] = PdfPage(page.page_num, [])
             
+            # 保存合并后的翻译结果，用于Word生成
+            merged_translations = []
+            
             for i, merged_block in enumerate(merged_blocks):
                 logger.info(f"任务 {task.task_id} 处理合并块 {i+1}/{len(merged_blocks)}")
                 logger.info(f"任务 {task.task_id} 合并块 {i+1} 原文: {merged_block['block_text']}")
@@ -294,6 +297,26 @@ class TranslationService:
                     # 非正文块直接使用原文
                     merged_translation = merged_block['block_text']
                 
+                # 保存合并后的翻译结果
+                first_block = merged_block['original_blocks'][0]
+                first_text_block = first_block['text_block']
+                logger.info(f"合并块 {i+1} 第一个原始块字体大小: {first_text_block.font_size}, 文本: '{first_text_block.block_text[:50]}...'")
+                
+                merged_translations.append({
+                    'text': merged_translation,
+                    'page_num': first_block['page_num'],  # 使用第一个原始块的页码
+                    'font': first_text_block.font,
+                    'font_size': first_text_block.font_size,
+                    'color': first_text_block.color,
+                    'bold': first_text_block.bold,
+                    'italic': first_text_block.italic
+                })
+                
+                # 记录合并块中所有原始块的字体大小
+                for j, block_info in enumerate(merged_block['original_blocks']):
+                    text_block = block_info['text_block']
+                    logger.info(f"合并块 {i+1} 原始块 {j+1} 字体大小: {text_block.font_size}, 文本: '{text_block.block_text[:50]}...'")
+                
                 # 拆分翻译结果
                 original_blocks = merged_block['original_blocks']
                 translated_block_texts = split_translated_result(merged_translation, original_blocks)
@@ -302,6 +325,15 @@ class TranslationService:
                 # 获取合并块的最大宽度和高度
                 max_width = merged_block.get('max_width', 0)
                 max_height = merged_block.get('max_height', 0)
+                
+                # 获取第一个原始块的样式信息，用于统一应用到所有拆分块
+                first_block = merged_block['original_blocks'][0]
+                first_text_block = first_block['text_block']
+                merged_font = first_text_block.font
+                merged_font_size = first_text_block.font_size
+                merged_color = first_text_block.color
+                merged_flags = first_text_block.flags
+                logger.info(f"任务 {task.task_id} 合并块 {i+1} 将使用统一样式: 字体={merged_font}, 字体大小={merged_font_size}")
                 
                 # 将拆分后的结果映射回原始块
                 for j, block_text in enumerate(translated_block_texts):
@@ -329,12 +361,12 @@ class TranslationService:
                         block_type=text_block.block_type
                     )
                     
-                    # 更新样式信息
+                    # 更新样式信息 - 使用合并块的统一样式（来自第一个原始块）
                     translated_text_block.update_style(
-                        font=text_block.font,
-                        font_size=text_block.font_size,
-                        color=text_block.color,
-                        flags=text_block.flags
+                        font=merged_font,
+                        font_size=merged_font_size,
+                        color=merged_color,
+                        flags=merged_flags
                     )
                     
                     # 添加到对应页面的翻译结果中
@@ -344,6 +376,9 @@ class TranslationService:
                 # 更新进度
                 progress = 40 + int((translated_blocks / total_original_blocks) * 30)
                 task.update_progress(progress, f'正在翻译文本: {translated_blocks}/{total_original_blocks}')
+            
+            # 添加合并后的翻译结果到translated_content
+            translated_content['merged_translations'] = merged_translations
             
             # 将翻译结果添加到translated_content中
             translated_content['blocks'] = [page_translated_blocks_dict[page_num] for page_num in sorted(page_translated_blocks_dict.keys())]
@@ -436,11 +471,29 @@ class TranslationService:
                 total_blocks = sum(len(page.text_blocks) for page in translated_content['blocks'])
                 logger.info(f"任务 {task.task_id} 传递给生成器的blocks信息: 总页数={len(translated_content['blocks'])}, 总blocks数={total_blocks}")
             
-            # 创建PDF生成器实例
-            pdf_generator = PdfGenerator()
-            # 生成翻译后的PDF，传递目标语言参数
-            pdf_generator.generate_pdf(input_filepath, translated_content, output_filepath, target_lang)
-            logger.info(f"任务 {task.task_id} PDF生成完成，输出文件: {output_filename}")
+            output_files = []
+            
+            # 处理PDF生成
+            if output_format in ['pdf', 'both']:
+                # 创建PDF生成器实例
+                pdf_generator = PdfGenerator()
+                # 生成翻译后的PDF，传递目标语言参数
+                pdf_generator.generate_pdf(input_filepath, translated_content, output_filepath, target_lang)
+                logger.info(f"任务 {task.task_id} PDF生成完成，输出文件: {output_filename}")
+                output_files.append(output_filename)
+            
+            # 处理Word生成
+            if output_format in ['docx', 'both']:
+                # 生成Word文件名
+                docx_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.docx"
+                docx_filepath = os.path.join(config.OUTPUT_FOLDER, docx_filename)
+                
+                # 创建Word生成器实例
+                docx_generator = DocxGenerator()
+                # 生成翻译后的Word文档
+                docx_generator.generate_docx(translated_content, extracted_images, docx_filepath, target_lang)
+                logger.info(f"任务 {task.task_id} Word文档生成完成，输出文件: {docx_filename}")
+                output_files.append(docx_filename)
             
             if task.is_canceled():
                 # 清理临时文件和输出文件
@@ -467,8 +520,14 @@ class TranslationService:
                 return
             
             # 设置任务结果
-            task.set_result(output_filename)
-            logger.info(f"任务 {task.task_id} 完成，输出文件: {output_filename}")
+            if output_files:
+                # 如果有多个输出文件，返回第一个作为主要结果，其他作为附加结果
+                task.set_result(output_files[0])
+                if len(output_files) > 1:
+                    task.add_attachment(output_files[1])
+                logger.info(f"任务 {task.task_id} 完成，输出文件: {', '.join(output_files)}")
+            else:
+                logger.warning(f"任务 {task.task_id} 未生成任何输出文件")
             
         except Exception as e:
             # 记录错误信息到日志

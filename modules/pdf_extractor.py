@@ -5,7 +5,7 @@ import logging
 import re
 from collections import defaultdict
 from models.text_block import TextBlock
-from models.extraction import PdfPage, PdfTable, PdfExtraction
+from models.extraction import PdfPage, PdfTable, PdfImage, PdfExtraction
 
 logger = logging.getLogger(__name__)
 
@@ -398,11 +398,16 @@ class PdfExtractor:
         result = {
             'total_pages': 0,
             'pages': [],
-            'tables': []
+            'tables': [],
+            'images': []
         }
         
         # 存储页面尺寸信息
         page_sizes = {}
+        
+        # 创建临时图像目录
+        temp_images_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp_images')
+        os.makedirs(temp_images_dir, exist_ok=True)
         
         try:
             logger.info(f"开始提取PDF: {pdf_path}")
@@ -502,6 +507,8 @@ class PdfExtractor:
                                         matched_block_no = block_no
                             
                             if matched_block_no is not None:
+                                # 收集所有span的样式信息和长度
+                                span_styles = []
                                 # 遍历块内的行
                                 for line in block.get("lines", []):
                                     # 遍历行内的span（包含相同属性的文本）
@@ -511,15 +518,33 @@ class PdfExtractor:
                                         size = span.get("size", 10)
                                         color = span.get("color", 0)
                                         flags = span.get("flags", 0)
+                                        text = span.get("text", "")
+                                        span_length = len(text)
                                         
-                                        # 更新TextBlock对象的样式信息
-                                        text_block_objects[matched_block_no].update_style(
-                                            font=font,
-                                            font_size=size,
-                                            color=color,
-                                            flags=flags
-                                        )
-                                        logger.debug(f"更新块 {matched_block_no} 的样式信息: 字体='{font}', 大小={size}, 颜色={color}, flags={flags}")
+                                        # 记录span的样式信息和长度
+                                        span_styles.append({
+                                            "font": font,
+                                            "font_size": size,
+                                            "color": color,
+                                            "flags": flags,
+                                            "length": span_length
+                                        })
+                                        logger.debug(f"块 {matched_block_no} 的span: 字体='{font}', 大小={size}, 颜色={color}, 长度={span_length}")
+                                
+                                # 计算主要样式（长度最长的span的样式）
+                                if span_styles:
+                                    # 按长度排序，选择最长的span的样式
+                                    span_styles.sort(key=lambda x: x["length"], reverse=True)
+                                    main_style = span_styles[0]
+                                    logger.info(f"块 {matched_block_no} 的主要样式: 字体='{main_style['font']}', 大小={main_style['font_size']}, 颜色={main_style['color']}")
+                                    
+                                    # 使用主要样式更新TextBlock对象
+                                    text_block_objects[matched_block_no].update_style(
+                                        font=main_style["font"],
+                                        font_size=main_style["font_size"],
+                                        color=main_style["color"],
+                                        flags=main_style["flags"]
+                                    )
                     
                     # 3. 按垂直位置排序TextBlock对象
                     sorted_text_blocks = sorted(
@@ -533,6 +558,30 @@ class PdfExtractor:
                         'text_blocks': sorted_text_blocks
                     })
                     
+                    # 提取图像
+                    images = page.get_images(full=True)
+                    for image_idx, img in enumerate(images):
+                        xref = img[0]
+                        base_image = doc.extract_image(xref)
+                        image_bytes = base_image['image']
+                        image_ext = base_image['ext']
+                        image_path = os.path.join(temp_images_dir, f'page_{page_num + 1}_image_{image_idx}.{image_ext}')
+                        
+                        # 保存图像
+                        with open(image_path, 'wb') as f:
+                            f.write(image_bytes)
+                        
+                        # 获取图像位置
+                        bbox = img[1:5]
+                        
+                        # 添加图像信息到结果
+                        result['images'].append({
+                            'page_num': page_num + 1,
+                            'image_idx': image_idx,
+                            'image_path': image_path,
+                            'bbox': bbox
+                        })
+                        logger.info(f"提取图像: 第{page_num + 1}页-图像{image_idx}, 保存到: {image_path}")
 
             # 使用pdfplumber提取表格
             with pdfplumber.open(pdf_path) as pdf:
@@ -593,11 +642,23 @@ class PdfExtractor:
                 )
                 pdf_tables.append(pdf_table)
             
+            # 创建PdfImage对象列表
+            pdf_images = []
+            for image_dict in result['images']:
+                pdf_image = PdfImage(
+                    page_num=image_dict['page_num'],
+                    image_idx=image_dict['image_idx'],
+                    image_path=image_dict['image_path'],
+                    bbox=image_dict['bbox']
+                )
+                pdf_images.append(pdf_image)
+            
             # 创建并返回PdfExtraction对象
             return PdfExtraction(
                 total_pages=result['total_pages'],
                 pages=pdf_pages,
-                tables=pdf_tables
+                tables=pdf_tables,
+                images=pdf_images
             )
             
         except Exception as e:
@@ -696,6 +757,8 @@ class PdfExtractor:
                                 matched_block_no = block_no
                     
                     if matched_block_no is not None:
+                        # 收集所有span的样式信息和长度
+                        span_styles = []
                         # 遍历块内的行
                         for line in block.get("lines", []):
                             # 遍历行内的span（包含相同属性的文本）
@@ -705,15 +768,33 @@ class PdfExtractor:
                                 size = span.get("size", 10)
                                 color = span.get("color", 0)
                                 flags = span.get("flags", 0)
+                                text = span.get("text", "")
+                                span_length = len(text)
                                 
-                                # 更新TextBlock对象的样式信息
-                                text_block_objects[matched_block_no].update_style(
-                                    font=font,
-                                    font_size=size,
-                                    color=color,
-                                    flags=flags
-                                )
-                                logger.debug(f"更新块 {matched_block_no} 的样式信息: 字体='{font}', 大小={size}, 颜色={color}, flags={flags}")
+                                # 记录span的样式信息和长度
+                                span_styles.append({
+                                    "font": font,
+                                    "font_size": size,
+                                    "color": color,
+                                    "flags": flags,
+                                    "length": span_length
+                                })
+                                logger.debug(f"块 {matched_block_no} 的span: 字体='{font}', 大小={size}, 颜色={color}, 长度={span_length}")
+                        
+                        # 计算主要样式（长度最长的span的样式）
+                        if span_styles:
+                            # 按长度排序，选择最长的span的样式
+                            span_styles.sort(key=lambda x: x["length"], reverse=True)
+                            main_style = span_styles[0]
+                            logger.info(f"块 {matched_block_no} 的主要样式: 字体='{main_style['font']}', 大小={main_style['font_size']}, 颜色={main_style['color']}")
+                            
+                            # 使用主要样式更新TextBlock对象
+                            text_block_objects[matched_block_no].update_style(
+                                font=main_style["font"],
+                                font_size=main_style["font_size"],
+                                color=main_style["color"],
+                                flags=main_style["flags"]
+                            )
             
             # 3. 按垂直位置排序TextBlock对象
             sorted_text_blocks = sorted(
@@ -918,6 +999,8 @@ class PdfExtractor:
                                         matched_block = text_block
                             
                             if matched_block is not None:
+                                # 收集所有span的样式信息和长度
+                                span_styles = []
                                 # 遍历块内的行
                                 for line in block.get("lines", []):
                                     # 遍历行内的span（包含相同属性的文本）
@@ -927,15 +1010,33 @@ class PdfExtractor:
                                         size = span.get("size", 10)
                                         color = span.get("color", 0)
                                         flags = span.get("flags", 0)
+                                        text = span.get("text", "")
+                                        span_length = len(text)
                                         
-                                        # 更新TextBlock对象的样式信息
-                                        matched_block.update_style(
-                                            font=font,
-                                            font_size=size,
-                                            color=color,
-                                            flags=flags
-                                        )
-                                        logger.debug(f"更新块 {matched_block.block_no} 的样式信息: 字体='{font}', 大小={size}, 颜色={color}, flags={flags}")
+                                        # 记录span的样式信息和长度
+                                        span_styles.append({
+                                            "font": font,
+                                            "font_size": size,
+                                            "color": color,
+                                            "flags": flags,
+                                            "length": span_length
+                                        })
+                                        logger.debug(f"块 {matched_block.block_no} 的span: 字体='{font}', 大小={size}, 颜色={color}, 长度={span_length}")
+                                
+                                # 计算主要样式（长度最长的span的样式）
+                                if span_styles:
+                                    # 按长度排序，选择最长的span的样式
+                                    span_styles.sort(key=lambda x: x["length"], reverse=True)
+                                    main_style = span_styles[0]
+                                    logger.info(f"块 {matched_block.block_no} 的主要样式: 字体='{main_style['font']}', 大小={main_style['font_size']}, 颜色={main_style['color']}")
+                                    
+                                    # 使用主要样式更新TextBlock对象
+                                    matched_block.update_style(
+                                        font=main_style["font"],
+                                        font_size=main_style["font_size"],
+                                        color=main_style["color"],
+                                        flags=main_style["flags"]
+                                    )
                     
                     # 3. 按垂直位置排序TextBlock对象
                     sorted_text_blocks = sorted(

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from modules.translator import Translator
-from modules.baidu_translator import BaiduTranslator
+
 from modules.aiping_translator import AipingTranslator
 from modules.silicon_flow_translator import SiliconFlowTranslator
 
@@ -20,17 +20,17 @@ class TestTranslator:
             'page_num': 1
         }
 
-        # 调用翻译方法，不再传递上下文参数
+        # 调用翻译方法，添加doc_type和glossary参数
         with pytest.raises(NotImplementedError):
-            translator.translate(current_block['block_text'], 'en', 'zh')
+            translator.translate(current_block['block_text'], 'en', 'zh', doc_type="AI技术", glossary=None)
 
     def test_translate_same_language(self):
         """测试翻译相同语言时的行为"""
         # 创建一个基本的翻译器实例
         translator = Translator(api_key="test_key")
         
-        # 测试相同语言翻译
-        result = translator.translate('Hello', 'en', 'en')
+        # 测试相同语言翻译，添加doc_type和glossary参数
+        result = translator.translate('Hello', 'en', 'en', doc_type="AI技术", glossary=None)
         assert result == 'Hello'
 
 class TestContextTranslation:
@@ -64,30 +64,13 @@ class TestContextTranslation:
 class TestTranslatorImplementations:
     """测试具体翻译器实现的上下文功能"""
     
-    def test_baidu_translate(self):
-        """测试百度翻译器的翻译"""
-        # 创建百度翻译器实例
-        translator = BaiduTranslator(app_id="test_app_id", app_key="test_app_key")
-        
-        # 模拟_generate_sign方法
-        with patch.object(translator, '_generate_sign', return_value='mock_sign'):
-            # 模拟requests.get方法
-            with patch('requests.get') as mock_get:
-                # 模拟响应
-                mock_response = MagicMock()
-                mock_response.json.return_value = {
-                    'trans_result': [{'dst': '你好'}]
-                }
-                mock_get.return_value = mock_response
-                
-                # 调用翻译
-                result = translator.translate('Hello', 'en', 'zh')
-                assert result == '你好'
-    
     def test_aiping_translate(self):
         """测试AI Ping翻译器的翻译"""
         # 创建aiping翻译器实例
-        translator = AipingTranslator(api_key="test_key")
+        api_key = "test_key"
+        api_url = "https://test-api.aiping.com/v1"
+        model = "Qwen3-32B"
+        translator = AipingTranslator(api_key, api_url, model)
         
         # 模拟聊天完成API
         with patch.object(translator.client.chat.completions, 'create') as mock_create:
@@ -97,14 +80,17 @@ class TestTranslatorImplementations:
             
             mock_create.return_value = [mock_stream_chunk]
             
-            # 调用翻译
-            result = translator.translate('Hello', 'en', 'zh')
+            # 调用翻译，添加doc_type和glossary参数
+            result = translator.translate('Hello', 'en', 'zh', doc_type="AI技术", glossary=None)
             assert result == '你好'
     
     def test_silicon_flow_translate(self):
         """测试硅基流动翻译器的翻译"""
         # 创建硅基流动翻译器实例
-        translator = SiliconFlowTranslator(api_key="test_key")
+        api_key = "test_key"
+        api_url = "https://api.siliconflow.cn/v1"
+        model = "tencent/Hunyuan-MT-7B"
+        translator = SiliconFlowTranslator(api_key, api_url, model)
         
         # 模拟聊天完成API
         with patch.object(translator.client.chat.completions, 'create') as mock_create:
@@ -113,8 +99,8 @@ class TestTranslatorImplementations:
             mock_response.choices = [MagicMock(message=MagicMock(content='你好'))]
             mock_create.return_value = mock_response
             
-            # 调用翻译
-            result = translator.translate('Hello', 'en', 'zh')
+            # 调用翻译，添加doc_type和glossary参数
+            result = translator.translate('Hello', 'en', 'zh', doc_type="AI技术", glossary=None)
             assert result == '你好'
 
 # 运行所有测试

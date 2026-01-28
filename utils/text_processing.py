@@ -48,6 +48,11 @@ def merge_semantic_blocks(all_blocks):
     first_width = first_bbox[2] - first_bbox[0]  # x1 - x0
     first_height = first_bbox[3] - first_bbox[1]  # y1 - y0
     
+    # 记录第一个块的信息
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"创建合并块，第一个原始块字体大小: {first_text_block.font_size}, 文本: '{first_text_block.block_text[:50]}...'")
+    
     # 初始化当前合并块
     current_merged = {
         'block_text': first_text_block.block_text,

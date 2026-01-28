@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (progressData.status === 'completed') {
                         clearInterval(progressInterval);
                         // 显示下载链接
-                        showDownloadLink(progressData.result_file);
+                        showDownloadLink(progressData.result_file, progressData.attachments || []);
                     } else if (progressData.status === 'error') {
                         clearInterval(progressInterval);
                     }
@@ -172,9 +172,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 显示下载链接
-    function showDownloadLink(fileName) {
-        // 更新下载链接
-        downloadLink.href = `/download_file/${fileName}`;
+    function showDownloadLink(fileName, attachments) {
+        const downloadLinksContainer = document.getElementById('download-links');
+        const resultMessage = document.getElementById('result-message');
+        
+        // 清空现有的下载链接
+        downloadLinksContainer.innerHTML = '';
+        
+        // 添加主要文件下载链接
+        const mainLink = document.createElement('a');
+        mainLink.href = `/download_file/${fileName}`;
+        mainLink.className = 'btn btn-success';
+        mainLink.textContent = `下载翻译后的${fileName.endsWith('.pdf') ? 'PDF' : 'Word'}文件`;
+        downloadLinksContainer.appendChild(mainLink);
+        
+        // 添加附件下载链接
+        if (attachments && attachments.length > 0) {
+            resultMessage.textContent = '您的文件已翻译完成，点击下方链接下载：';
+            
+            attachments.forEach((attachment, index) => {
+                const attachmentLink = document.createElement('a');
+                attachmentLink.href = `/download_file/${attachment}`;
+                attachmentLink.className = 'btn btn-success';
+                attachmentLink.style.marginLeft = '10px';
+                attachmentLink.textContent = `下载翻译后的${attachment.endsWith('.docx') ? 'Word' : 'PDF'}文件`;
+                downloadLinksContainer.appendChild(attachmentLink);
+            });
+        } else {
+            resultMessage.textContent = '您的文件已翻译完成，点击下方链接下载：';
+        }
         
         // 显示结果容器
         resultContainer.style.display = 'block';

@@ -7,6 +7,7 @@
 import os
 import pytest
 from app import app
+from config import config
 
 class TestApp:
     """测试前端应用功能"""
@@ -43,7 +44,7 @@ class TestApp:
                 'source_lang': 'en',
                 'target_lang': 'zh',
                 'translator': 'silicon_flow',
-                'doc_type': '技术文档',
+                'doc_type': config.DEFAULT_DOC_TYPE,
                 'glossary': 'AI agents: AI智能体\nLarge Language Model (LLM): 大语言模型（LLM）',
                 'pdf_file': (f, 'test.pdf')
             }

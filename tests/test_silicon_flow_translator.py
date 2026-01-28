@@ -19,20 +19,14 @@ class TestSiliconFlowTranslator:
         api_key = "test_api_key"
         api_url = "https://test-api.siliconflow.cn/v1"
         model = "test-model"
+        default_api_url = "https://api.siliconflow.cn/v1"
+        default_model = "tencent/Hunyuan-MT-7B"
     
-        # 测试默认初始化
-        translator1 = SiliconFlowTranslator(api_key)
-        assert translator1.api_key == api_key
-        assert translator1.api_url == "https://api.siliconflow.cn/v1"
-        assert translator1.model == "tencent/Hunyuan-MT-7B"
-        
-        # 测试自定义API URL
-        translator2 = SiliconFlowTranslator(api_key, api_url)
-        assert translator2.api_url == api_url
-        
-        # 测试自定义模型
-        translator3 = SiliconFlowTranslator(api_key, api_url, model)
-        assert translator3.model == model
+        # 测试完整参数初始化
+        translator = SiliconFlowTranslator(api_key, api_url, model)
+        assert translator.api_key == api_key
+        assert translator.api_url == api_url
+        assert translator.model == model
     
     @patch('modules.silicon_flow_translator.OpenAI')
     def test_translate(self, mock_openai, sample_text, source_lang, target_lang, mock_translator_response):
@@ -55,10 +49,13 @@ class TestSiliconFlowTranslator:
         mock_openai.return_value = mock_client
         
         # 创建翻译器实例
-        translator = SiliconFlowTranslator("test_api_key")
+        api_key = "test_api_key"
+        api_url = "https://api.siliconflow.cn/v1"
+        model = "tencent/Hunyuan-MT-7B"
+        translator = SiliconFlowTranslator(api_key, api_url, model)
         
         # 调用翻译方法
-        result = translator.translate(sample_text, source_lang, target_lang)
+        result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
         
         # 验证OpenAI客户端初始化
         mock_openai.assert_called_once()
@@ -84,18 +81,24 @@ class TestSiliconFlowTranslator:
         mock_openai.return_value = mock_client
         
         # 创建翻译器实例
-        translator = SiliconFlowTranslator("test_api_key")
+        api_key = "test_api_key"
+        api_url = "https://api.siliconflow.cn/v1"
+        model = "tencent/Hunyuan-MT-7B"
+        translator = SiliconFlowTranslator(api_key, api_url, model)
         
         # 验证抛出异常
         with pytest.raises(Exception):
-            translator.translate(sample_text, source_lang, target_lang)
+            translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
     
     def test_validate_language(self):
         """测试语言验证功能
         
         验证SiliconFlowTranslator能够正确验证语言代码。
         """
-        translator = SiliconFlowTranslator("test_api_key")
+        api_key = "test_api_key"
+        api_url = "https://api.siliconflow.cn/v1"
+        model = "tencent/Hunyuan-MT-7B"
+        translator = SiliconFlowTranslator(api_key, api_url, model)
         
         # 测试支持的语言
         assert translator._validate_language("en") is True
@@ -109,7 +112,10 @@ class TestSiliconFlowTranslator:
         
         验证SiliconFlowTranslator的文本预处理功能。
         """
-        translator = SiliconFlowTranslator("test_api_key")
+        api_key = "test_api_key"
+        api_url = "https://api.siliconflow.cn/v1"
+        model = "tencent/Hunyuan-MT-7B"
+        translator = SiliconFlowTranslator(api_key, api_url, model)
         
         # 测试包含多余空格的文本
         raw_text = "   " + sample_text + "   \n  "

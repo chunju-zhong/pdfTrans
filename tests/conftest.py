@@ -82,20 +82,3 @@ def sample_translated_text():
     """
     return "你好，世界！这是一段用于翻译测试的文本。"
 
-@pytest.fixture
-def mock_baidu_translator_response():
-    """返回模拟的百度翻译API响应
-    
-    Returns:
-        dict: 模拟的百度翻译API响应
-    """
-    return {
-        "from": "en",
-        "to": "zh",
-        "trans_result": [
-            {
-                "src": "Hello, world!",
-                "dst": "你好，世界！"
-            }
-        ]
-    }

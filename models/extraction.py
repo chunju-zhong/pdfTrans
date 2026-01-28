@@ -65,23 +65,59 @@ class PdfTable:
         }
 
 
+class PdfImage:
+    """单图提取结果模型
+    
+    表示PDF单图的提取结果，包含页码、图像索引、图像路径和位置信息
+    """
+    
+    def __init__(self, page_num, image_idx, image_path, bbox):
+        """初始化PdfImage对象
+        
+        Args:
+            page_num (int): 页码
+            image_idx (int): 图像索引
+            image_path (str): 图像保存路径
+            bbox (tuple): 图像位置 (x0, y0, x1, y1)
+        """
+        self.page_num = page_num
+        self.image_idx = image_idx
+        self.image_path = image_path
+        self.bbox = bbox
+    
+    def to_dict(self):
+        """转换为字典格式
+        
+        Returns:
+            dict: 包含所有属性的字典
+        """
+        return {
+            'page_num': self.page_num,
+            'image_idx': self.image_idx,
+            'image_path': self.image_path,
+            'bbox': self.bbox
+        }
+
+
 class PdfExtraction:
     """整体提取结果模型
     
-    表示PDF整体的提取结果，包含总页数、每页结果列表和表格列表
+    表示PDF整体的提取结果，包含总页数、每页结果列表、表格列表和图像列表
     """
     
-    def __init__(self, total_pages, pages, tables):
+    def __init__(self, total_pages, pages, tables, images=None):
         """初始化PdfExtraction对象
         
         Args:
             total_pages (int): PDF总页数
             pages (list[PdfPage]): 每页结果列表
             tables (list[PdfTable]): 表格列表
+            images (list[PdfImage]): 图像列表
         """
         self.total_pages = total_pages
         self.pages = pages
         self.tables = tables
+        self.images = images or []
     
     def to_dict(self):
         """转换为字典格式
@@ -92,5 +128,6 @@ class PdfExtraction:
         return {
             'total_pages': self.total_pages,
             'pages': [page.to_dict() for page in self.pages],
-            'tables': [table.to_dict() for table in self.tables]
+            'tables': [table.to_dict() for table in self.tables],
+            'images': [image.to_dict() for image in self.images]
         }

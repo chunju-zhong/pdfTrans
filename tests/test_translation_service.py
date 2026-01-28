@@ -48,10 +48,6 @@ class TestTranslationService:
         
         验证get_translator方法能够正确返回不同类型的翻译器
         """
-        # 测试获取百度翻译器
-        translator = translation_service.get_translator('baidu')
-        assert translator is not None
-        
         # 测试获取aiping翻译器
         translator = translation_service.get_translator('aiping')
         assert translator is not None

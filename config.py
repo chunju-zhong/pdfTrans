@@ -16,17 +16,15 @@ class Config:
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
     OUTPUT_FOLDER = os.path.join(os.getcwd(), 'outputs')
     
-    # 百度翻译API配置
-    BAIDU_APP_ID = os.environ.get('BAIDU_APP_ID')
-    BAIDU_APP_KEY = os.environ.get('BAIDU_APP_KEY')
-    
     # aiping API配置
     AIPING_API_KEY = os.environ.get('AIPING_API_KEY')
     AIPING_API_URL = os.environ.get('AIPING_API_URL') or 'https://aiping.cn/api/v1'
+    AIPING_MODEL = os.environ.get('AIPING_MODEL') or 'Qwen3-32B'
     
     # 硅基流动API配置
     SILICON_FLOW_API_KEY = os.environ.get('SILICON_FLOW_API_KEY')
     SILICON_FLOW_API_URL = os.environ.get('SILICON_FLOW_API_URL') or 'https://api.siliconflow.cn/v1'
+    SILICON_FLOW_MODEL = os.environ.get('SILICON_FLOW_MODEL') or 'tencent/Hunyuan-MT-7B'
     
     # 支持的语言列表
     SUPPORTED_LANGUAGES = {
@@ -46,6 +44,10 @@ class Config:
     
     # 默认翻译服务
     DEFAULT_TRANSLATOR = 'aiping'
+    
+    # 文档类型配置
+    DEFAULT_DOC_TYPE = os.environ.get('DEFAULT_DOC_TYPE') or 'AI技术'
+    SUPPORTED_DOC_TYPES = ['AI技术', '技术文档', '商务文档', '学术论文', '法律文档', '医学文档']
 
 # 创建配置实例
 config = Config()

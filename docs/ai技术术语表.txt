@@ -1,0 +1,159 @@
+AI agents: AI智能体
+Agent: 智能体
+Agentic Systems: 智能体系统
+Orchestration Layer: 编排层
+Agent Ops: 智能体运维
+Chain-of-Thought (CoT): 思维链（CoT）
+ReAct: 反应式推理（ReAct）
+Foundation Model: 基础模型
+Context Window: 上下文窗口
+Agent-to-Agent (A2A): 智能体间（A2A）
+Retrieval-Augmented Generation (RAG): 检索增强生成（RAG）
+Natural Language to SQL (NL2SQL): 自然语言转SQL（NL2SQL）
+Human in the Loop (HITL): 人机协同（HITL）
+OpenAPI specification: OpenAPI规范
+Model Context Protocol (MCP): 模型上下文协议（MCP）
+Large Language Model (LLM): 大语言模型（LLM）
+prompt: 提示词
+paradigm: 范式
+passive, discrete tasks: 被动式、离散型任务
+autonomous problem-solving: 自主问题解决
+task execution: 任务执行
+proofs-of-concept (PoC): 概念验证（PoC）
+core anatomy: 核心结构
+taxonomy of capabilities: 能力分类体系
+architectural design: 架构设计
+runtime services: 运行时服务
+reasoning engine: 推理引擎
+general-purpose model: 通用型模型
+fine-tuned model: 微调型模型
+multimodal model: 多模态模型
+API extensions: API扩展
+code functions: 代码函数
+data stores: 数据存储
+vector databases: 向量数据库
+knowledge graphs: 知识图谱
+function calling: 函数调用
+system prompt: 系统提示词
+persona: 功能定位/角色设定
+short-term memory: 短期记忆
+long-term memory: 长期记忆
+multi-agent systems: 多智能体系统
+design patterns: 设计模式
+Coordinator pattern: 协调者模式
+Sequential pattern: 顺序模式
+Iterative Refinement pattern: 迭代优化模式
+agent deployment: 智能体部署
+docker container: Docker容器
+DevOps: 开发运维一体化
+MLOps: 机器学习运维
+GenAIOps: 生成式AI运维
+LLMOps: 大语言模型运维
+FMOps: 基础模型运维
+RAGOps: 检索增强生成运维
+prompt engineering: 提示词工程
+context engineering: 上下文工程
+golden dataset: 黄金数据集
+metrics-driven development: 指标驱动开发
+OpenTelemetry Traces: OpenTelemetry追踪
+root cause analysis: 根因分析
+user interface: 用户界面
+chatbot: 聊天机器人
+structured data: 结构化数据
+JSON: JSON（JavaScript对象表示法）
+Gemini Live API: Gemini实时API
+bidirectional streaming: 双向流传输
+agentic economy: 智能体经济
+Agent Payments Protocol (AP2): 智能体支付协议（AP2）
+x402 protocol: x402协议（HTTP 402支付要求协议）
+mandates: 授权凭证
+non-repudiable audit trail: 不可否认的审计跟踪
+micropayments: 小额支付
+trust trade-off: 信任权衡
+rogue actions: 恶意行为
+sensitive data disclosure: 敏感数据泄露
+prompt injection: 提示词注入
+defense-in-depth approach: 深度防御策略
+guardrails: 安全护栏
+policy engine: 策略引擎
+adversarial training: 对抗性训练
+guard models: 防护模型
+principal: 主体
+Identity and Access Management (IAM): 身份与访问管理（IAM）
+OAuth: 开放授权（OAuth）
+SSO (Single Sign-On): 单点登录（SSO）
+SPIFFE (Secure Production Identity Framework For Everyone): 安全生产身份框架扩展（SPIFFE）
+authorization (AuthZ): 授权（AuthZ）
+authentication (AuthN): 认证（AuthN）
+least privilege: 最小权限原则
+callbacks: 回调函数
+plugins: 插件
+Gemini Flash-Lite: Gemini Flash-Lite模型
+Model Armor: 模型防护服务
+PII (Personally Identifiable Information): 个人身份信息（PII）
+jailbreak attempts: 越狱攻击
+agent sprawl: 智能体蔓延
+control plane: 控制平面
+VPC Service Controls: 虚拟专用网络服务控制
+intellectual property indemnity: 知识产权保障
+runtime policy enforcement: 运行时策略执行
+central registry: 中央注册表
+enterprise app store: 企业应用商店
+lifecycle management: 生命周期管理
+scale-to-zero: 零扩展
+latency-sensitive workloads: 延迟敏感型工作负载
+agent aging: 智能体老化
+self-evolving: 自进化
+runtime artifacts: 运行时工件
+decision trajectories: 决策轨迹
+external signals: 外部信号
+tool optimization: 工具优化
+multi-agent workflow: 多智能体工作流
+Querying Agent: 查询智能体
+Reporting Agent: 报告智能体
+Critiquing Agent: 评估智能体
+Learning Agent: 学习智能体
+Agent Gym: 智能体训练平台
+simulation environment: 模拟环境
+synthetic data generators: 合成数据生成器
+redteaming: 红队测试
+dynamic evaluation: 动态评估
+tribal knowledge: 隐性知识
+Google Co-Scientist: 谷歌协同科学家智能体
+Supervisor agent: 主管智能体
+Knowledge agent: 知识智能体
+Ideation agent: 构思智能体
+Evaluation agent: 评估智能体
+Reflection agent: 反思智能体
+Ranking agent: 排序智能体
+Proximity Check Agent: 相关性检测智能体
+Meta-review Agent: 元评审智能体
+Evolution Agent: 进化智能体
+AlphaEvolve Agent: AlphaEvolve智能体
+AlphaGenome: AlphaGenome（基因组优化智能体组件）
+wet lab automation: 湿实验室自动化
+evaluation criteria: 评估标准
+prompt sampler: 提示词采样器
+LLMs ensemble: 大语言模型集成
+Distributed Controller Loop: 分布式控制循环
+Program database: 程序数据库
+Evaluators pool: 评估器池
+algorithm evolution: 算法进化
+τ-bench: τ基准测试（工具-智能体-用户交互基准）
+Agent Development Kit (ADK): 智能体开发工具包（ADK）
+LangGraph: LangGraph框架
+LangChain: LangChain框架
+LlamaIndex: LlamaIndex框架
+CrewAI: CrewAI框架
+Gemini: Gemini模型
+Gemma: Gemma模型
+Vertex AI Agent Engine: Vertex AI智能体引擎
+Cloud Run: Cloud Run（云运行服务）
+GKE (Google Kubernetes Engine): Google Kubernetes引擎（GKE）
+agent-starter-pack: 智能体入门套件
+AI Agent Observability: AI智能体可观测性
+DirectGPT: DirectGPT（直接操作型大语言模型交互框架）
+MCP UI: MCP用户界面协议
+AG UI: AG用户界面协议
+A2UI (Agent-to-UI): 智能体到用户界面协议（A2UI）
+MLGym: ML训练平台（机器学习智能体研究框架）

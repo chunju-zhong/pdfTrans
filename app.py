@@ -29,7 +29,8 @@ def index():
                            supported_languages=config.SUPPORTED_LANGUAGES,
                            default_source=config.DEFAULT_SOURCE_LANGUAGE,
                            default_target=config.DEFAULT_TARGET_LANGUAGE,
-                           default_translator=config.DEFAULT_TRANSLATOR)
+                           default_translator=config.DEFAULT_TRANSLATOR,
+                           default_doc_type=config.DEFAULT_DOC_TYPE)
 
 @app.route('/translate', methods=['POST'])
 def translate():
@@ -51,9 +52,10 @@ def translate():
             source_lang = request.form.get('source_lang', config.DEFAULT_SOURCE_LANGUAGE)
             target_lang = request.form.get('target_lang', config.DEFAULT_TARGET_LANGUAGE)
             translator_type = request.form.get('translator', 'silicon_flow')
-            doc_type = request.form.get('doc_type', '技术文档')
+            doc_type = request.form.get('doc_type', config.DEFAULT_DOC_TYPE)
             glossary = request.form.get('glossary', '')
             page_range = request.form.get('page_range', '')
+            output_format = request.form.get('output_format', 'pdf')
             
             # 保存文件（在主线程中完成）
             filename = secure_filename(file.filename)
@@ -70,7 +72,7 @@ def translate():
             
             # 启动异步翻译任务，传递文件路径、unique_id和filename
             threading.Thread(target=translation_service.process_translation, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format)).start()
             
             # 返回任务ID
             return jsonify({
@@ -98,6 +100,7 @@ def get_progress(task_id):
         'progress': task.progress,
         'message': task.message,
         'result_file': task.result_file,
+        'attachments': getattr(task, 'attachments', []),
         'error': task.error,
         'canceled': task.canceled
     })

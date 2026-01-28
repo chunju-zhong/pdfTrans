@@ -17,6 +17,7 @@ class Task:
         self.progress = 0
         self.message = '准备开始...'
         self.result_file = None
+        self.attachments = []
         self.error = None
         self.canceled = False
         self.lock = threading.Lock()
@@ -62,6 +63,10 @@ class Task:
             self.message = '翻译已取消'
             self.error = '用户取消了翻译任务'
     
+    def add_attachment(self, attachment_file):
+        with self.lock:
+            self.attachments.append(attachment_file)
+    
     def to_dict(self):
         with self.lock:
             return {
@@ -71,6 +76,7 @@ class Task:
                 'progress': self.progress,
                 'message': self.message,
                 'result_file': self.result_file,
+                'attachments': self.attachments,
                 'error': self.error,
                 'canceled': self.canceled
             }

@@ -48,7 +48,6 @@
                 <div class="form-group">
                     <label for="translator">选择翻译服务</label>
                     <select id="translator" name="translator">
-                        <option value="baidu" {% if default_translator == 'baidu' %}selected{% endif %}>百度翻译</option>
                         <option value="aiping" {% if default_translator == 'aiping' %}selected{% endif %}>aiping翻译</option>
                         <option value="silicon_flow" {% if default_translator == 'silicon_flow' %}selected{% endif %}>硅基流动翻译</option>
                     </select>
@@ -77,17 +76,27 @@
             
             <div class="form-group">
                 <label for="doc_type">文档类型</label>
-                <input type="text" id="doc_type" name="doc_type" value="技术文档" placeholder="请输入文档类型">
+                <input type="text" id="doc_type" name="doc_type" value="{{ default_doc_type }}" placeholder="请输入文档类型">
             </div>
             
             <div class="form-group">
                 <label for="glossary">术语表（格式：术语: 翻译，每行一个）</label>
                 <textarea id="glossary" name="glossary" rows="6" placeholder="请输入术语表">AI agents: AI智能体
 Large Language Model (LLM): 大语言模型（LLM）
+Agent: 智能体
 paradigm: 范式
 passive, discrete tasks: 被动式、离散型任务
 prompt: 提示词
 autonomous problem-solving: 自主问题解决</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="output_format">输出格式</label>
+                <select id="output_format" name="output_format">
+                    <option value="pdf">仅PDF</option>
+                    <option value="docx">仅Word</option>
+                    <option value="both">PDF和Word</option>
+                </select>
             </div>
             
             <div class="form-group">
@@ -107,8 +116,10 @@ autonomous problem-solving: 自主问题解决</textarea>
         
         <div id="result-container" class="result-container" style="display: none;">
             <h2>翻译完成</h2>
-            <p>您的PDF文件已翻译完成，点击下方链接下载：</p>
-            <a id="download-link" href="#" class="btn btn-success">下载翻译后的PDF</a>
+            <p id="result-message">您的文件已翻译完成，点击下方链接下载：</p>
+            <div id="download-links" class="download-links">
+                <a id="download-link" href="#" class="btn btn-success">下载翻译后的文件</a>
+            </div>
         </div>
     </div>
     

@@ -7,16 +7,16 @@ class SiliconFlowTranslator(Translator):
     继承自Translator基类，实现硅基流动翻译API的调用逻辑。
     """
     
-    def __init__(self, api_key, api_url=None, model="tencent/Hunyuan-MT-7B"):
+    def __init__(self, api_key, api_url, model):
         """初始化硅基流动翻译器
         
         Args:
             api_key (str): 硅基流动翻译API的密钥
-            api_url (str, optional): 硅基流动翻译API的请求地址
-            model (str, optional): 要使用的模型名称
+            api_url (str): 硅基流动翻译API的请求地址
+            model (str): 要使用的模型名称
         """
         super().__init__(api_key, api_url)
-        self.api_url = api_url or "https://api.siliconflow.cn/v1"
+        self.api_url = api_url
         self.model = model
         # 初始化OpenAI客户端
         self.client = OpenAI(
@@ -24,7 +24,7 @@ class SiliconFlowTranslator(Translator):
             api_key=self.api_key,
         )
     
-    def translate(self, text, source_lang, target_lang, doc_type="技术文档", glossary=""):
+    def translate(self, text, source_lang, target_lang, doc_type, glossary):
         """使用硅基流动翻译API翻译文本
         
         Args:
@@ -64,20 +64,9 @@ class SiliconFlowTranslator(Translator):
         source_lang_name = lang_map.get(source_lang, source_lang)
         target_lang_name = lang_map.get(target_lang, target_lang)
         
-        # 构建针对技术文档英翻中的专属提示词
-        system_prompt = f"""
-你是专业的{doc_type}翻译专家，擅长将{source_lang_name}文档精准翻译成{target_lang_name}，严格遵循以下规则：
-1. 语义连贯：必须基于完整上下文理解，禁止逐词直译导致的句子断裂；
-2. 术语一致：严格使用以下术语表翻译，不随意变更：
-{glossary if glossary else '无'}
-3. 句式严谨：保持技术文档的正式语气，保留被动语态和逻辑连接词；
-4. 不增删义：严格遵循原文含义，不添加额外解释，不遗漏任何细节（包括标点、括号、冒号的位置）；
-5. 格式兼容：翻译结果需便于后续按原文本块拆分，不擅自添加换行、分段（保持段落级完整性）；
-6. 技术精准：对于{doc_type}术语、代码片段、公式等，保持高度准确性，避免误译。
-"""
-        
-        # 构建用户提示词 - 仅包含当前文本
-        user_prompt = f"请将以下{source_lang_name}的{doc_type}文本翻译成{target_lang_name}，严格遵守上述所有规则：\n\n{processed_text}"
+        # 生成提示词
+        system_prompt = self._generate_system_prompt(doc_type, source_lang_name, target_lang_name, glossary)
+        user_prompt = self._generate_user_prompt(source_lang_name, target_lang_name, doc_type, processed_text)
         
         
         try:

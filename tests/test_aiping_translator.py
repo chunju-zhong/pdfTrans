@@ -20,19 +20,11 @@ class TestAipingTranslator:
         api_url = "https://test-api.aiping.cn/v1"
         model = "test-model"
     
-        # 测试默认初始化
-        translator1 = AipingTranslator(api_key)
-        assert translator1.api_key == api_key
-        assert translator1.api_url == "https://aiping.cn/api/v1"
-        assert translator1.model == "Qwen3-32B"
-        
-        # 测试自定义API URL
-        translator2 = AipingTranslator(api_key, api_url)
-        assert translator2.api_url == api_url
-        
-        # 测试自定义模型
-        translator3 = AipingTranslator(api_key, api_url, model)
-        assert translator3.model == model
+        # 测试自定义初始化
+        translator = AipingTranslator(api_key, api_url, model)
+        assert translator.api_key == api_key
+        assert translator.api_url == api_url
+        assert translator.model == model
     
     @patch('modules.aiping_translator.OpenAI')
     def test_translate(self, mock_openai, sample_text, source_lang, target_lang, mock_translator_response):
@@ -72,17 +64,17 @@ class TestAipingTranslator:
         mock_chat.completions.create.return_value = mock_chunks
     
         # 创建翻译器实例
-        translator = AipingTranslator("test_api_key")
+        translator = AipingTranslator("test_api_key", "https://test-api.aiping.cn/v1", "test-model")
     
         # 调用翻译方法
-        result = translator.translate(sample_text, source_lang, target_lang)
-    
+        result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
+
         # 验证OpenAI客户端初始化
         mock_openai.assert_called_once()
-    
+
         # 验证API调用
         mock_chat.completions.create.assert_called_once()
-    
+
         # 验证翻译结果
         assert isinstance(result, str)
         assert result == mock_translation
@@ -101,18 +93,18 @@ class TestAipingTranslator:
         mock_openai.return_value = mock_client
         
         # 创建翻译器实例
-        translator = AipingTranslator("test_api_key")
+        translator = AipingTranslator("test_api_key", "https://test-api.aiping.cn/v1", "test-model")
         
         # 验证抛出异常
         with pytest.raises(Exception):
-            translator.translate(sample_text, source_lang, target_lang)
+            translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
     
     def test_validate_language(self):
         """测试语言验证功能
         
         验证AipingTranslator能够正确验证语言代码。
         """
-        translator = AipingTranslator("test_api_key")
+        translator = AipingTranslator("test_api_key", "https://test-api.aiping.cn/v1", "test-model")
         
         # 测试支持的语言
         assert translator._validate_language("en") is True
@@ -126,7 +118,7 @@ class TestAipingTranslator:
         
         验证AipingTranslator的文本预处理功能。
         """
-        translator = AipingTranslator("test_api_key")
+        translator = AipingTranslator("test_api_key", "https://test-api.aiping.cn/v1", "test-model")
         
         # 测试包含多余空格的文本
         raw_text = "   " + sample_text + "   \n  "
