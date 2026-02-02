@@ -111,7 +111,7 @@ PDF翻译工具
 - **Web框架**：Flask 3.0+
 - **PDF处理**：
   - PyMuPDF (fitz) 1.23+
-  - pdfplumber 0.10+
+  - camelot-py[cv]
 - **文档处理**：
   - python-docx：用于Word文档生成
 - **翻译API**：
@@ -137,6 +137,29 @@ PDF翻译工具
 - 下载页：翻译结果下载
 
 ## 变更记录
+
+### 2026-02-02
+- 替换 pdfplumber 为 camelot-py 以改进表格提取
+- 实现坐标系转换逻辑，解决 camelot-py 与 PyMuPDF 的坐标系差异
+- 更新依赖项，添加 camelot-py[cv]、ghostscript 和 opencv-python
+- 修复相关错误和测试用例
+- 优化 PDF 提取器：
+  - 修改 `__init__` 方法以接受 `pdf_path` 参数并在初始化时提取元数据
+  - 添加 `get_metadata` 方法提取 PDF 元数据
+  - 更新提取方法使用实例属性
+  - 移除 `extract_page_text` 方法
+  - 添加 `total_pages` 属性用于快速获取页数
+- 修复 API 超时错误：
+  - 为 OpenAI 客户端添加 30 秒超时设置
+  - 实现 3 次重试机制，每次间隔 2 秒
+- 修复 XML 兼容性错误：
+  - 添加 `_clean_xml_compatible_text` 方法移除非 XML 兼容字符
+  - 更新文本添加方法使用清理函数
+- 其他修复：
+  - 在 table_processor.py 中添加 os 模块导入
+  - 修复异常处理以正确抛出 FileNotFoundError
+  - 更新 translation_service.py 使用 `total_pages` 属性
+  - 添加新测试用例验证 `total_pages` 属性和其他新功能
 
 ### 2026-01-27
 - 新增：Word文档生成功能

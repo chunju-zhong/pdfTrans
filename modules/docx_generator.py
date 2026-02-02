@@ -16,6 +16,31 @@ class DocxGenerator:
         """初始化DocxGenerator对象"""
         logger.info("Word生成器初始化完成")
     
+    def _clean_xml_compatible_text(self, text):
+        """清理文本，确保它只包含XML兼容的字符
+        
+        Args:
+            text (str): 要清理的文本
+            
+        Returns:
+            str: 清理后的文本
+        """
+        if not text:
+            return ""
+        
+        # 移除NULL字节和控制字符（保留制表符、换行符和回车符）
+        cleaned_text = ""
+        for char in text:
+            char_code = ord(char)
+            # 保留XML兼容的字符：
+            # 1. 可打印的ASCII字符（32-126）
+            # 2. 制表符（9）、换行符（10）、回车符（13）
+            # 3. Unicode字符（128+）
+            if (32 <= char_code <= 126) or char_code in (9, 10, 13) or char_code >= 128:
+                cleaned_text += char
+        
+        return cleaned_text
+    
     def generate_docx(self, translated_content, images, output_docx_path, target_lang="zh"):
         """生成翻译后的Word文档
         
@@ -126,8 +151,11 @@ class DocxGenerator:
         # 创建段落
         paragraph = doc.add_paragraph()
         
+        # 清理文本，确保它只包含XML兼容的字符
+        cleaned_text = self._clean_xml_compatible_text(merged_item['text'])
+        
         # 添加文本
-        run = paragraph.add_run(merged_item['text'])
+        run = paragraph.add_run(cleaned_text)
         
         # 应用样式
         try:
@@ -137,7 +165,7 @@ class DocxGenerator:
             # 设置字体大小
             font_size = merged_item['font_size']
             run.font.size = Pt(font_size)
-            logger.info(f"应用字体大小: {font_size} 到文本: '{merged_item['text'][:50]}...'")
+            logger.info(f"应用字体大小: {font_size} 到文本: '{cleaned_text[:50]}...'")
             
             # 设置颜色
             color = merged_item['color']
@@ -155,7 +183,7 @@ class DocxGenerator:
             run.bold = merged_item['bold']
             run.italic = merged_item['italic']
             
-            logger.debug(f"添加合并文本，内容: '{merged_item['text'][:50]}...'，字体: {merged_item['font']}，大小: {font_size}")
+            logger.debug(f"添加合并文本，内容: '{cleaned_text[:50]}...'，字体: {merged_item['font']}，大小: {font_size}")
         except Exception as e:
             logger.warning(f"设置合并文本样式失败: {e}")
     
@@ -169,13 +197,16 @@ class DocxGenerator:
         # 创建段落
         paragraph = doc.add_paragraph()
         
+        # 清理文本，确保它只包含XML兼容的字符
+        cleaned_text = self._clean_xml_compatible_text(text_block.block_text)
+        
         # 添加文本
-        run = paragraph.add_run(text_block.block_text)
+        run = paragraph.add_run(cleaned_text)
         
         # 应用样式
         self._apply_style(run, text_block)
         
-        logger.debug(f"添加文本块，内容: '{text_block.block_text[:50]}...'，字体: {text_block.font}，大小: {text_block.font_size}")
+        logger.debug(f"添加文本块，内容: '{cleaned_text[:50]}...'，字体: {text_block.font}，大小: {text_block.font_size}")
     
     def _apply_style(self, run, text_block):
         """应用样式到文本
@@ -255,7 +286,7 @@ class DocxGenerator:
             doc: Word文档对象
             table: 表格对象
         """
-        table_data = table.get('rows', table.get('content', []))
+        table_data = table.get('cells', [])
         if not table_data:
             logger.warning("表格数据为空，跳过")
             return
@@ -272,7 +303,9 @@ class DocxGenerator:
                 for j, cell in enumerate(row):
                     # 检查cell类型
                     cell_text = cell.get('text', cell) if isinstance(cell, dict) else cell
-                    word_table.cell(i, j).text = str(cell_text)
+                    # 清理文本，确保它只包含XML兼容的字符
+                    cleaned_text = self._clean_xml_compatible_text(str(cell_text))
+                    word_table.cell(i, j).text = cleaned_text
             
             logger.info(f"添加表格成功，{num_rows}行{num_cols}列")
         else:

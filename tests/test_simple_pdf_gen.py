@@ -9,7 +9,7 @@ import os
 import sys
 import tempfile
 from modules.pdf_generator import PdfGenerator
-from modules.pdf_extractor import pdf_extractor
+from modules.pdf_extractor import PdfExtractor
 from services.translation_service import translation_service
 from utils.logging_config import setup_logging
 
@@ -32,7 +32,8 @@ with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
 try:
     # 1. 提取PDF文本
     print(f"1. 提取PDF文本: {test_pdf_path}")
-    extracted_content = pdf_extractor.extract_text(test_pdf_path)
+    pdf_extractor = PdfExtractor(test_pdf_path)
+    extracted_content = pdf_extractor.extract_text()
     print(f"   提取完成，页数: {extracted_content.total_pages}")
     
     # 2. 模拟翻译后的内容结构

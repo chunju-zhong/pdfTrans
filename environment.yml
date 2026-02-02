@@ -7,7 +7,9 @@ dependencies:
   - flask
   - requests
   - python-dotenv
+  - ghostscript
   - pip
   - pip:
     - pymupdf
-    - pdfplumber
+    - camelot-py[cv]
+    - opencv-python

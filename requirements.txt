@@ -1,6 +1,8 @@
 flask
 pymupdf
-pdfplumber
+camelot-py[cv]
+ghostscript
+opencv-python
 requests
 python-dotenv
 openai

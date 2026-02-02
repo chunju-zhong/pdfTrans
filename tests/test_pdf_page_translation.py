@@ -65,8 +65,13 @@ class TestPdfPageTranslationIntegration:
             extracted_content = PdfExtraction(total_pages=3, pages=pages, tables=[])
             
             # 模拟PDF提取器
-            with patch('services.translation_service.pdf_extractor') as mock_pdf_extractor:
+            with patch('services.translation_service.PdfExtractor') as mock_pdf_extractor_class:
+                # 创建模拟实例
+                mock_pdf_extractor = MagicMock()
                 mock_pdf_extractor.extract_text.return_value = extracted_content
+                mock_pdf_extractor.total_pages = 3  # 模拟 total_pages 属性
+                # 让构造函数返回模拟实例
+                mock_pdf_extractor_class.return_value = mock_pdf_extractor
                 
                 # 模拟翻译器
                 with patch('services.translation_service.translation_service.get_translator') as mock_get_translator:
@@ -198,8 +203,13 @@ class TestPdfPageTranslationIntegration:
             extracted_content = PdfExtraction(total_pages=2, pages=pages, tables=[])
             
             # 模拟PDF提取器
-            with patch('services.translation_service.pdf_extractor') as mock_pdf_extractor:
+            with patch('services.translation_service.PdfExtractor') as mock_pdf_extractor_class:
+                # 创建模拟实例
+                mock_pdf_extractor = MagicMock()
                 mock_pdf_extractor.extract_text.return_value = extracted_content
+                mock_pdf_extractor.total_pages = 2  # 模拟 total_pages 属性
+                # 让构造函数返回模拟实例
+                mock_pdf_extractor_class.return_value = mock_pdf_extractor
                 
                 # 测试：翻译不存在的页码
                 translation_service.process_translation(

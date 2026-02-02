@@ -145,7 +145,7 @@ class PdfGenerator:
                     page_tables = [table for table in translated_content['tables'] if table['page_num'] == page_num]
                     logger.info(f"第 {page_num} 页有 {len(page_tables)} 个表格需要处理")
                     for i, table in enumerate(page_tables):
-                        self._draw_translated_table(new_page, table)
+                        self._draw_translated_table(new_page, table, target_lang)
                         logger.info(f"第 {page_num} 页表格 {i+1} 绘制完成")
                 
                 # 如果没有需要处理的页面，生成一个空PDF或显示警告
@@ -384,60 +384,197 @@ class PdfGenerator:
     
 
     
-    def _draw_translated_table(self, page, table):
+    def _draw_translated_table(self, page, table, target_lang="zh"):
         """在页面上绘制翻译后的表格
         
         Args:
             page (fitz.Page): PDF页面对象
             table (dict): 翻译后的表格
+            target_lang (str): 目标语言代码
         """
-        # 支持两种表格数据格式：rows和content
-        table_data = table.get('rows', table.get('content', []))
-        if not table_data:
+        # 使用cells数据格式
+        table_cells = table.get('cells', [])
+        if not table_cells:
             logger.warning("表格数据为空，跳过绘制")
             return
         
-        logger.info(f"开始绘制表格，共 {len(table_data)} 行 {len(table_data[0])} 列")
+        logger.info(f"开始绘制表格，共 {len(table_cells)} 行 {len(table_cells[0])} 列")
         
-        # 简单实现：绘制表格边框和文本
-        for i, row in enumerate(table_data):
+        # 获取表格边界框信息
+        table_bbox = table.get('bbox')
+        logger.info(f"表格边界框: {table_bbox}")
+        
+        # 获取行高和列宽信息
+        row_heights = table.get('row_heights', [])
+        col_widths = table.get('col_widths', [])
+        logger.info(f"行高: {row_heights}")
+        logger.info(f"列宽: {col_widths}")
+        
+        # 获取适合目标语言的字体，使用与文本块相同的逻辑
+        suitable_font = self._get_suitable_font(page, 'GoogleSansText-Regular', target_lang)
+        logger.info(f"适合的字体: 目标语言='{target_lang}', 选择='{suitable_font}'")
+        
+        # 绘制表格边框和文本
+        logger.info(f"开始绘制表格单元格，共 {len(table_cells)} 行 {len(table_cells[0])} 列")
+        
+        for i, row in enumerate(table_cells):
             for j, cell in enumerate(row):
-                # 检查cell类型，支持两种格式：直接文本或包含text和position的dict
-                cell_text = cell.get('text', cell) if isinstance(cell, dict) else cell
+                # 记录单元格位置信息
+                is_corner_cell = (i == 0 and j == 0) or (i == 0 and j == len(row) - 1) or (i == len(table_cells) - 1 and j == 0) or (i == len(table_cells) - 1 and j == len(row) - 1)
+                cell_position = "角落" if is_corner_cell else "中间"
+                logger.info(f"处理{cell_position}单元格: 行={i+1}, 列={j+1}")
                 
-                # 如果没有位置信息，使用默认位置
-                if isinstance(cell, dict) and 'position' in cell:
-                    x0 = cell['position']['x0']
-                    y0 = cell['position']['y0']
-                    x1 = cell['position']['x1']
-                    y1 = cell['position']['y1']
+                # 检查cell类型
+                logger.info(f"单元格类型: {type(cell)}, 内容: {cell}")
+                
+                if isinstance(cell, dict):
+                    cell_text = cell.get('text', '')
+                    cell_bbox = cell.get('bbox')
+                    logger.info(f"单元格是字典，文本: '{cell_text}', 边界框: {cell_bbox}")
+                elif hasattr(cell, 'text') and hasattr(cell, 'bbox'):
+                    cell_text = cell.text
+                    cell_bbox = cell.bbox
+                    logger.info(f"单元格是对象，文本: '{cell_text}', 边界框: {cell_bbox}")
                 else:
-                    # 简单计算位置，实际应用中应该有更精确的位置信息
-                    x0 = 50 + j * 100
-                    y0 = 200 + i * 30
-                    x1 = 150 + j * 100
-                    y1 = 230 + i * 30
+                    cell_text = str(cell)
+                    cell_bbox = None
+                    logger.info(f"单元格是其他类型，转换为文本: '{cell_text}', 无边界框")
+                
+                # 如果有单元格边界框信息，使用它
+                if cell_bbox:
+                    x0, y0, x1, y1 = cell_bbox
+                    cell_width = x1 - x0
+                    cell_height = y1 - y0
+                    logger.info(f"使用单元格边界框: 位置=({x0:.2f}, {y0:.2f}), 大小=({cell_width:.2f}x{cell_height:.2f})")
+                else:
+                    # 没有边界框信息，使用表格边界框和行列信息计算
+                    if table_bbox and row_heights and col_widths:
+                        table_x0, table_y0, table_x1, table_y1 = table_bbox
+                        
+                        # 计算当前单元格的位置
+                        current_x = table_x0
+                        for k in range(j):
+                            if k < len(col_widths):
+                                current_x += col_widths[k]
+                        
+                        current_y = table_y0
+                        for k in range(i):
+                            if k < len(row_heights):
+                                current_y += row_heights[k]
+                        
+                        # 计算单元格大小
+                        cell_width = col_widths[j] if j < len(col_widths) else (table_x1 - table_x0) / len(row)
+                        cell_height = row_heights[i] if i < len(row_heights) else (table_y1 - table_y0) / len(table_cells)
+                        
+                        x0 = current_x
+                        y0 = current_y
+                        x1 = current_x + cell_width
+                        y1 = current_y + cell_height
+                        logger.info(f"计算单元格位置: 位置=({x0:.2f}, {y0:.2f}), 大小=({cell_width:.2f}x{cell_height:.2f})")
+                        logger.info(f"使用的行高: {row_heights[i] if i < len(row_heights) else '计算值'}")
+                        logger.info(f"使用的列宽: {col_widths[j] if j < len(col_widths) else '计算值'}")
+                    else:
+                        # 使用默认位置和大小
+                        x0 = 50 + j * 100
+                        y0 = 200 + i * 30
+                        x1 = 150 + j * 100
+                        y1 = 230 + i * 30
+                        cell_width = 100
+                        cell_height = 30
+                        logger.warning("没有足够的表格信息，使用默认位置和大小")
                 
                 rect = fitz.Rect(x0, y0, x1, y1)
+                logger.info(f"单元格矩形: {rect}")
                 
                 # 绘制单元格边框
-                page.draw_rect(rect, color=(0, 0, 0), width=0.5)
+                try:
+                    page.draw_rect(rect, color=(0, 0, 0), width=0.5)
+                    logger.info(f"成功绘制单元格 ({i+1},{j+1}) 边框")
+                except Exception as e:
+                    logger.error(f"绘制单元格 ({i+1},{j+1}) 边框异常: {str(e)}")
+                
+                # 绘制单元格背景，无论是否有文本
+                try:
+                    page.draw_rect(rect, color=(1, 1, 1), fill=True, width=0)
+                    logger.debug(f"成功绘制单元格 ({i+1},{j+1}) 背景")
+                except Exception as e:
+                    logger.error(f"绘制单元格 ({i+1},{j+1}) 背景异常: {str(e)}")
                 
                 # 绘制单元格文本
                 if cell_text:
-                    # 简单实现：居中对齐
-                    result = page.insert_textbox(
-                        rect,
-                        str(cell_text),
-                        fontname='helv',
-                        fontsize=10,
-                        color=(0, 0, 0),
-                        align=1  # 居中对齐
-                    )
-                    if result >= 0:
-                        logger.debug(f"单元格 ({i+1},{j+1}) 文本绘制成功，插入了 {result} 个字符")
+                    logger.info(f"开始绘制单元格 ({i+1},{j+1}) 文本: '{cell_text}'")
+                    
+                    # 动态计算字体大小
+                    base_font_size = min(cell_height * 0.8, 12)  # 不超过单元格高度的80%，最大12
+                    logger.info(f"计算字体大小: 基础大小={base_font_size:.2f}")
+                    
+                    # 尝试绘制文本，支持字体大小调整
+                    max_attempts = 5
+                    success = False
+                    
+                    for attempt in range(1, max_attempts + 1):
+                        # 计算当前尝试的字体大小
+                        if attempt == 1:
+                            current_font_size = base_font_size
+                        else:
+                            current_font_size = base_font_size * (1 - (attempt - 1) * 0.1)
+                            current_font_size = max(current_font_size, base_font_size * 0.5)  # 不小于原大小的50%
+                        
+                        logger.info(f"尝试 {attempt}/{max_attempts}: 字体大小={current_font_size:.2f}")
+                        
+                        try:
+                            # 尝试绘制文本
+                            result = page.insert_textbox(
+                                rect,
+                                cell_text,
+                                fontname=suitable_font,
+                                fontsize=current_font_size,
+                                color=(0, 0, 0),
+                                align=1  # 居中对齐
+                            )
+                            
+                            logger.info(f"文本绘制结果: {result}, 字体: {suitable_font}")
+                            
+                            if result >= 0:
+                                logger.info(f"单元格 ({i+1},{j+1}) 文本绘制成功，插入了 {result} 个字符，使用字体大小: {current_font_size:.2f}")
+                                success = True
+                                break
+                            
+                            # 文本溢出，需要调整
+                            logger.info(f"单元格 ({i+1},{j+1}) 文本溢出，返回值: {result}，尝试调整字体大小")
+                            
+                        except Exception as e:
+                            logger.error(f"单元格 ({i+1},{j+1}) 文本绘制异常: {str(e)}")
+                    
+                    if not success:
+                        logger.warning(f"单元格 ({i+1},{j+1}) 文本绘制失败，使用最小字体大小")
+                        # 使用最小字体大小尝试最后一次
+                        try:
+                            result = page.insert_textbox(
+                                rect,
+                                cell_text,
+                                fontname=suitable_font,
+                                fontsize=base_font_size * 0.5,
+                                color=(0, 0, 0),
+                                align=1  # 居中对齐
+                            )
+                            logger.info(f"单元格 ({i+1},{j+1}) 最后尝试绘制，返回值: {result}")
+                        except Exception as e:
+                            logger.error(f"单元格 ({i+1},{j+1}) 最后尝试绘制异常: {str(e)}")
+                    
+                    # 记录单元格绘制状态
+                    if success:
+                        logger.info(f"✅ 单元格 ({i+1},{j+1}) 绘制完成: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
                     else:
-                        logger.warning(f"单元格 ({i+1},{j+1}) 文本绘制失败，返回值: {result}")
+                        logger.warning(f"❌ 单元格 ({i+1},{j+1}) 绘制失败: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
+                else:
+                    logger.info(f"单元格 ({i+1},{j+1}) 无文本，但已绘制背景和边框")
+                    # 即使没有文本，也确保绘制边框
+                    try:
+                        page.draw_rect(rect, color=(0, 0, 0), width=0.5)
+                        logger.debug(f"成功绘制空单元格 ({i+1},{j+1}) 边框")
+                    except Exception as e:
+                        logger.error(f"绘制空单元格 ({i+1},{j+1}) 边框异常: {str(e)}")
         
         logger.info("表格绘制完成")
     

@@ -126,3 +126,65 @@ class TestAipingTranslator:
         
         # 验证预处理结果
         assert processed_text == "Hello, world! This is a test text for translation."
+    
+    @patch('modules.aiping_translator.OpenAI')
+    @patch('time.sleep', return_value=None)
+    def test_translate_with_retry(self, mock_sleep, mock_openai, sample_text, source_lang, target_lang, mock_translator_response):
+        """测试AI Ping翻译重试机制
+        
+        验证AipingTranslator的translate方法在API调用失败时能够正确重试。
+        """
+        # 配置mock，前两次调用失败，第三次成功
+        mock_client = MagicMock()
+        mock_chat = MagicMock()
+        
+        # 模拟前两次调用引发异常，第三次成功
+        def mock_create_side_effect(*args, **kwargs):
+            class MockDelta:
+                def __init__(self, content=None, reasoning_content=None):
+                    self.content = content
+                    self.reasoning_content = reasoning_content
+            
+            class MockChoice:
+                def __init__(self, delta):
+                    self.delta = delta
+            
+            class MockChunk:
+                def __init__(self, choices):
+                    self.choices = choices
+            
+            # 前两次调用失败
+            if mock_create_side_effect.calls < 2:
+                mock_create_side_effect.calls += 1
+                raise Exception("API Timeout")
+            # 第三次调用成功
+            else:
+                mock_translation = mock_translator_response["choices"][0]["message"]["content"]
+                return [
+                    MockChunk([MockChoice(MockDelta(reasoning_content="思考中..."))]),
+                    MockChunk([MockChoice(MockDelta(content=mock_translation))])
+                ]
+        
+        mock_create_side_effect.calls = 0
+        mock_chat.completions.create.side_effect = mock_create_side_effect
+        mock_client.chat = mock_chat
+        mock_openai.return_value = mock_client
+        
+        # 创建翻译器实例
+        translator = AipingTranslator("test_api_key", "https://test-api.aiping.cn/v1", "test-model")
+        
+        # 调用翻译方法
+        result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
+        
+        # 验证OpenAI客户端初始化
+        mock_openai.assert_called_once()
+        
+        # 验证API调用了3次（2次失败+1次成功）
+        assert mock_chat.completions.create.call_count == 3
+        
+        # 验证sleep被调用了2次（重试间隔）
+        assert mock_sleep.call_count == 2
+        
+        # 验证翻译结果
+        assert isinstance(result, str)
+        assert result == mock_translator_response["choices"][0]["message"]["content"]

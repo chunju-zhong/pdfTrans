@@ -5,7 +5,7 @@
 
 import pytest
 from services.translation_service import translation_service
-from modules.pdf_extractor import pdf_extractor
+from modules.pdf_extractor import PdfExtractor
 
 class TestTranslationService:
     """翻译服务测试类"""
@@ -16,7 +16,8 @@ class TestTranslationService:
         验证翻译服务能够正常处理PdfExtraction对象
         """
         # 先提取PDF文本，验证返回的是PdfExtraction对象
-        extracted_content = pdf_extractor.extract_text(test_pdf_path)
+        pdf_extractor = PdfExtractor(test_pdf_path)
+        extracted_content = pdf_extractor.extract_text()
         
         # 验证提取结果是PdfExtraction对象
         from models.extraction import PdfExtraction

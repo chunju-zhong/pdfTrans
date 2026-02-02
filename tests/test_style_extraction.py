@@ -3,7 +3,7 @@
 import os
 import sys
 import logging
-from modules.pdf_extractor import pdf_extractor
+from modules.pdf_extractor import PdfExtractor
 from utils.logging_config import setup_logging
 
 # 配置日志
@@ -21,8 +21,10 @@ def test_style_extraction():
         return False
     
     try:
-        # 调用extract_page_text方法，提取第一页的文本块
-        pdf_page = pdf_extractor.extract_page_text(test_file, 1)
+        # 创建本地PDF提取器实例
+        pdf_extractor = PdfExtractor(test_file)
+        # 调用extract_text方法，提取第一页的文本块
+        pdf_page = pdf_extractor.extract_text(pages=[1]).pages[0]
         
         # 打印提取的文本块数量
         print(f"提取到 {len(pdf_page.text_blocks)} 个文本块")

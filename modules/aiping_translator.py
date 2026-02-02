@@ -22,6 +22,7 @@ class AipingTranslator(Translator):
         self.client = OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
+            timeout=30.0,  # 添加超时设置，30秒
         )
     
     def translate(self, text, source_lang, target_lang, doc_type, glossary):
@@ -68,51 +69,63 @@ class AipingTranslator(Translator):
         system_prompt = self._generate_system_prompt(doc_type, source_lang_name, target_lang_name, glossary)
         user_prompt = self._generate_user_prompt(source_lang_name, target_lang_name, doc_type, processed_text)
         
-        try:
-            # 调用AI Ping API - 使用OpenAI Chat API格式，搭配Qwen3-32B优化参数
-            response = self.client.chat.completions.create(
-                model=self.model,
-                stream=True,  # 保持流式调用，兼容现有测试
-                temperature=0.1,  # 降低温度，提高翻译准确性
-                top_p=0.9,  # 核采样参数
-                max_tokens=8192,  # 最大token数
-                extra_body={
-                    "provider": {
-                        "only": [],
-                        "order": [],
-                        "sort": "output_price",
-                        "input_price_range": [],
-                        "output_price_range": [],
-                        "input_length_range": [],
-                        "throughput_range": [],
-                        "latency_range": []
-                    }
-                },
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system_prompt
+        import time
+        
+        max_retries = 3  # 最大重试次数
+        retry_delay = 2  # 重试间隔（秒）
+        
+        for attempt in range(max_retries):
+            try:
+                # 调用AI Ping API - 使用OpenAI Chat API格式，搭配Qwen3-32B优化参数
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    stream=True,  # 保持流式调用，兼容现有测试
+                    temperature=0.1,  # 降低温度，提高翻译准确性
+                    top_p=0.9,  # 核采样参数
+                    max_tokens=8192,  # 最大token数
+                    extra_body={
+                        "provider": {
+                            "only": [],
+                            "order": [],
+                            "sort": "output_price",
+                            "input_price_range": [],
+                            "output_price_range": [],
+                            "input_length_range": [],
+                            "throughput_range": [],
+                            "latency_range": []
+                        }
                     },
-                    {
-                        "role": "user",
-                        "content": user_prompt
-                    }
-                ]
-            )
-            
-            # 处理响应 - stream=True时直接处理流式响应
-            translated_text = ""
-            for chunk in response:
-                if hasattr(chunk, "choices") and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta
-                    if hasattr(delta, "content") and delta.content:
-                        translated_text += delta.content
-                    elif hasattr(delta, "reasoning_content"):
-                        # 跳过思考内容
-                        continue
-            
-            # 文本后处理
-            return self._postprocess_text(translated_text, text)
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": user_prompt
+                        }
+                    ]
+                )
                 
-        except Exception as e:
-            raise Exception(f"aiping翻译API请求失败: {str(e)}")
+                # 处理响应 - stream=True时直接处理流式响应
+                translated_text = ""
+                for chunk in response:
+                    if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta
+                        if hasattr(delta, "content") and delta.content:
+                            translated_text += delta.content
+                        elif hasattr(delta, "reasoning_content"):
+                            # 跳过思考内容
+                            continue
+                
+                # 文本后处理
+                return self._postprocess_text(translated_text, text)
+                    
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    # 不是最后一次尝试，记录错误并重试
+                    print(f"aiping翻译API请求失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}，将在 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                else:
+                    # 最后一次尝试失败，抛出异常
+                    raise Exception(f"aiping翻译API请求失败: {str(e)}")

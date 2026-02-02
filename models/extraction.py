@@ -34,23 +34,28 @@ class PdfPage:
         }
 
 
-class PdfTable:
-    """单表提取结果模型
+class PdfCell:
+    """表格单元格模型
     
-    表示PDF单表的提取结果，包含页码、表格索引和表格内容
+    表示PDF表格中的单个单元格，包含文本、边界框和大小信息
     """
     
-    def __init__(self, page_num, table_idx, content):
-        """初始化PdfTable对象
+    def __init__(self, text, bbox, row_idx, col_idx):
+        """初始化PdfCell对象
         
         Args:
-            page_num (int): 页码
-            table_idx (int): 表格索引
-            content (list[list[str]]): 表格内容
+            text (str): 单元格文本
+            bbox (tuple): 单元格边界框 (x0, y0, x1, y1)
+            row_idx (int): 行索引
+            col_idx (int): 列索引
         """
-        self.page_num = page_num
-        self.table_idx = table_idx
-        self.content = content
+        self.text = text
+        self.bbox = bbox
+        self.row_idx = row_idx
+        self.col_idx = col_idx
+        # 计算单元格大小
+        self.width = bbox[2] - bbox[0]
+        self.height = bbox[3] - bbox[1]
     
     def to_dict(self):
         """转换为字典格式
@@ -59,9 +64,60 @@ class PdfTable:
             dict: 包含所有属性的字典
         """
         return {
+            'text': self.text,
+            'bbox': self.bbox,
+            'row_idx': self.row_idx,
+            'col_idx': self.col_idx,
+            'width': self.width,
+            'height': self.height
+        }
+
+
+class PdfTable:
+    """单表提取结果模型
+    
+    表示PDF单表的提取结果，包含页码、表格索引、单元格信息和边界框信息
+    """
+    
+    def __init__(self, page_num, table_idx, cells, bbox=None, row_heights=None, col_widths=None):
+        """初始化PdfTable对象
+        
+        Args:
+            page_num (int): 页码
+            table_idx (int): 表格索引
+            cells (list[list[PdfCell]]): 单元格信息，二维列表
+            bbox (tuple): 表格边界框 (x0, y0, x1, y1)
+            row_heights (list[float]): 行高列表
+            col_widths (list[float]): 列宽列表
+        """
+        self.page_num = page_num
+        self.table_idx = table_idx
+        self.cells = cells
+        self.bbox = bbox
+        self.row_heights = row_heights or []
+        self.col_widths = col_widths or []
+    
+    def to_dict(self):
+        """转换为字典格式
+        
+        Returns:
+            dict: 包含所有属性的字典
+        """
+        # 转换cells为字典格式
+        cells_dict = []
+        for row in self.cells:
+            row_dict = []
+            for cell in row:
+                row_dict.append(cell.to_dict())
+            cells_dict.append(row_dict)
+        
+        return {
             'page_num': self.page_num,
             'table_idx': self.table_idx,
-            'content': self.content
+            'cells': cells_dict,
+            'bbox': self.bbox,
+            'row_heights': self.row_heights,
+            'col_widths': self.col_widths
         }
 
 

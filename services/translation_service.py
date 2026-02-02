@@ -3,7 +3,7 @@ import os
 import shutil
 import fitz  # PyMuPDF
 
-from modules.pdf_extractor import pdf_extractor
+from modules.pdf_extractor import PdfExtractor
 from modules.aiping_translator import AipingTranslator
 from modules.silicon_flow_translator import SiliconFlowTranslator
 from modules.pdf_generator import PdfGenerator
@@ -117,9 +117,9 @@ class TranslationService:
                 output_filename = f"translated_{unique_id}_{filename}"
                 output_filepath = os.path.join(config.OUTPUT_FOLDER, output_filename)
                 
-                # 提取PDF文本以获取总页数
-                extracted_content = pdf_extractor.extract_text(input_filepath)
-                total_pages = extracted_content.total_pages
+                # 使用 PdfExtractor 的 total_pages 属性获取总页数
+                pdf_extractor = PdfExtractor(input_filepath)
+                total_pages = pdf_extractor.total_pages
                 
                 # 解析页码范围，获取需要拷贝的页码集合
                 target_pages = self.parse_page_range(page_range, total_pages)
@@ -170,9 +170,9 @@ class TranslationService:
             
             # 1.1 先获取总页数
             logger.info(f"任务 {task.task_id} 开始获取总页数")
-            # 使用轻量级方式获取总页数
-            with fitz.open(input_filepath) as doc:
-                total_pages = len(doc)
+            # 使用 PdfExtractor 的 total_pages 属性获取总页数
+            pdf_extractor = PdfExtractor(input_filepath)
+            total_pages = pdf_extractor.total_pages
             logger.info(f"任务 {task.task_id} 获取总页数完成: {total_pages}")
             
             if task.is_canceled():
@@ -187,7 +187,8 @@ class TranslationService:
             
             # 1.3 根据页码范围提取PDF文本
             logger.info(f"任务 {task.task_id} 开始提取PDF文本")
-            extracted_content = pdf_extractor.extract_text(input_filepath, pages=list(target_pages))
+            pdf_extractor = PdfExtractor(input_filepath)
+            extracted_content = pdf_extractor.extract_text(pages=list(target_pages))
             logger.info(f"任务 {task.task_id} PDF文本提取完成")
             
             # 保存提取的图像信息
@@ -398,54 +399,77 @@ class TranslationService:
             
             # 翻译表格内容
             if extracted_content.tables:
-                if not task.update_progress(70, '正在翻译表格内容...'):
-                    # 清理临时文件
-                    remove_file(input_filepath)
-                    logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
-                    return
-                
-                logger.info(f"任务 {task.task_id} 开始翻译表格内容")
-                for table in extracted_content.tables:
-                    # 只翻译指定页码的表格
-                    if table.page_num not in target_pages:
-                        continue
+                    if not task.update_progress(70, '正在翻译表格内容...'):
+                        # 清理临时文件
+                        remove_file(input_filepath)
+                        logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
+                        return
                     
-                    translated_table = {
-                        'page_num': table.page_num,
-                        'table_idx': table.table_idx,
-                        'content': []
-                    }
-                    
-                    for row in table.content:
-                        if task.is_canceled():
-                            # 清理临时文件
-                            remove_file(input_filepath)
-                            logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
-                            return
+                    logger.info(f"任务 {task.task_id} 开始翻译表格内容")
+                    for table in extracted_content.tables:
+                        # 只翻译指定页码的表格
+                        if table.page_num not in target_pages:
+                            continue
                         
-                        translated_row = []
-                        for cell in row:
+                        translated_table = {
+                            'page_num': table.page_num,
+                            'table_idx': table.table_idx,
+                            'cells': [],
+                            'bbox': table.bbox,
+                            'row_heights': table.row_heights,
+                            'col_widths': table.col_widths
+                        }
+                        
+                        for row in table.cells:
                             if task.is_canceled():
                                 # 清理临时文件
                                 remove_file(input_filepath)
                                 logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
                                 return
                             
-                            if cell:
-                                # 调用翻译API
-                                translated_cell = translator.translate(
-                                    cell,
-                                    source_lang,
-                                    target_lang
-                                )
-                                translated_row.append(translated_cell)
-                            else:
-                                translated_row.append('')
-                        translated_table['content'].append(translated_row)
+                            translated_row = []
+                            for cell in row:
+                                if task.is_canceled():
+                                    # 清理临时文件
+                                    remove_file(input_filepath)
+                                    logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
+                                    return
+                                
+                                if cell and cell.text:
+                                    # 调用翻译API
+                                    translated_text = translator.translate(
+                                        cell.text,
+                                        source_lang,
+                                        target_lang,
+                                        doc_type=doc_type,
+                                        glossary=glossary
+                                    )
+                                    # 保存翻译后的单元格信息
+                                    translated_cell = {
+                                        'text': translated_text,
+                                        'bbox': cell.bbox,
+                                        'row_idx': cell.row_idx,
+                                        'col_idx': cell.col_idx,
+                                        'width': cell.width,
+                                        'height': cell.height
+                                    }
+                                    translated_row.append(translated_cell)
+                                else:
+                                    # 空单元格
+                                    translated_cell = {
+                                        'text': '',
+                                        'bbox': cell.bbox if cell else None,
+                                        'row_idx': cell.row_idx if cell else 0,
+                                        'col_idx': cell.col_idx if cell else 0,
+                                        'width': cell.width if cell else 0,
+                                        'height': cell.height if cell else 0
+                                    }
+                                    translated_row.append(translated_cell)
+                            translated_table['cells'].append(translated_row)
+                        
+                        translated_content['tables'].append(translated_table)
                     
-                    translated_content['tables'].append(translated_table)
-                
-                logger.info(f"任务 {task.task_id} 表格翻译完成")
+                    logger.info(f"任务 {task.task_id} 表格翻译完成")
             
             if task.is_canceled():
                 # 清理临时文件

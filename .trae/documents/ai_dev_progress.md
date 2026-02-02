@@ -54,8 +54,8 @@ pdfTrans/
 ## 技术栈
 - **后端语言**：Python 3.9+
 - **虚拟环境**：conda
-- **PDF处理库**：PyMuPDF + pdfplumber
-- **翻译服务**：百度翻译API + aiping API + 硅基流动API
+- **PDF处理库**：PyMuPDF + camelot-py
+- **翻译服务**：aiping API + 硅基流动API
 - **Web框架**：Flask
 - **前端**：HTML/CSS/JavaScript
 
@@ -63,13 +63,12 @@ pdfTrans/
 
 ### 1. PDF文本提取
 - 使用PyMuPDF提取普通文本，保留位置信息
-- 使用pdfplumber提取表格内容
+- 使用camelot-py提取表格内容
 - 支持提取指定页面文本
 - 支持获取PDF元数据
 
 ### 2. 多翻译API支持
 - 实现了翻译基类，统一翻译接口
-- 支持百度翻译API
 - 支持aiping翻译API
 - 支持硅基流动翻译API
 - 实现了翻译服务选择工厂
@@ -107,6 +106,50 @@ pdfTrans/
 - 每次开发完成后请记录已完成的任务和下一步计划
 
 ## 开发进度记录
+
+### 2026-02-02
+- **当前状态**：已完成PDF提取器优化、API超时错误修复、XML兼容性错误修复等多项功能改进
+- **已完成任务**：
+  - 优化 PDF 提取器：
+    - 修改 `__init__` 方法以接受 `pdf_path` 参数并在初始化时提取元数据
+    - 添加 `get_metadata` 方法提取 PDF 元数据
+    - 更新提取方法使用实例属性
+    - 移除 `extract_page_text` 方法
+    - 添加 `total_pages` 属性用于快速获取页数
+  - 修复 API 超时错误：
+    - 为 OpenAI 客户端添加 30 秒超时设置
+    - 实现 3 次重试机制，每次间隔 2 秒
+  - 修复 XML 兼容性错误：
+    - 添加 `_clean_xml_compatible_text` 方法移除非 XML 兼容字符
+    - 更新文本添加方法使用清理函数
+  - 其他修复：
+    - 在 table_processor.py 中添加 os 模块导入
+    - 修复异常处理以正确抛出 FileNotFoundError
+    - 更新 translation_service.py 使用 `total_pages` 属性
+    - 添加新测试用例验证 `total_pages` 属性和其他新功能
+  - 更新项目文档：
+    - 更新 README.md 中的更新日志
+    - 更新 AI 开发进度记录
+    - 更新需求文档中的变更记录
+- **正在进行任务**：
+  - 测试完整翻译流程
+  - 整体测试和优化
+- **待完成任务**：
+  - 部署到生产环境
+
+### 2026-02-02
+- **当前状态**：已完成表格提取库替换，从 pdfplumber 迁移到 camelot-py，实现了坐标系转换，更新了依赖项和测试用例
+- **已完成任务**：
+  - 替换 pdfplumber 为 camelot-py 以改进表格提取
+  - 实现坐标系转换逻辑，解决 camelot-py 与 PyMuPDF 的坐标系差异
+  - 更新依赖项，添加 camelot-py[cv]、ghostscript 和 opencv-python
+  - 修复相关错误和测试用例，确保表格提取功能正常工作
+  - 更新项目文档，反映技术栈变更
+- **正在进行任务**：
+  - 测试完整翻译流程
+  - 整体测试和优化
+- **待完成任务**：
+  - 部署到生产环境
 
 ### 2026-01-28
 - **当前状态**：已完成模型配置支持、移除百度翻译相关代码、优化提示词生成等多项功能优化

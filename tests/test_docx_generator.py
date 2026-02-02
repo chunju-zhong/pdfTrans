@@ -68,3 +68,43 @@ class TestDocxGenerator:
         assert os.path.getsize(output_docx_path) > 0, "Word文件为空"
         
         print(f"Word文件生成成功: {output_docx_path}")
+    
+    def test_clean_xml_compatible_text(self):
+        """测试清理XML兼容文本的方法
+        
+        验证 _clean_xml_compatible_text 方法能够正确清理XML不兼容的字符。
+        """
+        # 测试用例1：包含控制字符的文本
+        test_text1 = "Hello\x00World\x01"
+        result1 = self.docx_generator._clean_xml_compatible_text(test_text1)
+        assert result1 == "HelloWorld", "控制字符应该被移除"
+        
+        # 测试用例2：包含NULL字节的文本
+        test_text2 = "Test\x00String"
+        result2 = self.docx_generator._clean_xml_compatible_text(test_text2)
+        assert result2 == "TestString", "NULL字节应该被移除"
+        
+        # 测试用例3：包含制表符、换行符和回车符的文本（应该保留）
+        test_text3 = "Line1\tTabbed\nLine2\rLine3"
+        result3 = self.docx_generator._clean_xml_compatible_text(test_text3)
+        assert result3 == test_text3, "制表符、换行符和回车符应该被保留"
+        
+        # 测试用例4：包含Unicode字符的文本（应该保留）
+        test_text4 = "Hello 世界 🌍"
+        result4 = self.docx_generator._clean_xml_compatible_text(test_text4)
+        assert result4 == test_text4, "Unicode字符应该被保留"
+        
+        # 测试用例5：空字符串
+        test_text5 = ""
+        result5 = self.docx_generator._clean_xml_compatible_text(test_text5)
+        assert result5 == "", "空字符串应该返回空字符串"
+        
+        # 测试用例6：None值
+        test_text6 = None
+        result6 = self.docx_generator._clean_xml_compatible_text(test_text6)
+        assert result6 == "", "None值应该返回空字符串"
+        
+        # 测试用例7：正常文本（应该保持不变）
+        test_text7 = "Normal text with spaces and punctuation!"
+        result7 = self.docx_generator._clean_xml_compatible_text(test_text7)
+        assert result7 == test_text7, "正常文本应该保持不变"
