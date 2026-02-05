@@ -82,7 +82,7 @@ class PdfExtractor:
             logger.error(f"提取PDF元数据时出错: {str(e)}", exc_info=True)
             raise Exception(f"提取PDF元数据时出错: {str(e)}")
     
-    def extract_text(self, pages=None):
+    def extract(self, pages=None):
         """提取PDF中的文本内容，可以指定页面
 
         Args:
@@ -254,7 +254,8 @@ class PdfExtractor:
                         block_no=block_no,
                         text=text,
                         bbox=(x0, y0, x1, y1),
-                        block_type=block_type
+                        block_type=block_type,
+                        page_num=current_page_num
                     )
                     text_block_objects[block_no] = text_block
         
@@ -337,8 +338,26 @@ class PdfExtractor:
                 with open(image_path, 'wb') as f:
                     f.write(image_bytes)
                 
-                # 获取图像位置
-                bbox = img[1:5]
+                # 获取图像实际边界框
+                image_rects = page.get_image_rects(xref)
+                if image_rects:
+                    # 使用第一个边界框（通常每个图像只有一个边界框）
+                    rect = image_rects[0]
+                    bbox = (rect.x0, rect.y0, rect.x1, rect.y1)
+                    logger.info(f"获取图像边界框: {bbox}")
+                else:
+                    # 如果没有获取到边界框，使用默认值
+                    bbox = (0, 0, 100, 100)
+                    logger.warning(f"无法获取图像边界框，使用默认值: {bbox}")
+                
+                # 验证边界框格式
+                if len(bbox) == 4 and bbox[1] < bbox[3]:
+                    # 边界框格式正确
+                    pass
+                else:
+                    # 边界框格式异常，使用默认值
+                    logger.warning(f"图像边界框格式异常: {bbox}，使用默认值")
+                    bbox = (0, 0, 100, 100)
                 
                 # 直接创建PdfImage对象并添加到列表
                 pdf_image = PdfImage(
@@ -348,7 +367,7 @@ class PdfExtractor:
                     bbox=bbox
                 )
                 page_images.append(pdf_image)
-                logger.info(f"提取图像: 第{current_page_num}页-图像{image_idx}, 保存到: {image_path}")
+                logger.info(f"提取图像: 第{current_page_num}页-图像{image_idx}, 保存到: {image_path}, 边界框: {bbox}, 位置: x0={bbox[0]}, y0={bbox[1]}, x1={bbox[2]}, y1={bbox[3]}")
             except Exception as e:
                 logger.error(f"提取图像时出错: {str(e)}")
         

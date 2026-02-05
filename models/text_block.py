@@ -4,7 +4,7 @@ class TextBlock:
     封装PDF文本块的所有属性，包括内容和样式信息
     """
     
-    def __init__(self, block_no, text, bbox, block_type=0):
+    def __init__(self, block_no, text, bbox, block_type=0, page_num=0):
         """初始化文本块
         
         Args:
@@ -12,11 +12,13 @@ class TextBlock:
             text (str): 文本内容
             bbox (tuple): 块边界框 (x0, y0, x1, y1)
             block_type (int): 块类型
+            page_num (int): 页面号
         """
         self.block_no = block_no
         self.block_text = text.strip()
         self.block_bbox = bbox
         self.block_type = block_type
+        self.page_num = page_num  # 添加页面号属性
         self.is_body_text = True  # 添加是否为正文的属性，默认为True
         # 样式信息
         self.font = ""
@@ -58,6 +60,7 @@ class TextBlock:
             'block_text': self.block_text,
             'block_bbox': self.block_bbox,
             'block_type': self.block_type,
+            'page_num': self.page_num,  # 包含页面号属性
             'is_body_text': self.is_body_text,  # 包含是否为正文的属性
             'font': self.font,
             'font_size': self.font_size,

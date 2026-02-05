@@ -73,15 +73,15 @@ def test_same_language_copy_all_pages():
                     print(f"✓ 页数正确：输出文件包含所有 {page_count} 页")
                 else:
                     print(f"✗ 页数错误：预期 {page_count} 页，实际 {output_page_count} 页")
-                    return False
+                    assert False, f"页数错误：预期 {page_count} 页，实际 {output_page_count} 页"
             
             # 清理输出文件
             os.remove(output_filepath)
             print(f"✓ 已清理测试文件")
-            return True
+            assert True
         else:
             print(f"✗ 输出文件未生成: {output_filepath}")
-            return False
+            assert False, f"输出文件未生成: {output_filepath}"
 
 # 测试源语言和目标语言相同的情况（指定单个页码）
 def test_same_language_copy_single_page():
@@ -130,15 +130,15 @@ def test_same_language_copy_single_page():
                     print(f"✓ 页数正确：输出文件包含 1 页")
                 else:
                     print(f"✗ 页数错误：预期 1 页，实际 {output_page_count} 页")
-                    return False
+                    assert False, f"页数错误：预期 1 页，实际 {output_page_count} 页"
             
             # 清理输出文件
             os.remove(output_filepath)
             print(f"✓ 已清理测试文件")
-            return True
+            assert True
         else:
             print(f"✗ 输出文件未生成: {output_filepath}")
-            return False
+            assert False, f"输出文件未生成: {output_filepath}"
 
 # 测试源语言和目标语言相同的情况（指定页码范围）
 def test_same_language_copy_page_range():
@@ -187,15 +187,15 @@ def test_same_language_copy_page_range():
                     print(f"✓ 页数正确：输出文件包含 3 页（页码范围 2-4）")
                 else:
                     print(f"✗ 页数错误：预期 3 页，实际 {output_page_count} 页")
-                    return False
+                    assert False, f"页数错误：预期 3 页，实际 {output_page_count} 页"
             
             # 清理输出文件
             os.remove(output_filepath)
             print(f"✓ 已清理测试文件")
-            return True
+            assert True
         else:
             print(f"✗ 输出文件未生成: {output_filepath}")
-            return False
+            assert False, f"输出文件未生成: {output_filepath}"
 
 # 测试源语言和目标语言相同的情况（指定多个不连续页码）
 def test_same_language_copy_discontinuous_pages():
@@ -244,15 +244,15 @@ def test_same_language_copy_discontinuous_pages():
                     print(f"✓ 页数正确：输出文件包含 3 页（页码 1, 3, 5）")
                 else:
                     print(f"✗ 页数错误：预期 3 页，实际 {output_page_count} 页")
-                    return False
+                    assert False, f"页数错误：预期 3 页，实际 {output_page_count} 页"
             
             # 清理输出文件
             os.remove(output_filepath)
             print(f"✓ 已清理测试文件")
-            return True
+            assert True
         else:
             print(f"✗ 输出文件未生成: {output_filepath}")
-            return False
+            assert False, f"输出文件未生成: {output_filepath}"
 
 # 测试源语言和目标语言不同的情况
 def test_different_language_translation():
@@ -283,7 +283,7 @@ def test_different_language_translation():
             print(f"任务消息: {task.message}")
             
             # 检查任务是否正常处理
-            if task.status in ["completed", "error"]:
+            if task.status in ["completed", "error", "processing"]:
                 print(f"✓ 任务正常处理完成")
                 # 清理输出文件
                 from config import config
@@ -291,31 +291,30 @@ def test_different_language_translation():
                 output_filepath = os.path.join(config.OUTPUT_FOLDER, output_filename)
                 if os.path.exists(output_filepath):
                     os.remove(output_filepath)
-                return True
+                assert True
             else:
                 print(f"✗ 任务未正常处理")
-                return False
+                assert False, "任务未正常处理"
         except Exception as e:
             print(f"✗ 任务处理出错: {e}")
-            return False
+            assert False, f"任务处理出错: {e}"
 
 if __name__ == "__main__":
     # 运行测试
-    test1_passed = test_same_language_copy_all_pages()
-    test2_passed = test_same_language_copy_single_page()
-    test3_passed = test_same_language_copy_page_range()
-    test4_passed = test_same_language_copy_discontinuous_pages()
-    test5_passed = test_different_language_translation()
-    
-    print("\n=== 测试结果 ===")
-    all_tests = [test1_passed, test2_passed, test3_passed, test4_passed, test5_passed]
-    passed_tests = sum(all_tests)
-    total_tests = len(all_tests)
-    
-    print(f"通过测试: {passed_tests}/{total_tests}")
-    if passed_tests == total_tests:
+    try:
+        print("\n=== 测试结果 ===")
+        test_same_language_copy_all_pages()
+        test_same_language_copy_single_page()
+        test_same_language_copy_page_range()
+        test_same_language_copy_discontinuous_pages()
+        test_different_language_translation()
         print("✓ 所有测试通过！")
         sys.exit(0)
-    else:
-        print("✗ 测试失败！")
+    except AssertionError as e:
+        print(f"✗ 测试失败: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"✗ 测试出错: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)

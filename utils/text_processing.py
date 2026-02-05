@@ -23,112 +23,110 @@ def _is_sentence_continuation(curr_text):
     
     return False
 
-def merge_semantic_blocks(all_blocks):
+def merge_semantic_blocks(text_blocks):
     """按语义合并文本块
-    
+
     Args:
-        all_blocks (list): 所有原始块列表（已按垂直位置排序，仅包含正文块）
-                          每个元素是包含'text_block'和'page_num'的字典
-        
+        text_blocks (list): 所有原始块列表（已按垂直位置排序，仅包含正文块）
+                          每个元素是TextBlock对象
+
     Returns:
         tuple: (merged_blocks, block_mapping)
-            merged_blocks: 合并后的语义块列表
+            merged_blocks: 合并后的语义块列表（MergedBlock对象列表）
             block_mapping: 原始块与合并块的映射关系
     """
+    from models.merged_block import MergedBlock
+    
     merged_blocks = []
     block_mapping = []  # 记录原始块与合并块的映射关系
-    
-    if not all_blocks:
+
+    if not text_blocks:
         return merged_blocks, block_mapping
-    
+
     # 获取第一个块的TextBlock对象和文本
-    first_block = all_blocks[0]
-    first_text_block = first_block['text_block']
+    first_block = text_blocks[0]
+    first_text_block = first_block
     first_bbox = first_text_block.block_bbox
     first_width = first_bbox[2] - first_bbox[0]  # x1 - x0
     first_height = first_bbox[3] - first_bbox[1]  # y1 - y0
-    
+
     # 记录第一个块的信息
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"创建合并块，第一个原始块字体大小: {first_text_block.font_size}, 文本: '{first_text_block.block_text[:50]}...'")
-    
+
     # 初始化当前合并块
-    current_merged = {
-        'block_text': first_text_block.block_text,
-        'original_blocks': [first_block],  # 保留完整的块信息
-        'max_width': first_width,  # 初始化为第一个块的宽度
-        'max_height': first_height  # 初始化为第一个块的高度
-    }
+    current_merged = MergedBlock(
+        block_text=first_text_block.block_text,
+        original_blocks=[first_block],  # 保留完整的块信息
+        max_width=first_width,  # 初始化为第一个块的宽度
+        max_height=first_height  # 初始化为第一个块的高度
+    )
     
-    for i in range(1, len(all_blocks)):
+    for i in range(1, len(text_blocks)):
         # 通过索引i-1直接判断上一块（已按垂直位置排序）
-        prev_block_info = all_blocks[i-1]  # 上一块信息
-        curr_block_info = all_blocks[i]    # 当前块信息
-        
-        prev_text_block = prev_block_info['text_block']  # TextBlock对象
-        curr_text_block = curr_block_info['text_block']  # TextBlock对象
+        # prev_block_info = all_blocks[i-1]  # 上一块信息
+        curr_block_info = text_blocks[i]    # 当前块信息
+        curr_text_block = curr_block_info
         
         # 位置相邻检查（垂直距离小于阈值）
-        prev_bbox = prev_text_block.block_bbox
+        # prev_bbox = prev_text_block.block_bbox
         curr_bbox = curr_text_block.block_bbox
-        vertical_distance = curr_bbox[1] - prev_bbox[3]  # y0 - previous y1
+        # vertical_distance = curr_bbox[1] - prev_bbox[3]  # y0 - previous y1
         
         # 内容完整检查（前一块不是完整句子结束）
-        prev_merged_text = current_merged['block_text']
+        prev_merged_text = current_merged.block_text
         prev_ends_with_sentence = prev_merged_text.strip().endswith(('.', '!', '?', '。', '！', '？'))
         
         # 检查当前块是否延续前一个句子
         is_continuation = _is_sentence_continuation(curr_text_block.block_text)
         
         # 合并条件：
-        # 1. 垂直距离小于10且前一块不是完整句子结束
-        # 2. 或者前一块是不完整句子且当前块是其延续
-        if ((vertical_distance < 10 and not prev_ends_with_sentence) or 
-            (not prev_ends_with_sentence and is_continuation)):
+        # 前一块是不完整句子且当前块是其延续
+        if (not prev_ends_with_sentence and is_continuation):
             # 合并块，处理空格
-            prev_text = current_merged['block_text']
+            prev_text = current_merged.block_text
             curr_text = curr_text_block.block_text
             
             # 检查前一个块是否以空格结尾，当前块是否以空格开头
             if prev_text.endswith(' ') and curr_text.startswith(' '):
                 # 只保留一个空格
-                current_merged['block_text'] = prev_text + curr_text[1:]
+                current_merged.block_text = prev_text + curr_text[1:]
             elif not prev_text.endswith(' ') and not curr_text.startswith(' '):
                 # 添加一个空格
-                current_merged['block_text'] = prev_text + ' ' + curr_text
+                current_merged.block_text = prev_text + ' ' + curr_text
             else:
                 # 直接拼接
-                current_merged['block_text'] = prev_text + curr_text
+                current_merged.block_text = prev_text + curr_text
             
-            current_merged['original_blocks'].append(curr_block_info)
+            current_merged.original_blocks.append(curr_block_info)
             
             # 计算当前块的宽度和高度
             curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
             curr_height = curr_bbox[3] - curr_bbox[1]  # y1 - y0
             
             # 更新最大宽度和高度
-            current_merged['max_width'] = max(current_merged['max_width'], curr_width)
-            current_merged['max_height'] = max(current_merged['max_height'], curr_height)
+            current_merged.max_width = max(current_merged.max_width, curr_width)
+            current_merged.max_height = max(current_merged.max_height, curr_height)
         else:
             # 保存当前合并块
             merged_blocks.append(current_merged)
-            block_mapping.append(current_merged['original_blocks'])
+            block_mapping.append(current_merged.original_blocks)
             
             # 开始新的合并块
             curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
             curr_height = curr_bbox[3] - curr_bbox[1]  # y1 - y0
-            current_merged = {
-                'block_text': curr_text_block.block_text,
-                'original_blocks': [curr_block_info],
-                'max_width': curr_width,
-                'max_height': curr_height
-            }
+            current_merged = MergedBlock(
+                block_text=curr_text_block.block_text,
+                original_blocks=[curr_block_info],
+                max_width=curr_width,
+                max_height=curr_height
+            )
     
     # 添加最后一个合并块（如果存在）
     if current_merged is not None:
         merged_blocks.append(current_merged)
-        block_mapping.append(current_merged['original_blocks'])
+        block_mapping.append(current_merged.original_blocks)
     
     return merged_blocks, block_mapping
 

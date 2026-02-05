@@ -10,13 +10,13 @@ from modules.pdf_extractor import PdfExtractor
 class TestPdfExtractor:
     """PDF提取模块测试类"""
     
-    def test_extract_text(self, test_pdf_path):
+    def test_extract(self, test_pdf_path):
         """测试正常PDF文件的文本提取
         
-        验证extract_text方法能够正确提取PDF中的文本内容，包括文本块和表格。
+        验证extract方法能够正确提取PDF中的文本内容，包括文本块和表格。
         """
         pdf_extractor = PdfExtractor(test_pdf_path)
-        result = pdf_extractor.extract_text()
+        result = pdf_extractor.extract()
         
         # 验证结果类型
         from models.extraction import PdfExtraction
@@ -44,14 +44,14 @@ class TestPdfExtractor:
         # 验证至少有一个文本块
         assert any(len(page.text_blocks) > 0 for page in result.pages)
     
-    def test_extract_text_invalid_file(self, invalid_pdf_path):
+    def test_extract_invalid_file(self, invalid_pdf_path):
         """测试不存在的PDF文件处理
         
-        验证extract_text方法在处理不存在的PDF文件时能够正确抛出异常。
+        验证extract方法在处理不存在的PDF文件时能够正确抛出异常。
         """
         with pytest.raises(FileNotFoundError):
             pdf_extractor = PdfExtractor(invalid_pdf_path)
-            pdf_extractor.extract_text()
+            pdf_extractor.extract()
     
 
     

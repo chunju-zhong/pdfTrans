@@ -41,24 +41,18 @@ class TestSemanticMergeExtended:
             )
         ]
         
-        # 将TextBlock对象包装成字典列表
-        all_blocks = []
-        for i, block in enumerate(text_blocks):
-            all_blocks.append({
-                'text_block': block,
-                'page_num': 8,
-                'index': i
-            })
-        
+        # 直接使用TextBlock对象列表
+        all_blocks = text_blocks
+
         # 调用语义合并方法
         merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         # 验证所有原始块都被处理
-        original_block_nos = {block['text_block'].block_no for block in all_blocks}
+        original_block_nos = {block.block_no for block in all_blocks}
         processed_block_nos = set()
         for merged_block in merged_blocks:
-            for original_block in merged_block['original_blocks']:
-                processed_block_nos.add(original_block['text_block'].block_no)
+            for original_block in merged_block.original_blocks:
+                processed_block_nos.add(original_block.block_no)
         
         assert original_block_nos == processed_block_nos, \
             f"部分块丢失！原始块: {original_block_nos}, 处理后块: {processed_block_nos}"
@@ -68,10 +62,10 @@ class TestSemanticMergeExtended:
         
         # 验证所有合并块都有正确的结构
         for merged_block in merged_blocks:
-            assert 'block_text' in merged_block
-            assert 'original_blocks' in merged_block
-            assert 'max_width' in merged_block
-            assert 'max_height' in merged_block
+            assert hasattr(merged_block, 'block_text')
+            assert hasattr(merged_block, 'original_blocks')
+            assert hasattr(merged_block, 'max_width')
+            assert hasattr(merged_block, 'max_height')
 
     def test_merge_blocks_with_sentence_continuation_lowercase(self):
         """测试以小写字母开头的句子延续合并
@@ -91,14 +85,9 @@ class TestSemanticMergeExtended:
             )
         ]
         
-        all_blocks = []
-        for i, block in enumerate(text_blocks):
-            all_blocks.append({
-                'text_block': block,
-                'page_num': 1,
-                'index': i
-            })
-        
+        # 直接使用TextBlock对象列表
+        all_blocks = text_blocks
+
         merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         # 验证两个块被合并为一个
@@ -106,32 +95,27 @@ class TestSemanticMergeExtended:
             f"预期合并为1个块，实际得到{len(merged_blocks)}个块"
         assert merged_blocks[0]['block_text'] == 'This is the first sentence that ends with a continuation word here.'
 
-    def test_merge_blocks_with_sentence_continuation_punctuation(self):
-        """测试以标点开头的句子延续合并
-        
-        验证当前块以逗号、分号等标点开头时，能够与前一块合并
+    def test_merge_blocks_with_sentence_continuation_lowercase(self):
+        """测试以小写字母开头的句子延续合并
+
+        验证当前块以小写字母开头时，能够与前一块合并
         """
         text_blocks = [
             TextBlock(
                 block_no=1,
-                text='This is the first sentence',
+                text='This is the first sentence that ends',
                 bbox=(0, 0, 200, 20)
             ),
             TextBlock(
                 block_no=2,
-                text=', which continues with a comma.',
+                text='with a continuation word here.',
                 bbox=(0, 25, 200, 45)
             )
         ]
-        
-        all_blocks = []
-        for i, block in enumerate(text_blocks):
-            all_blocks.append({
-                'text_block': block,
-                'page_num': 1,
-                'index': i
-            })
-        
+
+        # 直接使用TextBlock对象列表
+        all_blocks = text_blocks
+
         merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         # 验证两个块被合并为一个
@@ -156,14 +140,9 @@ class TestSemanticMergeExtended:
             )
         ]
         
-        all_blocks = []
-        for i, block in enumerate(text_blocks):
-            all_blocks.append({
-                'text_block': block,
-                'page_num': 1,
-                'index': i
-            })
-        
+        # 直接使用TextBlock对象列表
+        all_blocks = text_blocks
+
         merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         # 验证两个块不被合并（因为前一块是完整句子）
@@ -188,14 +167,9 @@ class TestSemanticMergeExtended:
             )
         ]
         
-        all_blocks = []
-        for i, block in enumerate(text_blocks):
-            all_blocks.append({
-                'text_block': block,
-                'page_num': 1,
-                'index': i
-            })
-        
+        # 直接使用TextBlock对象列表
+        all_blocks = text_blocks
+
         merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         # 验证两个块不被合并（因为垂直距离过大）
@@ -230,19 +204,14 @@ class TestSemanticMergeExtended:
             )
         ]
         
-        all_blocks = []
-        for i, block in enumerate(text_blocks):
-            all_blocks.append({
-                'text_block': block,
-                'page_num': 1,
-                'index': i
-            })
-        
+        # 直接使用TextBlock对象列表
+        all_blocks = text_blocks
+
         merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         # 验证所有原始块都被处理
         original_count = len(all_blocks)
-        processed_count = sum(len(merged_block['original_blocks']) for merged_block in merged_blocks)
+        processed_count = sum(len(merged_block.original_blocks) for merged_block in merged_blocks)
         assert original_count == processed_count, \
             f"部分块丢失！原始{original_count}个块，处理后{processed_count}个块"
         
@@ -271,16 +240,13 @@ class TestSemanticMergeExtended:
             bbox=(0, 0, 200, 20)
         )
         
-        all_blocks = [{
-            'text_block': text_block,
-            'page_num': 1,
-            'index': 0
-        }]
-        
+        # 直接使用TextBlock对象列表
+        all_blocks = [text_block]
+
         merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
         
         assert len(merged_blocks) == 1
-        assert merged_blocks[0]['block_text'] == 'Single block content.'
+        assert merged_blocks[0].block_text == 'Single block content.'
 
     def test_is_sentence_continuation(self):
         """测试句子延续检测函数

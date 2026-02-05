@@ -33,7 +33,7 @@ try:
     # 1. 提取PDF文本
     print(f"1. 提取PDF文本: {test_pdf_path}")
     pdf_extractor = PdfExtractor(test_pdf_path)
-    extracted_content = pdf_extractor.extract_text()
+    extracted_content = pdf_extractor.extract()
     print(f"   提取完成，页数: {extracted_content.total_pages}")
     
     # 2. 模拟翻译后的内容结构

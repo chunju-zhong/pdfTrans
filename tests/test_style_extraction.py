@@ -18,13 +18,14 @@ def test_style_extraction():
     
     if not os.path.exists(test_file):
         print(f"测试文件不存在: {test_file}")
-        return False
+        print("跳过测试，因为测试文件不存在")
+        return
     
     try:
         # 创建本地PDF提取器实例
         pdf_extractor = PdfExtractor(test_file)
         # 调用extract_text方法，提取第一页的文本块
-        pdf_page = pdf_extractor.extract_text(pages=[1]).pages[0]
+        pdf_page = pdf_extractor.extract(pages=[1]).pages[0]
         
         # 打印提取的文本块数量
         print(f"提取到 {len(pdf_page.text_blocks)} 个文本块")
@@ -48,17 +49,21 @@ def test_style_extraction():
         
         if all_styles_empty:
             print("\n❌ 所有文本块的样式信息为空")
-            return False
+            assert False, "所有文本块的样式信息为空"
         else:
             print("\n✅ 部分或全部文本块的样式信息已正确提取")
-            return True
+            assert True
     except Exception as e:
         print(f"\n❌ 测试出错: {str(e)}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"测试出错: {str(e)}"
 
 if __name__ == "__main__":
     # 运行测试
-    success = test_style_extraction()
-    sys.exit(0 if success else 1)
+    try:
+        test_style_extraction()
+        sys.exit(0)
+    except AssertionError as e:
+        print(f"测试失败: {e}")
+        sys.exit(1)

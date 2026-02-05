@@ -3,11 +3,14 @@
 PDF指定页翻译集成测试
 """
 
-import pytest
 import os
 import tempfile
+import pytest
 from unittest.mock import MagicMock, patch
 from services.translation_service import translation_service
+from models.extraction import PdfExtraction, PdfPage, PdfTable
+from models.text_block import TextBlock
+from models.merged_block import MergedBlock
 
 class TestPdfPageTranslationIntegration:
     """PDF指定页翻译集成测试类"""
@@ -38,8 +41,6 @@ class TestPdfPageTranslationIntegration:
             doc.close()
             
             # 模拟PDF提取结果
-            from models.extraction import PdfExtraction, PdfPage, PdfTable
-            from models.text_block import TextBlock
             
             # 创建3个页面的测试数据
             pages = []
@@ -68,7 +69,7 @@ class TestPdfPageTranslationIntegration:
             with patch('services.translation_service.PdfExtractor') as mock_pdf_extractor_class:
                 # 创建模拟实例
                 mock_pdf_extractor = MagicMock()
-                mock_pdf_extractor.extract_text.return_value = extracted_content
+                mock_pdf_extractor.extract.return_value = extracted_content
                 mock_pdf_extractor.total_pages = 3  # 模拟 total_pages 属性
                 # 让构造函数返回模拟实例
                 mock_pdf_extractor_class.return_value = mock_pdf_extractor
@@ -82,28 +83,39 @@ class TestPdfPageTranslationIntegration:
                     # 模拟文本处理函数
                     with patch('services.translation_service.merge_semantic_blocks') as mock_merge:
                         # 模拟合并后的块
+                        # 设置TextBlock对象的page_num属性
+                        for page in pages:
+                            for text_block in page.text_blocks:
+                                text_block.page_num = page.page_num
+                        
                         merged_blocks = [
-                            {
-                                'block_text': "Page 1 text block 1 Page 1 text block 2",
-                                'original_blocks': [
-                                    {'text_block': pages[0].text_blocks[0], 'page_num': 1, 'index': 0},
-                                    {'text_block': pages[0].text_blocks[1], 'page_num': 1, 'index': 1}
-                                ]
-                            },
-                            {
-                                'block_text': "Page 2 text block 1 Page 2 text block 2",
-                                'original_blocks': [
-                                    {'text_block': pages[1].text_blocks[0], 'page_num': 2, 'index': 2},
-                                    {'text_block': pages[1].text_blocks[1], 'page_num': 2, 'index': 3}
-                                ]
-                            },
-                            {
-                                'block_text': "Page 3 text block 1 Page 3 text block 2",
-                                'original_blocks': [
-                                    {'text_block': pages[2].text_blocks[0], 'page_num': 3, 'index': 4},
-                                    {'text_block': pages[2].text_blocks[1], 'page_num': 3, 'index': 5}
-                                ]
-                            }
+                            MergedBlock(
+                                block_text="Page 1 text block 1 Page 1 text block 2",
+                                original_blocks=[
+                                    pages[0].text_blocks[0],
+                                    pages[0].text_blocks[1]
+                                ],
+                                max_width=150,
+                                max_height=50
+                            ),
+                            MergedBlock(
+                                block_text="Page 2 text block 1 Page 2 text block 2",
+                                original_blocks=[
+                                    pages[1].text_blocks[0],
+                                    pages[1].text_blocks[1]
+                                ],
+                                max_width=150,
+                                max_height=50
+                            ),
+                            MergedBlock(
+                                block_text="Page 3 text block 1 Page 3 text block 2",
+                                original_blocks=[
+                                    pages[2].text_blocks[0],
+                                    pages[2].text_blocks[1]
+                                ],
+                                max_width=150,
+                                max_height=50
+                            )
                         ]
                         mock_merge.return_value = (merged_blocks, {})
                         
@@ -206,7 +218,7 @@ class TestPdfPageTranslationIntegration:
             with patch('services.translation_service.PdfExtractor') as mock_pdf_extractor_class:
                 # 创建模拟实例
                 mock_pdf_extractor = MagicMock()
-                mock_pdf_extractor.extract_text.return_value = extracted_content
+                mock_pdf_extractor.extract.return_value = extracted_content
                 mock_pdf_extractor.total_pages = 2  # 模拟 total_pages 属性
                 # 让构造函数返回模拟实例
                 mock_pdf_extractor_class.return_value = mock_pdf_extractor

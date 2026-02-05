@@ -131,11 +131,18 @@ def identify_header_footer(pages, page_sizes=None):
     non_body_texts = set()
     if len(pages) > 1:
         # 计算出现频率阈值
-        frequency_threshold = len(pages) * 0.5  # 超过50%的页面出现
+        frequency_threshold = len(pages) * 0.7  # 超过70%的页面出现
         
-        # 识别重复出现的文本块
+        # 收集顶部和底部区域的文本
+        top_bottom_texts = set()
+        for page_num, block in top_blocks:
+            top_bottom_texts.add(block.block_text)
+        for page_num, block in bottom_blocks:
+            top_bottom_texts.add(block.block_text)
+        
+        # 识别重复出现的文本块，只考虑顶部和底部区域的文本
         for text, count in block_frequency.items():
-            if count >= frequency_threshold:
+            if count >= frequency_threshold and text in top_bottom_texts:
                 non_body_texts.add(text)
                 logger.debug(f"多页PDF，识别为页眉页脚: '{text}'，出现次数: {count}")
     
