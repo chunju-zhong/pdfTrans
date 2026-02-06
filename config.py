@@ -19,12 +19,14 @@ class Config:
     # aiping API配置
     AIPING_API_KEY = os.environ.get('AIPING_API_KEY')
     AIPING_API_URL = os.environ.get('AIPING_API_URL') or 'https://aiping.cn/api/v1'
-    AIPING_MODEL = os.environ.get('AIPING_MODEL') or 'Qwen3-32B'
+    AIPING_MODEL = os.environ.get('AIPING_MODEL_TRANSLATION') or 'Qwen3-32B'
+    AIPING_MODEL_LAYOUT = os.environ.get('AIPING_MODEL_LAYOUT') or 'Qwen3-32B'
     
     # 硅基流动API配置
     SILICON_FLOW_API_KEY = os.environ.get('SILICON_FLOW_API_KEY')
     SILICON_FLOW_API_URL = os.environ.get('SILICON_FLOW_API_URL') or 'https://api.siliconflow.cn/v1'
-    SILICON_FLOW_MODEL = os.environ.get('SILICON_FLOW_MODEL') or 'tencent/Hunyuan-MT-7B'
+    SILICON_FLOW_MODEL = os.environ.get('SILICON_FLOW_MODEL_TRANSLATION') or 'tencent/Hunyuan-MT-7B'
+    SILICON_FLOW_MODEL_LAYOUT = os.environ.get('SILICON_FLOW_MODEL_LAYOUT') or 'Qwen/Qwen3-32B'
     
     # 支持的语言列表
     SUPPORTED_LANGUAGES = {

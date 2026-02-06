@@ -183,7 +183,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const mainLink = document.createElement('a');
         mainLink.href = `/download_file/${fileName}`;
         mainLink.className = 'btn btn-success';
-        mainLink.textContent = `下载翻译后的${fileName.endsWith('.pdf') ? 'PDF' : 'Word'}文件`;
+        let fileTypeText = '文件';
+        if (fileName.endsWith('.pdf')) {
+            fileTypeText = 'PDF';
+        } else if (fileName.endsWith('.docx')) {
+            fileTypeText = 'Word';
+        } else if (fileName.endsWith('.md')) {
+            fileTypeText = 'Markdown';
+        } else if (fileName.endsWith('.zip')) {
+            fileTypeText = 'Markdown(含图片)';
+        }
+        mainLink.textContent = `下载翻译后的${fileTypeText}文件`;
         downloadLinksContainer.appendChild(mainLink);
         
         // 添加附件下载链接
@@ -195,7 +205,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 attachmentLink.href = `/download_file/${attachment}`;
                 attachmentLink.className = 'btn btn-success';
                 attachmentLink.style.marginLeft = '10px';
-                attachmentLink.textContent = `下载翻译后的${attachment.endsWith('.docx') ? 'Word' : 'PDF'}文件`;
+                let attachmentTypeText = '文件';
+                if (attachment.endsWith('.pdf')) {
+                    attachmentTypeText = 'PDF';
+                } else if (attachment.endsWith('.docx')) {
+                    attachmentTypeText = 'Word';
+                } else if (attachment.endsWith('.md')) {
+                    attachmentTypeText = 'Markdown';
+                } else if (attachment.endsWith('.zip')) {
+                    attachmentTypeText = 'Markdown(含图片)';
+                }
+                attachmentLink.textContent = `下载翻译后的${attachmentTypeText}文件`;
                 downloadLinksContainer.appendChild(attachmentLink);
             });
         } else {

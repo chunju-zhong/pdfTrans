@@ -8,10 +8,11 @@ from modules.aiping_translator import AipingTranslator
 from modules.silicon_flow_translator import SiliconFlowTranslator
 from modules.pdf_generator import PdfGenerator
 from modules.docx_generator import DocxGenerator
+from modules.markdown_generator import MarkdownGenerator
 from models.text_block import TextBlock
 from models.extraction import PdfPage
 from utils.text_processing import merge_semantic_blocks, split_translated_result
-from utils.file_utils import remove_file
+from utils.file_utils import remove_file, create_zip
 from utils.logging_config import get_logger
 from config import config
 
@@ -544,7 +545,7 @@ class TranslationService:
         
         return translated_tables
 
-    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang):
+    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping'):
         """生成输出文件
 
         Args:
@@ -556,17 +557,17 @@ class TranslationService:
             translated_content: 翻译后的内容
             extracted_images: 提取的图像
             target_lang: 目标语言
+            translator_type: 翻译器类型（aiping/silicon_flow）
 
         Returns:
             list: 输出文件名列表
         """
-        logger.info(f"任务 {task.task_id} 开始生成新PDF")
+        logger.info(f"任务 {task.task_id} 开始生成输出文件")
         # 4. 生成新PDF
         output_filename = f"translated_{unique_id}_{filename}"
         output_filepath = os.path.join(config.OUTPUT_FOLDER, output_filename)
         
         # 添加调用前的日志，记录translated_content中的blocks信息
-        logger.info(f"任务 {task.task_id} 准备调用PDF生成器")
         logger.info(f"任务 {task.task_id} translated_content包含blocks信息: {('blocks' in translated_content)}")
         if 'blocks' in translated_content:
             total_blocks = sum(len(page.text_blocks) for page in translated_content['blocks'])
@@ -575,7 +576,7 @@ class TranslationService:
         output_files = []
         
         # 处理PDF生成
-        if output_format in ['pdf', 'both']:
+        if output_format in ['pdf', 'pdf_docx', 'all']:
             # 创建PDF生成器实例
             pdf_generator = PdfGenerator()
             # 生成翻译后的PDF，传递目标语言参数
@@ -584,7 +585,7 @@ class TranslationService:
             output_files.append(output_filename)
         
         # 处理Word生成
-        if output_format in ['docx', 'both']:
+        if output_format in ['docx', 'pdf_docx', 'all']:
             # 生成Word文件名
             docx_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.docx"
             docx_filepath = os.path.join(config.OUTPUT_FOLDER, docx_filename)
@@ -601,6 +602,56 @@ class TranslationService:
             docx_generator.generate_docx(translated_content, extracted_images, docx_filepath, target_lang)
             logger.info(f"任务 {task.task_id} Word文档生成完成，输出文件: {docx_filename}")
             output_files.append(docx_filename)
+        
+        # 处理Markdown生成
+        if output_format in ['md', 'all']:
+            # 生成Markdown文件名
+            md_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.md"
+            md_filepath = os.path.join(config.OUTPUT_FOLDER, md_filename)
+            
+            # 根据翻译器类型选择布局模型
+            if translator_type == 'aiping':
+                api_key = config.AIPING_API_KEY
+                api_url = config.AIPING_API_URL
+                layout_model = config.AIPING_MODEL_LAYOUT
+            elif translator_type == 'silicon_flow':
+                api_key = config.SILICON_FLOW_API_KEY
+                api_url = config.SILICON_FLOW_API_URL
+                layout_model = config.SILICON_FLOW_MODEL_LAYOUT
+            else:
+                # 默认使用aiping的布局模型
+                api_key = config.AIPING_API_KEY
+                api_url = config.AIPING_API_URL
+                layout_model = config.AIPING_MODEL_LAYOUT
+            
+            # 创建Markdown生成器实例
+            markdown_generator = MarkdownGenerator(api_key, api_url, layout_model)
+            
+            # 记录传递给Markdown生成器的图像信息
+            logger.info(f"任务 {task.task_id} 传递 {len(extracted_images)} 个图像到Markdown生成器")
+            for i, image in enumerate(extracted_images):
+                logger.info(f"任务 {task.task_id} 传递图像 {i+1}: 页码={image.page_num}, 路径={image.image_path}, 边界框={image.bbox}")
+            
+            # 生成翻译后的Markdown文档
+            markdown_generator.generate_markdown(translated_content, extracted_images, md_filepath, target_lang)
+            logger.info(f"任务 {task.task_id} Markdown文档生成完成，输出文件: {md_filename}")
+            
+            # 创建包含Markdown文件和images目录的zip文件
+            zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
+            zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
+            
+            # 检查是否存在images目录
+            images_dir = os.path.join(config.OUTPUT_FOLDER, 'images')
+            directories_to_include = []
+            if os.path.exists(images_dir):
+                directories_to_include.append(images_dir)
+            
+            # 创建zip文件
+            create_zip(zip_filepath, [md_filepath], directories_to_include)
+            logger.info(f"任务 {task.task_id} Markdown压缩文件生成完成，输出文件: {zip_filename}")
+            
+            # 添加zip文件到输出文件列表
+            output_files.append(zip_filename)
         
         return output_files
 
@@ -736,7 +787,7 @@ class TranslationService:
                 logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
                 return
             
-            if not task.update_progress(80, '正在生成新PDF...'):
+            if not task.update_progress(80, '正在生成输出文件...'):
                 # 清理临时文件
                 remove_file(input_filepath)
                 logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
@@ -749,7 +800,7 @@ class TranslationService:
             
             # 生成输出文件
             output_files = self.generate_output_files(
-                task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang
+                task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type
             )
             
             if task.is_canceled():
@@ -781,7 +832,9 @@ class TranslationService:
                 # 如果有多个输出文件，返回第一个作为主要结果，其他作为附加结果
                 task.set_result(output_files[0])
                 if len(output_files) > 1:
-                    task.add_attachment(output_files[1])
+                    # 添加所有剩余文件作为附件
+                    for attachment in output_files[1:]:
+                        task.add_attachment(attachment)
                 logger.info(f"任务 {task.task_id} 完成，输出文件: {', '.join(output_files)}")
             else:
                 logger.warning(f"任务 {task.task_id} 未生成任何输出文件")
