@@ -181,6 +181,18 @@ input[type="text"]:focus {
     transition: width 0.3s ease;
 }
 
+.progress-bar.processing {
+    background-color: #3498db;
+}
+
+.progress-bar.completed {
+    background-color: #27ae60;
+}
+
+.progress-bar.error {
+    background-color: #e74c3c;
+}
+
 .progress-text {
     text-align: center;
     color: #666;
@@ -199,6 +211,20 @@ input[type="text"]:focus {
 .result-container h2 {
     color: #27ae60;
     margin-bottom: 16px;
+}
+
+/* 下载链接容器样式 */
+.download-links {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.download-links .btn {
+    width: 100%;
+    max-width: 300px;
 }
 
 /* 响应式设计 */
@@ -223,5 +249,10 @@ input[type="text"]:focus {
     
     h2 {
         font-size: 20px;
+    }
+    
+    .download-links .btn {
+        width: 100%;
+        max-width: none;
     }
 }

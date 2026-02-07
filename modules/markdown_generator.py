@@ -63,10 +63,13 @@ class MarkdownGenerator:
     * **有选择性地**使用粗体 (`**`) 来突出你在步骤 A.1 确定的**核心论点**、**关键结论**、**重要定义**或**金句**。
     * **优先加粗**：优先考虑加粗**能够概括要点的完整句子**或**关键短语**。
     * **避免**：避免只加粗零散的单个关键词，并**切勿过度使用粗体**，保持文档的专业性和易读性。
-2.  **【!!!】重要格式规范**：
+3.  **【!!!】重要格式规范**：
     * 在设置粗体时，**绝对不要**将任何标点符号（如 `。`、`，`、`：`、`"`、`（`、`）` 等）包含在 `**` 标记内部。
     * ✅ **正确示例**(标点在 `**` 之外)：这是"**一个核心观点**"。
     * ❌ **错误示例**：这是**"一个核心观点"**。
+4.  **【!!!】禁止使用代码块标记**：
+    * **绝对不要**在输出的开头或结尾添加 ```markdown ``` 或任何其他代码块标记。
+    * 直接返回纯 Markdown 文本内容，不需要任何包装或标记。
         """
     
     def _format_with_layout_model(self, text):
@@ -93,11 +96,14 @@ class MarkdownGenerator:
         
         for attempt in range(max_retries):
             try:
-                # 调用布局模型API
-                response = self.client.chat.completions.create(
+                # 调用布局模型API（使用流式）
+                stream = self.client.chat.completions.create(
                     model=self.model,
+                    stream=True,  # 启用流式响应
                     temperature=0.1,  # 降低温度，提高格式一致性
                     max_tokens=8192,  # 最大token数
+                    timeout=60.0,  # 增加超时时间
+                    n=1,  # 只返回一个结果
                     messages=[
                         {
                             "role": "system",
@@ -110,22 +116,21 @@ class MarkdownGenerator:
                     ]
                 )
                 
-                # 处理响应
-                if response.choices and len(response.choices) > 0:
-                    formatted_text = response.choices[0].message.content
-                    # # 移除可能的markdown代码块包装
-                    # formatted_text = formatted_text.strip()
-                    # if formatted_text.startswith('```markdown'):
-                    #     formatted_text = formatted_text[10:]
-                    # elif formatted_text.startswith('```'):
-                    #     formatted_text = formatted_text[3:]
-                    # if formatted_text.endswith('```'):
-                    #     formatted_text = formatted_text[:-3]
-                    formatted_text = formatted_text.strip()
-                    logger.info("布局模型格式化完成")
-                    return formatted_text
-                else:
+                # 处理流式响应
+                formatted_text = ""
+                for chunk in stream:
+                    if chunk.choices and len(chunk.choices) > 0:
+                        choice = chunk.choices[0]
+                        if choice.delta and choice.delta.content:
+                            formatted_text += choice.delta.content
+                
+                formatted_text = formatted_text.strip()
+                
+                if not formatted_text:
                     raise Exception("布局模型返回空响应")
+                
+                logger.info("布局模型格式化完成")
+                return formatted_text
                     
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -135,8 +140,8 @@ class MarkdownGenerator:
                 else:
                     # 最后一次尝试失败，抛出异常
                     logger.error(f"布局模型请求失败: {str(e)}")
-                    # 返回原始文本作为降级方案
-                    return text
+                    # 直接抛出异常，不使用降级方案
+                    raise Exception(f"布局模型请求失败: {str(e)}")
     
     def _convert_table_to_markdown(self, table):
         """将表格转换为Markdown格式
@@ -188,18 +193,20 @@ class MarkdownGenerator:
         
         return "\n".join(markdown_table) + "\n"
     
-    def _copy_images_to_output(self, images, output_dir):
+    def _copy_images_to_output(self, images, output_dir, doc_id):
         """复制图像到输出目录
         
         Args:
             images (list): 图像对象列表
             output_dir (str): 输出目录
+            doc_id (str): 文档唯一标识符
             
         Returns:
             list: 更新后的图像对象列表，包含相对路径
         """
         updated_images = []
-        images_dir = os.path.join(output_dir, 'images')
+        # 为每个文档创建独立的图像目录
+        images_dir = os.path.join(output_dir, f'images_{doc_id}')
         os.makedirs(images_dir, exist_ok=True)
         
         for image in images:
@@ -213,7 +220,7 @@ class MarkdownGenerator:
                 try:
                     shutil.copy(image_path, dest_path)
                     # 更新图像路径为相对路径
-                    relative_path = os.path.join('images', image_filename)
+                    relative_path = os.path.join(f'images_{doc_id}', image_filename)
                     updated_image = type('obj', (object,), {
                         'page_num': image.page_num,
                         'image_idx': image.image_idx,
@@ -393,7 +400,7 @@ class MarkdownGenerator:
             full_text.append(table_md)
             full_text.append("")
     
-    def generate_markdown(self, translated_content, images, output_md_path, target_lang="zh"):
+    def generate_markdown(self, translated_content, images, output_md_path, target_lang="zh", doc_id=None):
         """生成翻译后的Markdown文档
         
         Args:
@@ -422,6 +429,7 @@ class MarkdownGenerator:
                 - bbox (tuple): 图像位置
             output_md_path (str): 输出Markdown文件路径
             target_lang (str): 目标语言代码
+            doc_id (str): 文档唯一标识符，用于创建独立的图像目录
         """
         logger.info(f"开始生成Markdown文档，输出文件: {output_md_path}, 目标语言: {target_lang}")
         
@@ -430,8 +438,12 @@ class MarkdownGenerator:
             output_dir = os.path.dirname(output_md_path)
             os.makedirs(output_dir, exist_ok=True)
             
+            # 如果没有提供doc_id，使用文件名的一部分作为doc_id
+            if not doc_id:
+                doc_id = os.path.splitext(os.path.basename(output_md_path))[0]
+            
             # 复制图像到输出目录
-            updated_images = self._copy_images_to_output(images, output_dir)
+            updated_images = self._copy_images_to_output(images, output_dir, doc_id)
             
             # 按页码组织合并后的翻译结果
             merged_by_page = {}

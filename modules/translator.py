@@ -145,15 +145,92 @@ class Translator:
     
     def _generate_user_prompt(self, source_lang_name, target_lang_name, doc_type, processed_text):
         """生成用户提示词
-        
+
         Args:
             source_lang_name (str): 源语言名称
             target_lang_name (str): 目标语言名称
             doc_type (str): 文档类型
             processed_text (str): 预处理后的文本
-            
+
         Returns:
             str: 生成的用户提示词
         """
         return f"请将以下{source_lang_name}的{doc_type}文本转写成{target_lang_name}，严格遵守上述所有规则：\n\n{processed_text}"
+
+    def _generate_semantic_analysis_prompt(self, text1, text2, source_lang):
+        """生成语义分析提示词
+
+        Args:
+            text1 (str): 第一个文本块
+            text2 (str): 第二个文本块
+            source_lang (str): 源语言代码
+
+        Returns:
+            str: 生成的语义分析提示词
+        """
+        # 获取语言名称
+        lang_name = self.supported_languages.get(source_lang, source_lang)
+        
+        return f"""
+        你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系。
+        
+        请分析以下两个{lang_name}相邻文本块是否应该合并为一个语义单元：
+        
+        块1: "{text1}"
+        块2: "{text2}"
+        
+        分析标准：
+        1. 语义连贯性：两个块是否表达同一个完整的语义单元
+        2. 语法完整性：前一个块是否是不完整的句子，后一个块是否是其延续
+        3. 逻辑关系：两个块之间是否存在紧密的逻辑联系
+        4. 标题识别：如果任一文本块是标题（大小标题），则不应合并
+        
+        标题识别规则：
+        - 标题通常具有简洁性、概括性和引导性
+        - 标题通常是短语或简短句子，不包含详细内容
+        - 标题通常用于引入或概括后续内容
+        - 标题示例："1. 引言"、"2.1 方法概述"、"结论"、"背景介绍"
+        - 非标题示例："这是一个详细的段落内容，包含具体的信息和解释。"
+        
+        重要判断规则：
+        - 如果块1是标题，块2不是标题，返回merge: false
+        - 如果块2是标题，块1不是标题，返回merge: false
+        - 如果两个块都是标题，返回merge: false
+        - 只有当两个块都不是标题且满足其他合并条件时，才返回merge: true
+        
+        请根据{lang_name}的语法和语义规则进行分析，给出明确的判断。
+        
+        重要输出要求：
+        1. 只返回纯JSON字符串，不包含任何其他文本
+        2. 不要包含Markdown代码块标记（如 ```json 或 ```）
+        3. 确保返回的内容可以直接被JSON解析器解析
+        4. 只输出一行JSON，不要有多余的空白行
+        5. 只包含merge字段，值为true或false
+        
+        正确输出示例：
+        {{"merge": true}}
+        
+        错误输出示例：
+        ```json
+        {{"merge": true}}
+        ```
+        
+        请严格按照要求输出，仅返回：
+        {{"merge": true/false}}
+        """
+
+    def analyze_semantic_relationship(self, text1, text2, source_lang):
+        """分析两个文本块之间的语义关系，判断是否应该合并
+
+        Args:
+            text1 (str): 第一个文本块
+            text2 (str): 第二个文本块
+            source_lang (str): 源语言代码
+
+        Returns:
+            bool: 是否应该合并
+        """
+
+        # 子类必须实现此方法
+        raise NotImplementedError("子类必须实现analyze_semantic_relationship方法")
     

@@ -57,6 +57,7 @@ def translate():
             page_range = request.form.get('page_range', '')
             output_format = request.form.get('output_format', 'pdf')
             semantic_merge = request.form.get('semantic_merge', 'on') == 'on'
+            use_llm_merging = request.form.get('use_llm_merging', '') == 'on'
             
             # 保存文件（在主线程中完成）
             filename = secure_filename(file.filename)
@@ -73,7 +74,7 @@ def translate():
             
             # 启动异步翻译任务，传递文件路径、unique_id和filename
             threading.Thread(target=translation_service.process_translation, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge, use_llm_merging)).start()
             
             # 返回任务ID
             return jsonify({

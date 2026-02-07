@@ -99,3 +99,66 @@ class SiliconFlowTranslator(Translator):
                 
         except Exception as e:
             raise Exception(f"硅基流动翻译API请求失败: {str(e)}")
+
+    def analyze_semantic_relationship(self, text1, text2, source_lang):
+        """分析两个文本块之间的语义关系，判断是否应该合并
+
+        Args:
+            text1 (str): 第一个文本块
+            text2 (str): 第二个文本块
+            source_lang (str): 源语言代码
+
+        Returns:
+            bool: 是否应该合并
+        """
+        import json
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # 准备语义分析的提示词
+        analysis_prompt = self._generate_semantic_analysis_prompt(text1, text2, source_lang)
+        logger.info(f"生成语义分析提示词: 块1='{text1}', 块2='{text2}', 提示词长度={len(analysis_prompt)}")
+
+        try:
+            # 调用硅基流动API - 使用与translate一致的参数
+            response = self.client.chat.completions.create(
+                model=self.model,
+                stream=False,  # 非流式调用
+                temperature=0.1,  # 降低温度，提高分析准确性
+                top_p=0.9,  # 核采样参数
+                max_tokens=1024,  # 最大token数
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系。"
+                    },
+                    {
+                        "role": "user",
+                        "content": analysis_prompt
+                    }
+                ]
+            )
+
+            # 处理响应 - stream=False时直接处理非流式响应
+            analysis_result = ""
+            if hasattr(response, "choices") and len(response.choices) > 0:
+                analysis_result = response.choices[0].message.content.strip()
+
+            logger.info(f"LLM返回的原始分析结果: '{analysis_result}'")
+
+            # 解析LLM的分析结果
+            analysis_json = json.loads(analysis_result)
+            logger.info(f"解析后的JSON结果: {analysis_json}")
+            
+            should_merge = analysis_json.get("merge", False)
+            logger.info(f"最终合并决策: {should_merge}，块1='{text1}', 块2='{text2}'")
+            return bool(should_merge)
+
+        except Exception as e:
+            # 分析失败时，返回默认值
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"silicon_flow语义分析API请求失败: {str(e)}，返回默认值False")
+            logger.error(f"失败时的文本块: 块1='{text1}', 块2='{text2}'")
+            return False

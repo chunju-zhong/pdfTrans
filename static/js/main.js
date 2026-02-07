@@ -374,6 +374,27 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Target language:', e.target.value);
     });
     
+    // 语义块合并相关事件处理
+    const semanticMergeCheckbox = document.getElementById('semantic_merge');
+    const llmMergingOption = document.getElementById('llm-merging-option');
+    
+    // 初始状态检查
+    function updateLlmMergingOptionVisibility() {
+        if (semanticMergeCheckbox.checked) {
+            llmMergingOption.style.display = 'block';
+        } else {
+            llmMergingOption.style.display = 'none';
+        }
+    }
+    
+    // 初始调用，设置正确的显示状态
+    updateLlmMergingOptionVisibility();
+    
+    // 语义块合并开关变化事件处理
+    semanticMergeCheckbox.addEventListener('change', function(e) {
+        updateLlmMergingOptionVisibility();
+    });
+    
     // 取消按钮事件处理
     cancelBtn.addEventListener('click', function() {
         if (confirm('确定要取消翻译吗？')) {

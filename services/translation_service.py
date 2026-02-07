@@ -11,7 +11,7 @@ from modules.docx_generator import DocxGenerator
 from modules.markdown_generator import MarkdownGenerator
 from models.text_block import TextBlock
 from models.extraction import PdfPage
-from utils.text_processing import merge_semantic_blocks, split_translated_result
+from utils.text_processing import merge_semantic_blocks, split_translated_result, merge_semantic_blocks_with_llm
 from utils.file_utils import remove_file, create_zip
 from utils.logging_config import get_logger
 from config import config
@@ -633,25 +633,43 @@ class TranslationService:
                 logger.info(f"任务 {task.task_id} 传递图像 {i+1}: 页码={image.page_num}, 路径={image.image_path}, 边界框={image.bbox}")
             
             # 生成翻译后的Markdown文档
-            markdown_generator.generate_markdown(translated_content, extracted_images, md_filepath, target_lang)
-            logger.info(f"任务 {task.task_id} Markdown文档生成完成，输出文件: {md_filename}")
-            
-            # 创建包含Markdown文件和images目录的zip文件
-            zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
-            zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
-            
-            # 检查是否存在images目录
-            images_dir = os.path.join(config.OUTPUT_FOLDER, 'images')
-            directories_to_include = []
-            if os.path.exists(images_dir):
-                directories_to_include.append(images_dir)
-            
-            # 创建zip文件
-            create_zip(zip_filepath, [md_filepath], directories_to_include)
-            logger.info(f"任务 {task.task_id} Markdown压缩文件生成完成，输出文件: {zip_filename}")
-            
-            # 添加zip文件到输出文件列表
-            output_files.append(zip_filename)
+            try:
+                # 使用unique_id作为doc_id，确保每个文档有独立的图像目录
+                markdown_generator.generate_markdown(translated_content, extracted_images, md_filepath, target_lang, doc_id=unique_id)
+                logger.info(f"任务 {task.task_id} Markdown文档生成完成，输出文件: {md_filename}")
+                
+                # 创建包含Markdown文件和当前文档图像目录的zip文件
+                zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
+                zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
+                
+                # 检查是否存在当前文档的图像目录
+                images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
+                directories_to_include = []
+                if os.path.exists(images_dir):
+                    directories_to_include.append(images_dir)
+                
+                # 创建zip文件
+                create_zip(zip_filepath, [md_filepath], directories_to_include)
+                logger.info(f"任务 {task.task_id} Markdown压缩文件生成完成，输出文件: {zip_filename}")
+                
+                # 添加zip文件到输出文件列表
+                output_files.append(zip_filename)
+                
+                # 清理临时图像目录
+                if os.path.exists(images_dir):
+                    import shutil
+                    shutil.rmtree(images_dir)
+                    logger.info(f"任务 {task.task_id} 已清理临时图像目录: {images_dir}")
+            except Exception as e:
+                logger.error(f"任务 {task.task_id} Markdown文档生成失败: {str(e)}")
+                # 清理临时图像目录
+                images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
+                if os.path.exists(images_dir):
+                    import shutil
+                    shutil.rmtree(images_dir)
+                    logger.info(f"任务 {task.task_id} 已清理临时图像目录: {images_dir}")
+                # 抛出异常，让上层处理
+                raise Exception(f"Markdown文档生成失败: {str(e)}")
         
         return output_files
 
@@ -672,7 +690,7 @@ class TranslationService:
             remove_file(output_filepath)
             logger.info(f"任务 {task.task_id} 已清理输出文件")
 
-    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True):
+    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False):
         """异步翻译任务处理函数
 
         Args:
@@ -688,6 +706,7 @@ class TranslationService:
             page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
             output_format: 输出格式，可选值: "pdf", "docx", "both"
             semantic_merge: 是否启用语义块合并 (默认: True)
+            use_llm_merging: 是否使用大模型进行语义块合并 (默认: True)
         """
         try:
             logger.info(f"开始处理任务 {task.task_id}，文件: {filename}")
@@ -734,8 +753,17 @@ class TranslationService:
             # 2. 语义块合并
             if semantic_merge:
                 logger.info(f"任务 {task.task_id} 开始语义块合并，原始块数量: {len(text_blocks)}")
-                # 语义块合并
-                merged_blocks, block_mapping = merge_semantic_blocks(text_blocks)
+                
+                # 根据配置选择合并方法
+                if use_llm_merging:
+                    logger.info(f"任务 {task.task_id} 使用大模型进行语义块合并")
+                    # 使用LLM进行语义块合并
+                    merged_blocks, block_mapping = merge_semantic_blocks_with_llm(text_blocks, translator, source_lang)
+                else:
+                    logger.info(f"任务 {task.task_id} 使用规则-based方法进行语义块合并")
+                    # 使用规则-based方法进行语义块合并
+                    merged_blocks, block_mapping = merge_semantic_blocks(text_blocks)
+                
                 logger.info(f"任务 {task.task_id} 语义块合并完成，原始块数量: {len(text_blocks)}, 合并后块数量: {len(merged_blocks)}")
                 
                 # 记录合并块的具体内容

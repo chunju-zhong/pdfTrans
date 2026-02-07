@@ -109,6 +109,14 @@ autonomous problem-solving: 自主问题解决</textarea>
                 <div class="form-hint">启用后会合并语义相关的文本块，提高翻译连贯性</div>
             </div>
             
+            <div class="form-group" id="llm-merging-option" style="margin-top: 10px;">
+                <label class="checkbox-option">
+                    <input type="checkbox" id="use_llm_merging" name="use_llm_merging">
+                    使用大语言模型进行语义判断
+                </label>
+                <div class="form-hint">启用后会使用大语言模型分析语义关系，提高合并准确性（可能会增加翻译时间及费用）</div>
+            </div>
+            
             <div class="form-group">
                 <button type="submit" class="btn btn-primary">开始翻译</button>
             </div>

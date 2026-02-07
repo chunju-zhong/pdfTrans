@@ -304,12 +304,12 @@ def fix_block_start_punctuation(translated_blocks):
 
 def split_translated_result(merged_translation, original_blocks):
     """将完整翻译结果按原文本块的长度比例拆分
-    
+
     Args:
         merged_translation (str): 合并块的翻译结果
         original_blocks (list): 原始块列表（已按垂直位置排序，带有序号）
                                每个元素是包含'text_block'和'page_num'的字典
-        
+
     Returns:
         list: 拆分后的翻译结果，与原始块一一对应
     """
@@ -317,56 +317,56 @@ def split_translated_result(merged_translation, original_blocks):
     if isinstance(merged_translation, list) and isinstance(original_blocks, str):
         # 参数顺序颠倒了，交换它们
         merged_translation, original_blocks = original_blocks, merged_translation
-    
+
     num_blocks = len(original_blocks)
-    
+
     if num_blocks == 0:
         return []
-    
+
     translation_len = len(merged_translation)
-    
+
     # 处理空翻译结果
     if translation_len == 0:
         return ['' for _ in original_blocks]
-    
+
     # 处理单个块情况
     if num_blocks == 1:
         return [merged_translation.strip()]
-    
+
     min_characters_per_block = 3  # 每个块至少分配3个字符
     translated_blocks = ['' for _ in range(num_blocks)]
     available_text = merged_translation
-    
+
     # 计算更精确的每个块的长度分配
     # 使用动态分配策略，确保充分利用每个块的可用长度
     start_pos = 0
     remaining_len = translation_len
     remaining_blocks = num_blocks
-    
+
     for i in range(num_blocks):
         # 动态计算当前块的目标长度：向上取整(剩余长度 / 剩余块数)
         # 这样可以确保后面的块也能获得合理的长度
         target_len = -(-remaining_len // remaining_blocks)
-        
+
         # 计算当前块的结束位置
         end_pos = start_pos + target_len
         # 对于最后一个块，确保不超过文本长度
         if i == num_blocks - 1:
             end_pos = translation_len
         end_pos = min(end_pos, translation_len)  # 确保不超过文本长度
-        
+
         # 调整拆分位置，确保英文单词完整性和标点正确位置
         # 这里会优先充分利用分块长度
         adjusted_end = adjust_split_position(available_text, end_pos)
         actual_end = adjusted_end
-        
+
         # 确保至少分配min_characters_per_block个字符
         if actual_end - start_pos < min_characters_per_block:
             actual_end = min(start_pos + min_characters_per_block, translation_len)
-        
+
         # 获取当前块文本
         current_text = available_text[start_pos:actual_end].strip()
-        
+
         # 如果块不为空，确保块首不是标点符号
         if current_text and is_punctuation(current_text[0]):
             # 寻找块首的标点，将其移到前一个块（如果有前一个块）
@@ -375,14 +375,14 @@ def split_translated_result(merged_translation, original_blocks):
                 punct_end = 0
                 while punct_end < len(current_text) and is_punctuation(current_text[punct_end]):
                     punct_end += 1
-                
+
                 if punct_end > 0:
                     # 将标点移到前一个块
                     translated_blocks[i-1] += current_text[:punct_end]
                     current_text = current_text[punct_end:].strip()
                     # 重新计算实际结束位置
                     actual_end = start_pos + (punct_end + len(current_text))
-        
+
         # 确保块尾不是左成对字符
         if current_text and is_left_pair_character(current_text[-1]):
             # 向前调整实际结束位置，直到块尾不是左成对字符
@@ -393,9 +393,9 @@ def split_translated_result(merged_translation, original_blocks):
             current_text = available_text[start_pos:adjusted_actual_end].strip()
             # 更新实际结束位置
             actual_end = adjusted_actual_end
-        
+
         translated_blocks[i] = current_text
-        
+
         # 确保当前块尾不是左成对字符
         # 这是直接的修复，确保当前块尾没有左成对字符
         if current_text and is_left_pair_character(current_text[-1]):
@@ -405,19 +405,19 @@ def split_translated_result(merged_translation, original_blocks):
                 translated_blocks[i+1] = current_text[-1] + translated_blocks[i+1]
                 # 从当前块中移除左成对字符
                 translated_blocks[i] = current_text[:-1]
-        
+
         # 更新剩余长度和剩余块数
         used_len = actual_end - start_pos
         remaining_len -= used_len
         remaining_blocks -= 1
-        
+
         # 更新起始位置
         start_pos = actual_end
-        
+
         # 如果已经到达文本末尾，跳出循环
         if start_pos >= translation_len:
             break
-    
+
     # 处理可能的空块情况
     for i in range(num_blocks):
         if not translated_blocks[i].strip() and i > 0:
@@ -437,7 +437,7 @@ def split_translated_result(merged_translation, original_blocks):
                     adjusted_split = adjust_split_position(prev_block, split_point)
                     translated_blocks[i] = prev_block[adjusted_split:].strip()
                     translated_blocks[i-1] = prev_block[:adjusted_split].strip()
-    
+
     # 确保块尾不是左成对字符
     for i in range(num_blocks - 1):
         current_block = translated_blocks[i]
@@ -452,10 +452,10 @@ def split_translated_result(merged_translation, original_blocks):
             # 如果当前块为空，跳出循环
             if not current_block:
                 break
-    
+
     # 最后调整标点，确保所有块首都不是标点
     translated_blocks = fix_block_start_punctuation(translated_blocks)
-    
+
     # 最终检查：确保所有块尾都不是左成对字符
     # 这是最后的防线，确保所有块尾都没有左成对字符
     for i in range(num_blocks - 1):
@@ -474,48 +474,296 @@ def split_translated_result(merged_translation, original_blocks):
             # 如果当前块为空，跳出循环
             if not current_block:
                 break
-    
+
     # 添加最终的分段长度平衡调整
     # 检查所有分段的长度，确保分布均匀
     if num_blocks > 1:
         # 计算各分段长度
         block_lengths = [len(block) for block in translated_blocks]
-        
+
         # 计算平均长度和标准差
         avg_length = sum(block_lengths) / num_blocks
         max_length = max(block_lengths)
-        
+
         # 如果最后一个分段明显长于平均长度，进行调整
         if block_lengths[-1] > avg_length * 1.5:
             # 计算需要重新分配的字符数
             excess_length = block_lengths[-1] - int(avg_length)
-            
+
             # 从最后一个分段中取出多余的部分
             last_block = translated_blocks[-1]
             if excess_length > 0 and len(last_block) > excess_length:
                 # 寻找合适的拆分位置，确保不拆分单词和左成对字符
                 split_point = len(last_block) - excess_length
                 adjusted_split = adjust_split_position(last_block, split_point)
-                
+
                 # 将多余部分分配到前面的分段中
                 excess_text = last_block[adjusted_split:]
                 translated_blocks[-1] = last_block[:adjusted_split]
-                
+
                 # 均匀分配到前面的分段
                 num_front_blocks = num_blocks - 1
                 if num_front_blocks > 0:
                     chars_per_block = len(excess_text) // num_front_blocks
                     remaining_chars = len(excess_text) % num_front_blocks
-                    
+
                     current_pos = 0
                     for i in range(num_front_blocks):
                         # 计算当前块应分配的字符数
                         assign_chars = chars_per_block + (1 if i < remaining_chars else 0)
-                        
+
                         # 如果还有剩余字符，分配给当前块
                         if current_pos < len(excess_text):
                             end_pos = current_pos + assign_chars
                             translated_blocks[i] += excess_text[current_pos:end_pos]
                             current_pos = end_pos
-    
+
     return translated_blocks
+
+
+def merge_semantic_blocks_with_llm(text_blocks, translator, source_lang):
+    """使用大模型按语义合并文本块
+
+    Args:
+        text_blocks (list): 所有原始块列表（已按垂直位置排序，仅包含正文块）
+                          每个元素是TextBlock对象
+        translator: 翻译器实例，用于调用LLM进行语义分析
+        source_lang (str): 源语言代码
+
+    Returns:
+        tuple: (merged_blocks, block_mapping)
+            merged_blocks: 合并后的语义块列表（MergedBlock对象列表）
+            block_mapping: 原始块与合并块的映射关系
+    """
+    from models.merged_block import MergedBlock
+    import logging
+    import re
+
+    logger = logging.getLogger(__name__)
+    merged_blocks = []
+    block_mapping = []
+
+    def is_image_caption(text):
+        """判断文本是否为图片注释
+        
+        Args:
+            text (str): 要判断的文本
+            
+        Returns:
+            bool: 是否为图片注释
+        """
+        # 匹配 "图1："、"表2：" 等格式的图片/表格注释
+        pattern = r'^(图|表)\s*\d+\s*：'
+        return bool(re.match(pattern, text.strip()))
+
+    if not text_blocks:
+        return merged_blocks, block_mapping
+
+    # 初始化当前合并块
+    first_block = text_blocks[0]
+    first_bbox = first_block.block_bbox
+    first_width = first_bbox[2] - first_bbox[0] if len(first_bbox) >= 4 else 0
+    first_height = first_bbox[3] - first_bbox[1] if len(first_bbox) >= 4 else 0
+
+    current_merged = MergedBlock(
+        block_text=first_block.block_text,
+        original_blocks=[first_block],
+        max_width=first_width,
+        max_height=first_height
+    )
+
+    # 批量处理相邻块的语义分析
+    for i in range(1, len(text_blocks)):
+        curr_block = text_blocks[i]
+        
+        try:
+            # 先检查是否为图片注释，如果是，直接不合并
+            prev_text = current_merged.block_text
+            curr_text = curr_block.block_text
+            
+            if is_image_caption(prev_text):
+                logger.info(f"识别到图片注释，不合并: 块1='{prev_text}'，块2='{curr_text}'")
+                # 保存当前合并块
+                merged_blocks.append(current_merged)
+                block_mapping.append(current_merged.original_blocks)
+
+                # 开始新的合并块
+                curr_bbox = curr_block.block_bbox
+                curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
+                curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
+
+                current_merged = MergedBlock(
+                    block_text=curr_block.block_text,
+                    original_blocks=[curr_block],
+                    max_width=curr_width,
+                    max_height=curr_height
+                )
+                continue
+            
+            # 检查是否为新段落的开始
+            def is_new_paragraph_start(text):
+                """判断文本是否为新段落的开始
+                
+                Args:
+                    text (str): 要判断的文本
+                    
+                Returns:
+                    bool: 是否为新段落的开始
+                """
+                # 引导性短语，通常表示新段落的开始
+                intro_phrases = [
+                    "让我们", "现在", "首先", "其次", "然后", "最后", "总之", "此外",
+                    "另外", "然而", "因此", "所以", "但是", "不过", "同时", "例如",
+                    "比如", "假设", "想象", "考虑", "需要", "必须", "应该", "可以"
+                ]
+                
+                text_stripped = text.strip()
+                for phrase in intro_phrases:
+                    if text_stripped.startswith(phrase):
+                        return True
+                return False
+            
+            # 如果当前块是新段落的开始，不合并
+            if is_new_paragraph_start(curr_text):
+                logger.info(f"识别到新段落开始，不合并: 块1='{prev_text}'，块2='{curr_text}'")
+                # 保存当前合并块
+                merged_blocks.append(current_merged)
+                block_mapping.append(current_merged.original_blocks)
+
+                # 开始新的合并块
+                curr_bbox = curr_block.block_bbox
+                curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
+                curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
+
+                current_merged = MergedBlock(
+                    block_text=curr_block.block_text,
+                    original_blocks=[curr_block],
+                    max_width=curr_width,
+                    max_height=curr_height
+                )
+                continue
+            
+            # 使用翻译器的语义关系分析方法
+            logger.info(f"开始分析语义关系: 块1='{current_merged.block_text}'，块2='{curr_block.block_text}'")
+            should_merge = translator.analyze_semantic_relationship(
+                current_merged.block_text,
+                curr_block.block_text,
+                source_lang
+            )
+
+            logger.info(f"语义分析结果: {should_merge}，块1='{current_merged.block_text}'，块2='{curr_block.block_text}'")
+
+            if should_merge:
+                # 合并块，处理空格
+                prev_text = current_merged.block_text
+                curr_text = curr_block.block_text
+
+                # 检查前一个块是否以空格结尾，当前块是否以空格开头
+                if prev_text.endswith(' ') and curr_text.startswith(' '):
+                    # 只保留一个空格
+                    current_merged.block_text = prev_text + curr_text[1:]
+                elif not prev_text.endswith(' ') and not curr_text.startswith(' '):
+                    # 添加一个空格
+                    current_merged.block_text = prev_text + ' ' + curr_text
+                else:
+                    # 直接拼接
+                    current_merged.block_text = prev_text + curr_text
+
+                current_merged.original_blocks.append(curr_block)
+
+                # 计算当前块的宽度和高度
+                curr_bbox = curr_block.block_bbox
+                curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
+                curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
+
+                # 更新最大宽度和高度
+                current_merged.max_width = max(current_merged.max_width, curr_width)
+                current_merged.max_height = max(current_merged.max_height, curr_height)
+            else:
+                # 保存当前合并块
+                merged_blocks.append(current_merged)
+                block_mapping.append(current_merged.original_blocks)
+
+                # 开始新的合并块
+                curr_bbox = curr_block.block_bbox
+                curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
+                curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
+
+                current_merged = MergedBlock(
+                    block_text=curr_block.block_text,
+                    original_blocks=[curr_block],
+                    max_width=curr_width,
+                    max_height=curr_height
+                )
+        except Exception as e:
+            logger.error(f"语义分析失败: {str(e)}")
+            # 分析失败时，回退到规则-based方法
+            # 检查当前块是否延续前一个句子
+            is_continuation = _is_sentence_continuation(curr_block.block_text)
+            prev_merged_text = current_merged.block_text
+            prev_ends_with_sentence = prev_merged_text.strip().endswith(('.', '!', '?', '。', '！', '？'))
+            prev_ends_with_space = prev_merged_text.endswith(' ')
+            
+            # 增强的回退机制：特别检查句子延续的情况
+            should_merge_fallback = False
+            if not prev_ends_with_sentence:
+                # 检查前一个块是否为图片注释，如果是，不合并
+                if is_image_caption(prev_merged_text):
+                    logger.info(f"回退机制：前一个块是图片注释，不合并，块1='{prev_merged_text}'，块2='{curr_block.block_text}'")
+                elif prev_ends_with_space:
+                    # 前一个块以空格结尾且不是完整句子，很可能是句子延续
+                    should_merge_fallback = True
+                    logger.info(f"回退机制：前一个块以空格结尾且不是完整句子，块1='{prev_merged_text}'，块2='{curr_block.block_text}'，应该合并")
+                elif curr_block.block_text.strip() and not curr_block.block_text.strip().startswith(('$', '#', '@', 'http://', 'https://')):
+                    # 前一个块不是完整句子，当前块不是特殊标记或链接，可能是句子延续
+                    should_merge_fallback = True
+                    logger.info(f"回退机制：前一个块不是完整句子，块1='{prev_merged_text}'，块2='{curr_block.block_text}'，应该合并")
+
+            if (not prev_ends_with_sentence and is_continuation) or should_merge_fallback:
+                # 合并块，处理空格
+                prev_text = current_merged.block_text
+                curr_text = curr_block.block_text
+
+                if prev_text.endswith(' ') and curr_text.startswith(' '):
+                    current_merged.block_text = prev_text + curr_text[1:]
+                elif not prev_text.endswith(' ') and not curr_text.startswith(' '):
+                    current_merged.block_text = prev_text + ' ' + curr_text
+                else:
+                    current_merged.block_text = prev_text + curr_text
+
+                current_merged.original_blocks.append(curr_block)
+
+                curr_bbox = curr_block.block_bbox
+                curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
+                curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
+
+                current_merged.max_width = max(current_merged.max_width, curr_width)
+                current_merged.max_height = max(current_merged.max_height, curr_height)
+                
+                logger.info(f"回退机制：合并块成功，合并后内容='{current_merged.block_text}'")
+            else:
+                # 保存当前合并块
+                merged_blocks.append(current_merged)
+                block_mapping.append(current_merged.original_blocks)
+
+                # 开始新的合并块
+                curr_bbox = curr_block.block_bbox
+                curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
+                curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
+
+                current_merged = MergedBlock(
+                    block_text=curr_block.block_text,
+                    original_blocks=[curr_block],
+                    max_width=curr_width,
+                    max_height=curr_height
+                )
+                
+                logger.info(f"回退机制：不合并块，保存当前合并块='{current_merged.block_text}'，开始新块='{curr_block.block_text}'")
+
+    # 添加最后一个合并块
+    if current_merged is not None:
+        merged_blocks.append(current_merged)
+        block_mapping.append(current_merged.original_blocks)
+
+    logger.info(f"LLM语义合并完成，原始块数量: {len(text_blocks)}, 合并后块数量: {len(merged_blocks)}")
+    return merged_blocks, block_mapping
