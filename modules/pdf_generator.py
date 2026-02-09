@@ -93,7 +93,8 @@ class PdfGenerator:
                 
                 # 收集有表格翻译的页码
                 for table_content in translated_content.get('tables', []):
-                    pages_with_content.add(table_content['page_num'])
+                    # 使用page_num属性
+                    pages_with_content.add(table_content.page_num)
                 
                 # 将页码转换为原始文档的索引（从0开始）
                 pages_to_process = sorted(pages_with_content)
@@ -142,7 +143,11 @@ class PdfGenerator:
                         logger.info(f"第 {page_num} 页绘制完成")
                     
                     # 处理表格（如果有）
-                    page_tables = [table for table in translated_content['tables'] if table['page_num'] == page_num]
+                    page_tables = []
+                    for table in translated_content['tables']:
+                        # 使用page_num属性
+                        if table.page_num == page_num:
+                            page_tables.append(table)
                     logger.info(f"第 {page_num} 页有 {len(page_tables)} 个表格需要处理")
                     for i, table in enumerate(page_tables):
                         self._draw_translated_table(new_page, table, target_lang)
@@ -389,11 +394,11 @@ class PdfGenerator:
         
         Args:
             page (fitz.Page): PDF页面对象
-            table (dict): 翻译后的表格
+            table: PdfTable对象
             target_lang (str): 目标语言代码
         """
-        # 使用cells数据格式
-        table_cells = table.get('cells', [])
+        # 使用cells属性
+        table_cells = table.cells
         if not table_cells:
             logger.warning("表格数据为空，跳过绘制")
             return
@@ -401,12 +406,12 @@ class PdfGenerator:
         logger.info(f"开始绘制表格，共 {len(table_cells)} 行 {len(table_cells[0])} 列")
         
         # 获取表格边界框信息
-        table_bbox = table.get('bbox')
+        table_bbox = table.bbox
         logger.info(f"表格边界框: {table_bbox}")
         
         # 获取行高和列宽信息
-        row_heights = table.get('row_heights', [])
-        col_widths = table.get('col_widths', [])
+        row_heights = table.row_heights
+        col_widths = table.col_widths
         logger.info(f"行高: {row_heights}")
         logger.info(f"列宽: {col_widths}")
         

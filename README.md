@@ -226,6 +226,27 @@ MIT License
 
 ## 更新日志
 
+### 2026-02-09
+- 优化Word和Markdown生成器图表插入方法：
+  - 移除MergedBlock类中的self.bbox属性，简化代码结构
+  - 实现基于原始块位置的图表插入方法，提高图表定位准确性
+  - 统一Word和Markdown生成器的图表插入逻辑，确保一致性
+  - 移除不必要的边框计算和排序代码，简化代码结构
+- 修复表格插入位置问题：
+  - 修改translation_service.py中的translate_tables方法，返回PdfTable对象而不是字典
+  - 更新docx_generator.py中的_add_table方法，使用PdfTable对象属性
+  - 更新markdown_generator.py中的_convert_table_to_markdown方法，使用PdfTable对象属性
+  - 更新pdf_generator.py中的表格处理代码，使用PdfTable对象属性
+  - 确保表格边界框信息在整个处理流程中正确保留
+- 更新测试用例：
+  - 修改test_markdown_table.py，使用PdfTable和PdfCell对象
+  - 修改test_pdf_generator.py的test_generate_pdf_with_tables方法，使用PdfTable和PdfCell对象
+  - 确保测试用例与代码变更一致，验证表格处理功能
+- 运行回归测试：
+  - 执行所有测试用例，确保代码变更不破坏现有功能
+  - 验证表格和图表插入功能正常工作
+  - 确保所有测试用例通过，提高代码质量
+
 ### 2026-02-07
 - 优化文本连续判断提示词：
   - 修改translator.py中的语义分析提示词，添加明确的标题识别规则

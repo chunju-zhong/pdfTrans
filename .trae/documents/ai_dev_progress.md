@@ -6,6 +6,42 @@
 - 每次开发完成后请记录任务完成状态
 
 ## 开发记录
+### 2026-02-09
+- **当前状态**：已完成Word和Markdown生成器图表插入方法优化，修复了表格插入位置问题，更新了测试用例，并运行了回归测试
+- **已完成任务**：
+  - 优化Word和Markdown生成器图表插入方法：
+    - 修改models/merged_block.py，移除self.bbox属性，简化代码结构
+    - 更新modules/docx_generator.py，实现基于原始块位置的图表插入方法
+    - 更新modules/markdown_generator.py，实现基于原始块位置的图表插入方法
+    - 统一Word和Markdown生成器的图表插入逻辑，确保一致性
+    - 移除不必要的边框计算和排序代码，简化代码结构
+  - 修复表格插入位置问题：
+    - 修改services/translation_service.py中的translate_tables方法，返回PdfTable对象而不是字典
+    - 更新modules/docx_generator.py中的_add_table方法，使用PdfTable对象属性
+    - 更新modules/markdown_generator.py中的_convert_table_to_markdown方法，使用PdfTable对象属性
+    - 更新modules/pdf_generator.py中的表格处理代码，使用PdfTable对象属性
+    - 确保表格边界框信息在整个处理流程中正确保留
+  - 更新测试用例：
+    - 修改tests/test_markdown_table.py，使用PdfTable和PdfCell对象
+    - 修改tests/test_pdf_generator.py的test_generate_pdf_with_tables方法，使用PdfTable和PdfCell对象
+    - 确保测试用例与代码变更一致，验证表格处理功能
+  - 运行回归测试：
+    - 执行所有测试用例，确保代码变更不破坏现有功能
+    - 验证表格和图表插入功能正常工作
+    - 确保所有测试用例通过，提高代码质量
+  - 更新项目文档：
+    - 更新README.md，添加2026-02-09的开发记录
+    - 更新AI开发进度记录，添加2026-02-09的开发记录
+
+- **影响**：
+  - 提高图表插入准确性：通过基于原始块位置的图表插入方法，确保图表出现在正确的位置
+  - 修复表格插入问题：通过保留PdfTable对象结构，确保表格边界框信息正确传递，解决表格插入位置问题
+  - 简化代码结构：移除不必要的边框计算和排序代码，减少代码复杂度
+  - 提高代码可维护性：统一图表插入逻辑，使用对象属性访问语法，提高代码可读性
+  - 增强测试覆盖：更新测试用例，确保表格处理功能的可靠性
+  - 确保代码质量：通过回归测试，验证所有功能正常工作，避免引入新的问题
+  - 文档完善：更新了项目文档，反映了新功能的实现和变更
+
 ### 2026-02-07
 - **当前状态**：已完成文本连续判断提示词优化、标题识别功能实现、Markdown生成器提示词优化和前端UI改进，同时添加了相应的测试用例
 - **已完成任务**：

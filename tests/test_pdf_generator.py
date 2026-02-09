@@ -188,14 +188,47 @@ class TestPdfGenerator:
     
     def test_generate_pdf_with_tables(self, test_pdf_path):
         """测试生成包含表格的PDF
-        
+
         验证generate_pdf方法能够处理包含表格的翻译内容。
         """
+        from models.extraction import PdfTable, PdfCell
+        
         # 创建临时输出文件路径
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
             output_pdf_path = temp_file.name
-        
+
         try:
+            # 准备表格数据，创建PdfCell对象
+            table_data = [
+                ['列1', '列2', '列3'],
+                ['数据1', '数据2', '数据3'],
+                ['数据4', '数据5', '数据6']
+            ]
+            
+            cells = []
+            for i, row in enumerate(table_data):
+                cell_row = []
+                for j, text in enumerate(row):
+                    # 创建PdfCell对象
+                    cell = PdfCell(
+                        text=text,
+                        bbox=(50 + j * 100, 150 + i * 30, 150 + j * 100, 180 + i * 30),
+                        row_idx=i,
+                        col_idx=j
+                    )
+                    cell_row.append(cell)
+                cells.append(cell_row)
+            
+            # 创建PdfTable对象
+            pdf_table = PdfTable(
+                page_num=1,
+                table_idx=0,
+                cells=cells,
+                bbox=(50, 150, 350, 240),
+                row_heights=[30, 30, 30],
+                col_widths=[100, 100, 100]
+            )
+            
             # 准备包含表格的翻译内容
             translated_content = {
                 'text_content': [
@@ -215,19 +248,9 @@ class TestPdfGenerator:
                         ]
                     }
                 ],
-                'tables': [
-                    {
-                        'page_num': 1,
-                        'table_idx': 0,
-                        'content': [
-                            ['列1', '列2', '列3'],
-                            ['数据1', '数据2', '数据3'],
-                            ['数据4', '数据5', '数据6']
-                        ]
-                    }
-                ]
+                'tables': [pdf_table]
             }
-            
+
             # 调用生成方法
             generator = PdfGenerator()
             generator.generate_pdf(test_pdf_path, translated_content, output_pdf_path)

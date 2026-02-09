@@ -28,13 +28,6 @@ class MergedBlock:
             self.bold = first_block.bold
             self.italic = first_block.italic
             self.page_num = first_block.page_num
-            
-            # 计算合并边界框
-            min_x0 = min(block.block_bbox[0] for block in original_blocks if block.block_bbox)
-            min_y0 = min(block.block_bbox[1] for block in original_blocks if block.block_bbox)
-            max_x1 = max(block.block_bbox[2] for block in original_blocks if block.block_bbox)
-            max_y1 = max(block.block_bbox[3] for block in original_blocks if block.block_bbox)
-            self.bbox = (min_x0, min_y0, max_x1, max_y1)
         else:
             # 默认值
             self.font = ""
@@ -44,7 +37,6 @@ class MergedBlock:
             self.bold = False
             self.italic = False
             self.page_num = 0
-            self.bbox = (0, 0, 0, 0)
     
     def to_dict(self):
         """转换为字典格式
@@ -63,6 +55,5 @@ class MergedBlock:
             'flags': self.flags,
             'bold': self.bold,
             'italic': self.italic,
-            'page_num': self.page_num,
-            'bbox': self.bbox
+            'page_num': self.page_num
         }

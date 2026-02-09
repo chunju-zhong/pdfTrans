@@ -9,16 +9,69 @@ import os
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from modules.markdown_generator import MarkdownGenerator
+from models.extraction import PdfTable, PdfCell
 
 
 def test_table_generation():
     """测试表格生成功能"""
+    # 创建测试表格数据，使用PdfCell和PdfTable对象
+    table_data = [
+        # 表头
+        [
+            {'text': '主体实体'},
+            {'text': '认证 / 验证'},
+            {'text': '备注'}
+        ],
+        # 数据行1
+        [
+            {'text': '用户'},
+            {'text': '通过OAuth或单点登录（SSO）进行认证'},
+            {'text': '具有完全自主性和行为责任的人类主体'}
+        ],
+        # 数据行2
+        [
+            {'text': '智能体（新一类原则）'},
+            {'text': '已通过SPIFFE验证'},
+            {'text': '智能体拥有被授权的权限，能够代表用户执行操作。'}
+        ],
+        # 数据行3
+        [
+            {'text': '服务账号'},
+            {'text': '集成到身份与访问管理（IAM）'},
+            {'text': '应用与容器完全确定，不对行为负责'}
+        ]
+    ]
+    
+    # 创建PdfCell对象
+    cells = []
+    for i, row in enumerate(table_data):
+        cell_row = []
+        for j, cell_data in enumerate(row):
+            cell = PdfCell(
+                text=cell_data['text'],
+                bbox=(50 + j * 100, 150 + i * 30, 150 + j * 100, 180 + i * 30),
+                row_idx=i,
+                col_idx=j
+            )
+            cell_row.append(cell)
+        cells.append(cell_row)
+    
+    # 创建PdfTable对象
+    test_table = PdfTable(
+        page_num=1,
+        table_idx=0,
+        cells=cells,
+        bbox=(50, 150, 350, 240),
+        row_heights=[30, 30, 30, 30],
+        col_widths=[100, 100, 100]
+    )
+    
     # 创建一个模拟的MarkdownGenerator实例（只用于测试表格生成方法）
     class MockMarkdownGenerator:
         def _convert_table_to_markdown(self, table):
             """模拟表格转换方法"""
-            cells = table.get('cells', [])
+            # 使用cells属性
+            cells = table.cells
             if not cells:
                 return ""
             
@@ -36,7 +89,8 @@ def test_table_generation():
             header_row = cells[0]
             row_cells = []
             for cell in header_row:
-                cell_text = cell.get('text', '') if isinstance(cell, dict) else str(cell)
+                # 使用text属性
+                cell_text = cell.text
                 row_cells.append(cell_text)
             markdown_table.append("|" + "|".join(row_cells) + "| ")
             
@@ -48,7 +102,8 @@ def test_table_generation():
             for i, row in enumerate(cells[1:]):
                 row_cells = []
                 for cell in row:
-                    cell_text = cell.get('text', '') if isinstance(cell, dict) else str(cell)
+                    # 使用text属性
+                    cell_text = cell.text
                     row_cells.append(cell_text)
                 if i == len(cells[1:]) - 1:
                     # 最后一行
@@ -58,36 +113,6 @@ def test_table_generation():
                     markdown_table.append(" |" + "|".join(row_cells) + "| ")
             
             return "\n".join(markdown_table) + "\n"
-    
-    # 创建测试表格数据
-    test_table = {
-        'cells': [
-            # 表头
-            [
-                {'text': '主体实体'},
-                {'text': '认证 / 验证'},
-                {'text': '备注'}
-            ],
-            # 数据行1
-            [
-                {'text': '用户'},
-                {'text': '通过OAuth或单点登录（SSO）进行认证'},
-                {'text': '具有完全自主性和行为责任的人类主体'}
-            ],
-            # 数据行2
-            [
-                {'text': '智能体（新一类原则）'},
-                {'text': '已通过SPIFFE验证'},
-                {'text': '智能体拥有被授权的权限，能够代表用户执行操作。'}
-            ],
-            # 数据行3
-            [
-                {'text': '服务账号'},
-                {'text': '集成到身份与访问管理（IAM）'},
-                {'text': '应用与容器完全确定，不对行为负责'}
-            ]
-        ]
-    }
     
     # 生成表格
     generator = MockMarkdownGenerator()

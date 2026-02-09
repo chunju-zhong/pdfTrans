@@ -472,6 +472,8 @@ class TranslationService:
         Returns:
             list: 翻译后的表格列表
         """
+        from models.extraction import PdfTable, PdfCell
+        
         translated_tables = []
         
         if tables:
@@ -483,14 +485,8 @@ class TranslationService:
             
             logger.info(f"任务 {task.task_id} 开始翻译表格内容")
             for table in tables:
-                translated_table = {
-                    'page_num': table.page_num,
-                    'table_idx': table.table_idx,
-                    'cells': [],
-                    'bbox': table.bbox,
-                    'row_heights': table.row_heights,
-                    'col_widths': table.col_widths
-                }
+                # 创建翻译后的单元格列表
+                translated_cells = []
                 
                 for row in table.cells:
                     if task.is_canceled():
@@ -516,28 +512,34 @@ class TranslationService:
                                 doc_type=doc_type,
                                 glossary=glossary
                             )
-                            # 保存翻译后的单元格信息
-                            translated_cell = {
-                                'text': translated_text,
-                                'bbox': cell.bbox,
-                                'row_idx': cell.row_idx,
-                                'col_idx': cell.col_idx,
-                                'width': cell.width,
-                                'height': cell.height
-                            }
+                            # 创建翻译后的PdfCell对象
+                            translated_cell = PdfCell(
+                                text=translated_text,
+                                bbox=cell.bbox,
+                                row_idx=cell.row_idx,
+                                col_idx=cell.col_idx
+                            )
                             translated_row.append(translated_cell)
                         else:
                             # 空单元格
-                            translated_cell = {
-                                'text': '',
-                                'bbox': cell.bbox if cell else None,
-                                'row_idx': cell.row_idx if cell else 0,
-                                'col_idx': cell.col_idx if cell else 0,
-                                'width': cell.width if cell else 0,
-                                'height': cell.height if cell else 0
-                            }
+                            translated_cell = PdfCell(
+                                text='',
+                                bbox=cell.bbox if cell else None,
+                                row_idx=cell.row_idx if cell else 0,
+                                col_idx=cell.col_idx if cell else 0
+                            )
                             translated_row.append(translated_cell)
-                    translated_table['cells'].append(translated_row)
+                    translated_cells.append(translated_row)
+                
+                # 创建翻译后的PdfTable对象
+                translated_table = PdfTable(
+                    page_num=table.page_num,
+                    table_idx=table.table_idx,
+                    cells=translated_cells,
+                    bbox=table.bbox,
+                    row_heights=table.row_heights,
+                    col_widths=table.col_widths
+                )
                 
                 translated_tables.append(translated_table)
             

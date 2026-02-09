@@ -102,10 +102,20 @@ class DocxGenerator:
             tables_by_page = {}
             if 'tables' in translated_content:
                 for table in translated_content['tables']:
-                    page_num = table.get('page_num', 1)  # 默认页码为1
+                    page_num = table.page_num  # 使用page_num属性
                     if page_num not in tables_by_page:
                         tables_by_page[page_num] = []
                     tables_by_page[page_num].append(table)
+            
+            # 按页码组织原始文本块
+            original_blocks_by_page = {}
+            if 'blocks' in translated_content:
+                for page in translated_content['blocks']:
+                    page_num = page.page_num
+                    if page_num not in original_blocks_by_page:
+                        original_blocks_by_page[page_num] = []
+                    # 原始文本块已经按垂直位置排序
+                    original_blocks_by_page[page_num] = page.text_blocks
             
             # 获取所有页码的列表
             all_pages = set(merged_by_page.keys())
@@ -123,76 +133,48 @@ class DocxGenerator:
                 # 添加文本块元素
                 text_blocks = merged_by_page.get(page_num, [])
                 for block_idx, block in enumerate(text_blocks):
-                    # 尝试获取文本块的边界框
-                    bbox = block.bbox
-                    y_position = bbox[1] if len(bbox) >= 2 else 0
-                    
-                    logger.info(f"处理第 {page_num} 页 文本块 {block_idx+1}: 边界框={bbox}, y_position={y_position}, 内容='{block.block_text[:50]}...'")
+                    logger.info(f"处理第 {page_num} 页 文本块 {block_idx+1}: 内容='{block.block_text[:50]}...'")
                     
                     page_elements.append({
                         'type': 'text',
                         'content': block,
-                        'y_position': y_position,
                         'block_idx': block_idx
                     })
                 
                 # 添加图像元素
                 page_images = images_by_page.get(page_num, [])
                 for image_idx, image in enumerate(page_images):
-                    y_position = image.bbox[1] if image.bbox else 0
-                    
-                    logger.info(f"处理第 {page_num} 页 图像 {image_idx+1}: 边界框={image.bbox}, y_position={y_position}, 路径={image.image_path}")
+                    logger.info(f"处理第 {page_num} 页 图像 {image_idx+1}: 路径={image.image_path}")
                     
                     page_elements.append({
                         'type': 'image',
-                        'content': image,
-                        'y_position': y_position
+                        'content': image
                     })
                 
                 # 添加表格元素
                 page_tables = tables_by_page.get(page_num, [])
-                for table in page_tables:
-                    bbox = table.get('bbox', (0, 0, 0, 0))
-                    y_position = bbox[1] if len(bbox) >= 2 else 0
+                for table_idx, table in enumerate(page_tables):
+                    logger.info(f"处理第 {page_num} 页 表格 {table_idx+1}")
                     
                     page_elements.append({
                         'type': 'table',
-                        'content': table,
-                        'y_position': y_position
+                        'content': table
                     })
                 
-                # 记录排序前的元素
-                logger.info(f"第 {page_num} 页排序前元素列表:")
+                # 记录元素列表
+                logger.info(f"第 {page_num} 页元素列表:")
                 for i, elem in enumerate(page_elements):
                     elem_type = elem['type']
-                    y_pos = elem['y_position']
                     if elem_type == 'text':
                         content = elem['content'].block_text[:30] + '...'
                     elif elem_type == 'image':
                         content = f"图像: {elem['content'].image_path}"
                     else:
                         content = f"{elem_type}: {elem['content']}"
-                    logger.info(f"  排序前元素 {i+1}: 类型={elem_type}, y_position={y_pos}, 内容='{content}'")
+                    logger.info(f"  元素 {i+1}: 类型={elem_type}, 内容='{content}'")
                 
-                # 按垂直位置排序元素
-                page_elements.sort(key=lambda x: x['y_position'])
-                logger.info(f"第 {page_num} 页排序后元素数量: {len(page_elements)}")
-                
-                # 记录排序后的元素
-                logger.info(f"第 {page_num} 页排序后元素列表:")
-                for i, elem in enumerate(page_elements):
-                    elem_type = elem['type']
-                    y_pos = elem['y_position']
-                    if elem_type == 'text':
-                        content = elem['content'].block_text[:30] + '...'
-                    elif elem_type == 'image':
-                        content = f"图像: {elem['content'].image_path}"
-                    else:
-                        content = f"{elem_type}: {elem['content']}"
-                    logger.info(f"  排序后元素 {i+1}: 类型={elem_type}, y_position={y_pos}, 内容='{content}'")
-                
-                # 处理排序后的元素
-                self._process_page_elements(doc, page_elements, text_blocks)
+                # 处理元素
+                self._process_page_elements(doc, page_elements, original_blocks_by_page, page_num)
                 
                 # 只在不是最后一页时添加分页符
                 if i < len(sorted_pages) - 1:
@@ -210,131 +192,152 @@ class DocxGenerator:
             logger.error(f"生成Word文档时出错: {str(e)}", exc_info=True)
             raise Exception(f"生成Word文档时出错: {str(e)}")
     
-    def _process_page_elements(self, doc, page_elements, text_blocks):
+    def _find_chart_position(self, image, original_blocks):
+        """查找图表在原始文本块中的位置
+        
+        Args:
+            image: 图像对象
+            original_blocks: 原始文本块列表（已排序）
+            
+        Returns:
+            tuple: (before_block, after_block) - 图表前后的原始块
+        """
+        chart_y = image.bbox[1]
+        
+        # 在已排序的原始文本块中查找图表前后的块
+        # 由于原始文本块已经按垂直位置排序，可以使用线性查找
+        before_block = None
+        after_block = None
+        
+        for i, block in enumerate(original_blocks):
+            block_y = block.block_bbox[1]
+            if block_y <= chart_y:
+                before_block = block
+            else:
+                after_block = block
+                break
+        
+        logger.info(f"图表位置查找完成: before_block={before_block.block_no if before_block else None}, after_block={after_block.block_no if after_block else None}")
+        return before_block, after_block
+    
+    def _find_merged_block(self, before_block, after_block, merged_blocks):
+        """查找包含图表前后原始块的合并块
+        
+        Args:
+            before_block: 图表前的原始块
+            after_block: 图表后的原始块
+            merged_blocks: 合并块列表
+            
+        Returns:
+            tuple: (merged_block, position) - 包含图表的合并块和位置关系
+        """
+        for block in merged_blocks:
+            original_blocks = block.original_blocks
+            original_block_nos = [b.block_no for b in original_blocks]
+            
+            # 检查before_block是否在当前合并块中（使用块编号）
+            if before_block and before_block.block_no in original_block_nos:
+                logger.info(f"找到包含before_block的合并块: {block.block_text[:30]}...")
+                return block, 'after'  # 图表在before_block之后
+            
+            # 检查after_block是否在当前合并块中（使用块编号）
+            if after_block and after_block.block_no in original_block_nos:
+                logger.info(f"找到包含after_block的合并块: {block.block_text[:30]}...")
+                return block, 'before'  # 图表在after_block之前
+        
+        logger.info("未找到包含图表前后原始块的合并块")
+        return None, None
+    
+    def _process_page_elements(self, doc, page_elements, original_blocks_by_page, page_num):
         """处理页面元素，按顺序添加到Word文档
         
         Args:
             doc: Word文档对象
-            page_elements (list): 排序后的页面元素列表
-            text_blocks (list): 文本块列表
+            page_elements (list): 页面元素列表
+            original_blocks_by_page: 按页码组织的原始文本块
+            page_num: 当前页码
         """
         logger.info(f"开始处理页面元素，元素数量: {len(page_elements)}")
         
         # 跟踪已处理的文本块索引
         processed_blocks = set()
         
-        # 预处理：检测元素是否位于文本块内部
-        elements_with_context = []
+        # 获取当前页面的原始文本块（已排序）
+        original_blocks = original_blocks_by_page.get(page_num, [])
+        
+        # 分离文本块和图表元素
+        text_elements = []
+        chart_elements = []
         
         for element in page_elements:
-            element_type = element['type']
-            
-            if element_type in ['image', 'table']:
-                # 检查是否位于某个文本块内部
-                containing_block = None
-                insertion_point = 0.5  # 默认插入点（中间位置）
+            if element['type'] == 'text':
+                text_elements.append(element)
+            else:
+                chart_elements.append(element)
+        
+        # 处理图表元素，确定它们的插入位置
+        chart_insertions = []
+        for chart in chart_elements:
+            if chart['type'] == 'image' or chart['type'] == 'table':
+                # 查找图表/表格在原始文本块中的位置
+                before_block, after_block = None, None
+                if hasattr(chart['content'], 'bbox'):
+                    # 如果有bbox属性，使用与图像相同的位置查找逻辑
+                    before_block, after_block = self._find_chart_position(chart['content'], original_blocks)
                 
-                elem_y = element['y_position']
-                logger.info(f"处理元素: 类型={element_type}, y_position={elem_y}")
+                # 查找包含图表/表格前后原始块的合并块
+                merged_blocks = [e['content'] for e in text_elements]
+                merged_block, position = self._find_merged_block(before_block, after_block, merged_blocks)
                 
-                for block_idx, block in enumerate(text_blocks):
-                    if block_idx not in processed_blocks:
-                            block_bbox = block.bbox
-                            if len(block_bbox) >= 4:
-                                block_y0, block_y1 = block_bbox[1], block_bbox[3]
-                                
-                                # 检查元素是否位于文本块内部
-                                if block_y0 <= elem_y <= block_y1:
-                                    containing_block = {
-                                        'block': block,
-                                        'block_idx': block_idx
-                                    }
-                                    # 计算插入点比例
-                                    insertion_point = (elem_y - block_y0) / (block_y1 - block_y0) if (block_y1 - block_y0) > 0 else 0.5
-                                    logger.info(f"元素位于文本块 {block_idx+1} 内部，插入点: {insertion_point:.2f}")
-                                    break
-                
-                if containing_block:
-                    logger.info(f"元素将插入到文本块 {containing_block['block_idx']+1} 中")
+                if merged_block:
+                    chart_insertions.append((merged_block, position, chart))
                 else:
-                    logger.info(f"元素位于文本块之间，将直接添加")
+                    # 如果没有找到合适的合并块，直接添加图表/表格
+                    chart_insertions.append((None, 'end', chart))
+        
+        # 处理文本块和图表
+        for element in text_elements:
+            block = element['content']
+            block_idx = element['block_idx']
+            
+            if block_idx not in processed_blocks:
+                # 检查是否有图表需要插入到当前块之前
+                for merged_block, position, chart in chart_insertions:
+                    if merged_block == block and position == 'before':
+                        # 插入图表到当前块之前
+                        if chart['type'] == 'image':
+                            logger.info(f"  在文本块之前插入图像: {chart['content'].image_path}")
+                            self._add_image(doc, chart['content'])
+                        elif chart['type'] == 'table':
+                            logger.info(f"  在文本块之前插入表格")
+                            self._add_table(doc, chart['content'])
                 
-                elements_with_context.append({
-                    'element': element,
-                    'containing_block': containing_block,
-                    'insertion_point': insertion_point
-                })
-            
-            elif element_type == 'text':
-                logger.info(f"处理元素: 类型=text, block_idx={element['block_idx']}, y_position={element['y_position']}")
-                elements_with_context.append({
-                    'element': element,
-                    'containing_block': None
-                })
-        
-        # 处理元素
-        logger.info(f"开始处理带上下文的元素，数量: {len(elements_with_context)}")
-        
-        for i, item in enumerate(elements_with_context):
-            element = item['element']
-            element_type = element['type']
-            containing_block = item.get('containing_block')
-            
-            logger.info(f"处理第 {i+1} 个元素: 类型={element_type}")
-            
-            if element_type == 'text':
                 # 添加文本块
-                block = element['content']
-                block_idx = element['block_idx']
-                
                 logger.info(f"  添加文本块 {block_idx+1}: 内容='{block.block_text[:30]}...'")
+                self._add_merged_text(doc, block)
+                processed_blocks.add(block_idx)
+                logger.info(f"  文本块 {block_idx+1} 处理完成")
                 
-                if block_idx not in processed_blocks:
-                    self._add_merged_text(doc, block)
-                    processed_blocks.add(block_idx)
-                    logger.info(f"  文本块 {block_idx+1} 处理完成")
-                else:
-                    logger.info(f"  文本块 {block_idx+1} 已处理，跳过")
-            
-            elif element_type in ['image', 'table']:
-                if containing_block:
-                    # 元素位于文本块内部，需要拆分文本
-                    block = containing_block['block']
-                    block_idx = containing_block['block_idx']
-                    insertion_point = item.get('insertion_point', 0.5)
-                    
-                    logger.info(f"  元素位于文本块 {block_idx+1} 内部，插入点: {insertion_point:.2f}")
-                    
-                    if block_idx not in processed_blocks:
-                        # 拆分文本并插入元素
-                        logger.info(f"  拆分文本块 {block_idx+1} 并插入元素")
-                        self._insert_element_in_text_block(
-                            doc, block, element, insertion_point
-                        )
-                        processed_blocks.add(block_idx)
-                        logger.info(f"  文本块 {block_idx+1} 拆分并插入元素完成")
-                    else:
-                        # 文本块已处理，直接添加元素
-                        logger.info(f"  文本块 {block_idx+1} 已处理，直接添加元素")
-                        if element_type == 'image':
-                            logger.info(f"  直接添加图像: {element['content'].image_path}")
-                            self._add_image(doc, element['content'])
-                            logger.info(f"  图像添加完成")
-                        elif element_type == 'table':
-                            logger.info(f"  直接添加表格")
-                            self._add_table(doc, element['content'])
-                            logger.info(f"  表格添加完成")
-                else:
-                    # 元素位于文本块之间，直接添加
-                    logger.info(f"  元素位于文本块之间，直接添加")
-                    if element_type == 'image':
-                        logger.info(f"  直接添加图像: {element['content'].image_path}")
-                        self._add_image(doc, element['content'])
-                        logger.info(f"  图像添加完成")
-                    elif element_type == 'table':
-                        logger.info(f"  直接添加表格")
-                        self._add_table(doc, element['content'])
-                        logger.info(f"  表格添加完成")
+                # 检查是否有图表需要插入到当前块之后
+                for merged_block, position, chart in chart_insertions:
+                    if merged_block == block and position == 'after':
+                        # 插入图表到当前块之后
+                        if chart['type'] == 'image':
+                            logger.info(f"  在文本块之后插入图像: {chart['content'].image_path}")
+                            self._add_image(doc, chart['content'])
+                        elif chart['type'] == 'table':
+                            logger.info(f"  在文本块之后插入表格")
+                            self._add_table(doc, chart['content'])
+        
+        # 处理需要添加到文档末尾的图表
+        for merged_block, position, chart in chart_insertions:
+            if position == 'end':
+                if chart['type'] == 'image':
+                    logger.info(f"  在文档末尾插入图像: {chart['content'].image_path}")
+                    self._add_image(doc, chart['content'])
+                elif chart['type'] == 'table':
+                    logger.info(f"  在文档末尾插入表格")
+                    self._add_table(doc, chart['content'])
         
         logger.info(f"页面元素处理完成，已处理 {len(processed_blocks)} 个文本块")
     
@@ -347,6 +350,8 @@ class DocxGenerator:
             element: 要插入的元素
             insertion_point: 插入点比例（0-1）
         """
+        logger.info(f"拆分合并块，插入点: {insertion_point:.2f}, 合并块内容: '{text_block.block_text[:50]}...'")
+        
         text = text_block.block_text
         text_length = len(text)
         
@@ -363,6 +368,8 @@ class DocxGenerator:
         text_before = text[:split_index].rstrip()
         text_after = text[split_index:].lstrip()
         
+        logger.info(f"拆分结果: 前半部分='{text_before[:30]}...', 后半部分='{text_after[:30]}...'")
+        
         # 添加前段文本
         if text_before:
             from models.merged_block import MergedBlock
@@ -373,12 +380,15 @@ class DocxGenerator:
                 max_height=text_block.max_height
             )
             self._add_merged_text(doc, before_block)
+            logger.info("添加前段文本完成")
         
         # 添加元素
         if element['type'] == 'image':
             self._add_image(doc, element['content'])
+            logger.info("添加图像完成")
         elif element['type'] == 'table':
             self._add_table(doc, element['content'])
+            logger.info("添加表格完成")
         
         # 添加后段文本
         if text_after:
@@ -390,6 +400,7 @@ class DocxGenerator:
                 max_height=text_block.max_height
             )
             self._add_merged_text(doc, after_block)
+            logger.info("添加后段文本完成")
     
     def _add_merged_text(self, doc, merged_item):
         """添加合并后的文本到Word文档
@@ -537,12 +548,14 @@ class DocxGenerator:
     
     def _add_table(self, doc, table):
         """添加表格到Word文档
-        
+
         Args:
             doc: Word文档对象
-            table: 表格对象
+            table: PdfTable对象
         """
-        table_data = table.get('cells', [])
+        # 使用cells属性
+        table_data = table.cells
+        
         if not table_data:
             logger.warning("表格数据为空，跳过")
             return
@@ -557,8 +570,8 @@ class DocxGenerator:
             # 填充表格数据
             for i, row in enumerate(table_data):
                 for j, cell in enumerate(row):
-                    # 检查cell类型
-                    cell_text = cell.get('text', cell) if isinstance(cell, dict) else cell
+                    # 使用text属性
+                    cell_text = cell.text
                     # 清理文本，确保它只包含XML兼容的字符
                     cleaned_text = self._clean_xml_compatible_text(str(cell_text))
                     word_table.cell(i, j).text = cleaned_text
