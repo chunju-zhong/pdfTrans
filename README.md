@@ -226,6 +226,27 @@ MIT License
 
 ## 更新日志
 
+### 2026-02-19
+- 新增批量语义分析功能：
+  - 在translator.py中添加batch_analyze_semantic_relationship方法和_generate_batch_semantic_analysis_prompt方法
+  - 在aiping_translator.py中实现批量语义分析功能，支持流式响应和错误处理
+  - 在silicon_flow_translator.py中实现批量语义分析功能，支持非流式响应和错误处理
+  - 优化批量语义分析提示词，提供详细的分析标准和输出要求
+- 新增批量语义分析测试用例：
+  - 创建test_batch_semantic_analysis.py文件，包含完整的批量语义分析测试用例
+  - 测试基础功能、错误处理、重试机制和边界情况
+  - 确保测试覆盖各种批量语义分析场景
+- 新增列表项延续测试：
+  - 创建test_list_item_continuation.py文件，测试列表项延续的语义分析
+- 新增性能测试：
+  - 创建test_performance_batch_analysis.py文件，测试批量语义分析的性能
+- 新增语义合并优化测试：
+  - 创建test_semantic_merge_optimization.py文件，测试语义合并的优化效果
+- 运行回归测试：
+  - 执行所有测试用例，确保代码变更不破坏现有功能
+  - 验证批量语义分析功能正常工作
+  - 确保所有测试用例通过，提高代码质量
+
 ### 2026-02-09
 - 优化Word和Markdown生成器图表插入方法：
   - 移除MergedBlock类中的self.bbox属性，简化代码结构

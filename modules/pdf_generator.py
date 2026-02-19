@@ -288,18 +288,20 @@ class PdfGenerator:
                     
                     if result >= 0:
                         logger.info(f"✅ 文本渲染成功，插入了 {result} 个字符，使用字体大小: {adjusted_font_size}，文本框大小: {current_rect}")
+                        logger.debug(f"渲染文本内容: '{translated_text[:100]}...' (完整长度={len(translated_text)})")
                         success = True
                         break
                     
                     # 文本溢出，需要调整
                     logger.warning(f"⚠️  文本溢出，返回值: {result}，当前字体大小: {adjusted_font_size}，文本框: {current_rect}")
+                    logger.warning(f"溢出文本: '{translated_text[:100]}...' (完整长度={len(translated_text)})")
                     
                     # 调整文本框大小（仅前3次尝试）
                     if attempt <= 3:
                         # 同时增加高度和宽度
                         new_width = current_rect.width * 1.1
                         new_height = current_rect.height * 1.2
-                        logger.debug(f"调整文本框宽度到: {new_width}, 高度到: {new_height}")
+                        logger.info(f"调整文本框大小: 宽度从 {current_rect.width} 增加到 {new_width}, 高度从 {current_rect.height} 增加到 {new_height}")
                         
                         # 更新文本框
                         current_rect = fitz.Rect(
@@ -308,6 +310,7 @@ class PdfGenerator:
                             current_rect.x0 + new_width,
                             current_rect.y0 + new_height
                         )
+                        logger.debug(f"新文本框: {current_rect}")
                 except Exception as e:
                     logger.warning(f"❌ 绘制失败: {e}")
                     break
@@ -336,51 +339,69 @@ class PdfGenerator:
         # 1. 检查是否有预先加载的字体
         if original_font:
             try:
-                logger.debug(f"尝试使用原始字体 '{original_font}'")
+                logger.info(f"尝试使用原始字体 '{original_font}'")
                 page.insert_font(fontname=original_font, fontfile=None)
                 logger.info(f"成功使用原始字体 '{original_font}'")
                 return original_font
             except Exception as e:
-                logger.debug(f"原始字体 '{original_font}' 插入失败: {e}")
+                logger.warning(f"原始字体 '{original_font}' 插入失败: {e}")
         
         # 2. 从系统获取可用字体列表
         system_font_paths = self._get_system_fonts()
+        logger.info(f"系统字体列表获取完成，共 {len(system_font_paths)} 种字体")
         
         # 3. 从系统字体中选择支持目标语言的字体
         if system_font_paths:
             logger.info(f"开始从系统字体中选择支持 '{target_lang}' 的字体")
             
             # 特殊处理Arial Unicode.ttf，它支持多种语言
+            arial_unicode_found = False
             for font_path in system_font_paths:
                 if 'Arial Unicode.ttf' in font_path:
+                    arial_unicode_found = True
                     try:
-                        logger.debug(f"尝试使用Arial Unicode字体: {font_path}")
+                        logger.info(f"找到Arial Unicode字体: {font_path}")
                         # 使用自定义短名称插入字体
                         fontname = "arialuni"
                         page.insert_font(fontname=fontname, fontfile=font_path)
-                        logger.info(f"成功使用Arial Unicode字体")
+                        logger.info(f"成功使用Arial Unicode字体作为 '{fontname}'")
                         return fontname
                     except Exception as e:
-                        logger.debug(f"Arial Unicode字体插入失败: {e}")
+                        logger.error(f"Arial Unicode字体插入失败: {e}")
                         continue
             
+            if not arial_unicode_found:
+                logger.info("未找到Arial Unicode字体，继续搜索其他字体")
+            
             # 遍历所有系统字体路径
+            compatible_fonts = []
             for font_path in system_font_paths:
                 try:
                     # 检查字体是否支持目标语言
                     if self._check_font_support(font_path, target_lang):
-                        logger.debug(f"尝试使用系统字体: {font_path}")
-                        # 创建自定义短名称，去除空格和特殊字符
-                        font_filename = os.path.basename(font_path)
-                        fontname = os.path.splitext(font_filename)[0].replace(' ', '_')
-                        fontname = ''.join(c for c in fontname if c.isalnum() or c == '_')
-                        
-                        # 尝试插入字体
-                        page.insert_font(fontname=fontname, fontfile=font_path)
-                        logger.info(f"成功使用系统字体 '{font_filename}' 作为 '{fontname}'")
-                        return fontname
+                        compatible_fonts.append(font_path)
+                        logger.debug(f"字体 '{os.path.basename(font_path)}' 支持目标语言 '{target_lang}'")
                 except Exception as e:
-                    logger.debug(f"系统字体 '{os.path.basename(font_path)}' 插入失败: {e}")
+                    logger.debug(f"检查字体 '{os.path.basename(font_path)}' 时出错: {e}")
+            
+            logger.info(f"找到 {len(compatible_fonts)} 种支持 '{target_lang}' 的字体")
+            
+            # 尝试使用找到的兼容字体
+            for font_path in compatible_fonts:
+                try:
+                    logger.info(f"尝试使用兼容字体: {font_path}")
+                    # 创建自定义短名称，去除空格和特殊字符
+                    font_filename = os.path.basename(font_path)
+                    fontname = os.path.splitext(font_filename)[0].replace(' ', '_')
+                    fontname = ''.join(c for c in fontname if c.isalnum() or c == '_')
+                    
+                    # 尝试插入字体
+                    page.insert_font(fontname=fontname, fontfile=font_path)
+                    logger.info(f"成功使用系统字体 '{font_filename}' 作为 '{fontname}'")
+                    return fontname
+                except Exception as e:
+                    logger.warning(f"系统字体 '{os.path.basename(font_path)}' 插入失败: {e}")
+                    continue
         
         # 4. 无法找到任何适合的字体，抛出异常
         error_msg = f"无法找到适合目标语言 '{target_lang}' 的字体。请安装支持该语言的字体，例如Arial Unicode或其他支持{target_lang}语言的字体。"

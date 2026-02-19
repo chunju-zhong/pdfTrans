@@ -307,15 +307,6 @@ class TranslationService:
             max_width = merged_block.max_width
             max_height = merged_block.max_height
             
-            # 获取第一个原始块的样式信息，用于统一应用到所有拆分块
-            first_block = merged_block.original_blocks[0]
-            first_text_block = first_block
-            merged_font = first_text_block.font
-            merged_font_size = first_text_block.font_size
-            merged_color = first_text_block.color
-            merged_flags = first_text_block.flags
-            logger.info(f"任务 {task.task_id} 合并块 {i+1} 将使用统一样式: 字体={merged_font}, 字体大小={merged_font_size}")
-            
             # 将拆分后的结果映射回原始块
             for j, block_text in enumerate(translated_block_texts):
                 original_block_info = original_blocks[j]
@@ -339,13 +330,16 @@ class TranslationService:
                     page_num=page_num
                 )
                 
-                # 更新样式信息 - 使用合并块的统一样式（来自第一个原始块）
+                # 更新样式信息 - 使用每个拆分块的原始样式
                 translated_text_block.update_style(
-                    font=merged_font,
-                    font_size=merged_font_size,
-                    color=merged_color,
-                    flags=merged_flags
+                    font=text_block.font,
+                    font_size=text_block.font_size,
+                    color=text_block.color,
+                    flags=text_block.flags
                 )
+                
+                # 记录每个拆分块使用的原始样式
+                logger.info(f"任务 {task.task_id} 拆分块 {j+1} 使用原始样式: 字体={text_block.font}, 字体大小={text_block.font_size}")
                 
                 # 动态创建页面对象（如果不存在）
                 if page_num not in page_translated_blocks_dict:

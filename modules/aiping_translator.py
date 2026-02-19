@@ -219,3 +219,126 @@ class AipingTranslator(Translator):
                     logger.error(f"aiping语义分析API请求最终失败: {str(e)}，返回默认值False")
                     logger.error(f"失败时的文本块: 块1='{text1}', 块2='{text2}'")
                     return False
+    
+    def batch_analyze_semantic_relationship(self, text_pairs, source_lang):
+        """批量分析多个文本块对之间的语义关系，判断是否应该合并
+
+        Args:
+            text_pairs (list): 文本块对列表，每个元素是包含两个文本的元组
+            source_lang (str): 源语言代码
+
+        Returns:
+            list: 布尔值列表，表示每个文本块对是否应该合并
+        """
+        import json
+        import logging
+        import time
+
+        logger = logging.getLogger(__name__)
+
+        # 记录输入文本对的详细信息
+        logger.info(f"开始批量语义分析: 文本对数量={len(text_pairs)}, 源语言={source_lang}")
+        for i, (text1, text2) in enumerate(text_pairs):
+            logger.debug(f"文本对 {i+1}: 块1='{text1[:100]}...' (长度={len(text1)}), 块2='{text2[:100]}...' (长度={len(text2)})")
+
+        # 准备批量语义分析的提示词
+        analysis_prompt = self._generate_batch_semantic_analysis_prompt(text_pairs, source_lang)
+        logger.info(f"生成批量语义分析提示词: 文本对数量={len(text_pairs)}, 提示词长度={len(analysis_prompt)}")
+
+        max_retries = 3  # 最大重试次数
+        retry_delay = 2  # 重试间隔（秒）
+
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"执行API调用 (尝试 {attempt + 1}/{max_retries})")
+                # 调用AI Ping API - 使用OpenAI Chat API格式
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    stream=True,  # 保持流式调用
+                    temperature=0.1,  # 降低温度，提高分析准确性
+                    top_p=0.9,  # 核采样参数
+                    max_tokens=2048,  # 最大token数
+                    extra_body={
+                        "provider": {
+                            "only": [],
+                            "order": [],
+                            "sort": "output_price",
+                            "input_price_range": [],
+                            "output_price_range": [],
+                            "input_length_range": [],
+                            "throughput_range": [],
+                            "latency_range": []
+                        }
+                    },
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系。"
+                        },
+                        {
+                            "role": "user",
+                            "content": analysis_prompt
+                        }
+                    ]
+                )
+
+                # 处理响应 - stream=True时直接处理流式响应
+                analysis_result = ""
+                chunk_count = 0
+                logger.info("开始处理流式响应")
+                for chunk in response:
+                    chunk_count += 1
+                    if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta
+                        if hasattr(delta, "content") and delta.content:
+                            analysis_result += delta.content
+                            logger.debug(f"处理响应块 {chunk_count}: 添加内容长度={len(delta.content)}")
+                        elif hasattr(delta, "reasoning_content"):
+                            # 跳过思考内容
+                            logger.debug(f"处理响应块 {chunk_count}: 跳过思考内容")
+                            continue
+                logger.info(f"完成处理响应，共处理 {chunk_count} 个块，结果长度={len(analysis_result)}")
+
+                logger.info(f"LLM返回的原始批量分析结果: '{analysis_result}'")
+
+                # 解析LLM的分析结果
+                analysis_json = json.loads(analysis_result)
+                logger.info(f"解析后的JSON结果: {analysis_json}")
+                
+                merge_results = analysis_json.get("merge", [])
+                logger.info(f"最终批量合并决策: {merge_results}")
+                
+                # 确保返回结果数量与输入文本对数量一致
+                if len(merge_results) != len(text_pairs):
+                    logger.error(f"批量分析结果数量与输入文本对数量不一致: 期望{len(text_pairs)}个结果，实际{len(merge_results)}个结果")
+                    # 返回默认值列表
+                    default_results = [False] * len(text_pairs)
+                    logger.info(f"返回默认结果: {default_results}")
+                    return default_results
+                
+                # 详细记录每个文本对的分析结果
+                final_results = [bool(result) for result in merge_results]
+                
+                logger.info(f"批量语义分析完成: 共分析 {len(text_pairs)} 个文本对，合并 {sum(final_results)} 个")
+                return final_results
+
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析错误: {str(e)}")
+                logger.error(f"无法解析的原始结果: '{analysis_result}'")
+                if attempt < max_retries - 1:
+                    logger.error(f"将在 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error("最终失败，返回默认值列表")
+                    return [False] * len(text_pairs)
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    # 不是最后一次尝试，记录错误并重试
+                    logger.error(f"aiping批量语义分析API请求失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}，将在 {retry_delay} 秒后重试...")
+                    logger.error(f"失败时的文本对数量: {len(text_pairs)}")
+                    time.sleep(retry_delay)
+                else:
+                    # 最后一次尝试失败，返回默认值列表
+                    logger.error(f"aiping批量语义分析API请求最终失败: {str(e)}，返回默认值列表")
+                    logger.error(f"失败时的文本对数量: {len(text_pairs)}")
+                    return [False] * len(text_pairs)
