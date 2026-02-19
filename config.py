@@ -50,6 +50,10 @@ class Config:
     # 文档类型配置
     DEFAULT_DOC_TYPE = os.environ.get('DEFAULT_DOC_TYPE') or 'AI技术'
     SUPPORTED_DOC_TYPES = ['AI技术', '技术文档', '商务文档', '学术论文', '法律文档', '医学文档']
+    
+    # 线程池配置
+    MAX_WORKERS = int(os.environ.get('MAX_WORKERS', '8'))  # 最大线程数
+    TRANSLATION_BATCH_SIZE = int(os.environ.get('TRANSLATION_BATCH_SIZE', '10'))  # 翻译批处理大小
 
 # 创建配置实例
 config = Config()

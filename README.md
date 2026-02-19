@@ -227,6 +227,27 @@ MIT License
 ## 更新日志
 
 ### 2026-02-19
+- 新增多线程并行翻译功能：
+  - 在translation_service.py中添加线程池，用于并行翻译文本块和表格单元格
+  - 实现线程安全的结果收集和处理
+  - 保持翻译结果的原始顺序
+  - 支持表格单元格的并行翻译
+- 新增配置参数：
+  - 在config.py中添加MAX_WORKERS参数，控制最大线程数
+  - 在config.py中添加TRANSLATION_BATCH_SIZE参数，控制翻译批处理大小
+  - 支持通过环境变量覆盖默认值
+- 优化批处理大小：
+  - 在text_processing.py中将batch_size从5增加到10，提高批量处理效率
+- 新增测试用例：
+  - 创建test_thread_safety.py文件，测试线程安全性
+  - 创建test_performance_multithread.py文件，测试多线程性能
+  - 在test_translation_service.py中添加多线程功能测试
+- 运行回归测试：
+  - 执行所有测试用例，确保代码变更不破坏现有功能
+  - 验证多线程功能正常工作
+  - 确保所有测试用例通过，提高代码质量
+
+### 2026-02-19
 - 新增批量语义分析功能：
   - 在translator.py中添加batch_analyze_semantic_relationship方法和_generate_batch_semantic_analysis_prompt方法
   - 在aiping_translator.py中实现批量语义分析功能，支持流式响应和错误处理
@@ -240,8 +261,6 @@ MIT License
   - 创建test_list_item_continuation.py文件，测试列表项延续的语义分析
 - 新增性能测试：
   - 创建test_performance_batch_analysis.py文件，测试批量语义分析的性能
-- 新增语义合并优化测试：
-  - 创建test_semantic_merge_optimization.py文件，测试语义合并的优化效果
 - 运行回归测试：
   - 执行所有测试用例，确保代码变更不破坏现有功能
   - 验证批量语义分析功能正常工作

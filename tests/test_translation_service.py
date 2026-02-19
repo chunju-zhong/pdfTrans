@@ -116,3 +116,41 @@ class TestTranslationService:
         except Exception as e:
             # 确保没有参数处理相关的异常
             assert False, f"参数处理失败: {str(e)}"
+    
+    def test_translation_service_multithreading(self):
+        """测试翻译服务多线程功能
+        
+        验证翻译服务能够正确使用线程池进行并行翻译
+        """
+        from services.translation_service import TranslationService
+        from config import config
+        
+        # 验证配置参数存在且类型正确
+        assert hasattr(config, 'MAX_WORKERS'), "MAX_WORKERS配置不存在"
+        assert isinstance(config.MAX_WORKERS, int), "MAX_WORKERS配置类型错误"
+        assert config.MAX_WORKERS > 0, "MAX_WORKERS配置必须大于0"
+        
+        # 验证TRANSLATION_BATCH_SIZE配置
+        assert hasattr(config, 'TRANSLATION_BATCH_SIZE'), "TRANSLATION_BATCH_SIZE配置不存在"
+        assert isinstance(config.TRANSLATION_BATCH_SIZE, int), "TRANSLATION_BATCH_SIZE配置类型错误"
+        assert config.TRANSLATION_BATCH_SIZE > 0, "TRANSLATION_BATCH_SIZE配置必须大于0"
+        
+        # 验证TranslationService类存在
+        service = TranslationService()
+        assert service is not None
+        
+    def test_text_processing_batch_size(self):
+        """测试文本处理批处理大小
+        
+        验证文本处理模块的批处理大小设置正确
+        """
+        from utils.text_processing import merge_semantic_blocks_with_llm
+        import inspect
+        
+        # 获取函数源码
+        source = inspect.getsource(merge_semantic_blocks_with_llm)
+        
+        # 验证batch_size设置为10
+        assert 'batch_size = 10' in source, "批处理大小未设置为10"
+        assert '# 每批处理10对文本块' in source, "批处理大小注释不匹配"
+

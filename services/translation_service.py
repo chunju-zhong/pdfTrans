@@ -2,6 +2,7 @@ import threading
 import os
 import shutil
 import fitz  # PyMuPDF
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from modules.pdf_extractor import PdfExtractor
 from modules.aiping_translator import AipingTranslator
@@ -258,13 +259,15 @@ class TranslationService:
         
         # 动态构建页面级别的翻译结果字典
         page_translated_blocks_dict = {}
-        
-        # 保存合并后的翻译结果，用于Word生成
+        # 线程安全的结果收集
         merged_translations = []
+        results_lock = threading.Lock()
         
-        for i, merged_block in enumerate(merged_blocks):
-            logger.info(f"任务 {task.task_id} 处理合并块 {i+1}/{len(merged_blocks)}")
-            logger.info(f"任务 {task.task_id} 合并块 {i+1} 原文: {merged_block.block_text}")
+        # 定义翻译任务函数
+        def translate_block(merged_block, index):
+            """翻译单个合并块"""
+            logger.info(f"任务 {task.task_id} 处理合并块 {index+1}/{len(merged_blocks)}")
+            logger.info(f"任务 {task.task_id} 合并块 {index+1} 原文: {merged_block.block_text}")
             
             merged_translation = translator.translate(
                 merged_block.block_text,
@@ -273,7 +276,7 @@ class TranslationService:
                 doc_type=doc_type,
                 glossary=glossary
             )
-            logger.info(f"任务 {task.task_id} 合并块 {i+1} 翻译结果: {merged_translation}")
+            logger.info(f"任务 {task.task_id} 合并块 {index+1} 翻译结果: {merged_translation}")
             
             # 保存合并后的翻译结果
             from models.merged_block import MergedBlock
@@ -281,7 +284,7 @@ class TranslationService:
             first_block = merged_block.original_blocks[0]
             first_text_block = first_block
             page_num = merged_block.page_num
-            logger.info(f"合并块 {i+1} 第一个原始块字体大小: {first_text_block.font_size}, 文本: '{first_text_block.block_text[:50]}...'")
+            logger.info(f"合并块 {index+1} 第一个原始块字体大小: {first_text_block.font_size}, 文本: '{first_text_block.block_text[:50]}...'")
             
             # 创建新的 MergedBlock 对象，使用翻译后的文本作为 block_text
             translated_merged_block = MergedBlock(
@@ -291,23 +294,22 @@ class TranslationService:
                 max_height=merged_block.max_height
             )
             
-            merged_translations.append(translated_merged_block)
-            
             # 记录合并块中所有原始块的字体大小
             for j, block_info in enumerate(merged_block.original_blocks):
                 text_block = block_info
-                logger.info(f"合并块 {i+1} 原始块 {j+1} 字体大小: {text_block.font_size}, 文本: '{text_block.block_text[:50]}...'")
+                logger.info(f"合并块 {index+1} 原始块 {j+1} 字体大小: {text_block.font_size}, 文本: '{text_block.block_text[:50]}...'")
             
             # 拆分翻译结果
             original_blocks = merged_block.original_blocks
             translated_block_texts = split_translated_result(merged_translation, original_blocks)
-            logger.info(f"任务 {task.task_id} 合并块 {i+1} 拆分结果: {translated_block_texts}")
+            logger.info(f"任务 {task.task_id} 合并块 {index+1} 拆分结果: {translated_block_texts}")
             
             # 获取合并块的最大宽度和高度
             max_width = merged_block.max_width
             max_height = merged_block.max_height
             
-            # 将拆分后的结果映射回原始块
+            # 准备拆分后的结果
+            block_results = []
             for j, block_text in enumerate(translated_block_texts):
                 original_block_info = original_blocks[j]
                 text_block = original_block_info  # 获取TextBlock对象
@@ -341,17 +343,54 @@ class TranslationService:
                 # 记录每个拆分块使用的原始样式
                 logger.info(f"任务 {task.task_id} 拆分块 {j+1} 使用原始样式: 字体={text_block.font}, 字体大小={text_block.font_size}")
                 
-                # 动态创建页面对象（如果不存在）
-                if page_num not in page_translated_blocks_dict:
-                    page_translated_blocks_dict[page_num] = PdfPage(page_num, [])
-                
-                # 添加到对应页面的翻译结果中
-                page_translated_blocks_dict[page_num].text_blocks.append(translated_text_block)
-                translated_blocks += 1
+                block_results.append((page_num, translated_text_block))
             
-            # 更新进度
-            progress = 40 + int((translated_blocks / total_original_blocks) * 30)
-            task.update_progress(progress, f'正在翻译文本: {translated_blocks}/{total_original_blocks}')
+            return translated_merged_block, block_results
+        
+        # 使用线程池并行翻译
+        with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+            # 提交所有翻译任务
+            future_to_block = {executor.submit(translate_block, block, i): (block, i) 
+                             for i, block in enumerate(merged_blocks)}
+            
+            # 收集所有结果，保存原始索引
+            results = {}
+            completed_blocks = 0
+            
+            for future in as_completed(future_to_block):
+                try:
+                    block, index = future_to_block[future]
+                    translated_merged_block, block_results = future.result()
+                    
+                    with results_lock:
+                        # 保存结果和原始索引
+                        results[index] = (translated_merged_block, block_results)
+                        
+                        # 更新进度
+                        completed_blocks += 1
+                        progress = 40 + int((completed_blocks / len(merged_blocks)) * 30)
+                        task.update_progress(progress, f'正在翻译文本: {completed_blocks}/{len(merged_blocks)}')
+                        
+                except Exception as e:
+                    logger.error(f"任务 {task.task_id} 翻译合并块时出错: {str(e)}")
+                    # 继续处理其他块
+                    continue
+            
+            # 按原始顺序处理结果
+            for index in sorted(results.keys()):
+                translated_merged_block, block_results = results[index]
+                
+                # 添加到合并结果列表（按原始顺序）
+                merged_translations.append(translated_merged_block)
+                
+                # 处理拆分后的结果
+                for page_num, translated_text_block in block_results:
+                    # 动态创建页面对象（如果不存在）
+                    if page_num not in page_translated_blocks_dict:
+                        page_translated_blocks_dict[page_num] = PdfPage(page_num, [])
+                    # 添加到对应页面的翻译结果中
+                    page_translated_blocks_dict[page_num].text_blocks.append(translated_text_block)
+                    translated_blocks += 1
         
         return page_translated_blocks_dict, merged_translations, translated_blocks
 
@@ -375,20 +414,21 @@ class TranslationService:
         
         # 动态构建页面级别的翻译结果字典
         page_translated_blocks_dict = {}
-        
         # 保存翻译结果，用于Word生成
         merged_translations = []
+        # 线程安全的结果收集
+        results_lock = threading.Lock()
         
-        for i, block_info in enumerate(text_blocks):
+        # 定义翻译任务函数
+        def translate_block(block_info, index):
+            """翻译单个原始块"""
             text_block = block_info
             page_num = block_info.page_num
             
-            logger.info(f"任务 {task.task_id} 处理原始块 {i+1}/{len(text_blocks)}")
-            logger.info(f"任务 {task.task_id} 原始块 {i+1} 原文: {text_block.block_text}")
+            logger.info(f"任务 {task.task_id} 处理原始块 {index+1}/{len(text_blocks)}")
+            logger.info(f"任务 {task.task_id} 原始块 {index+1} 原文: {text_block.block_text}")
             
-            # 检查是否是正文块
-            # if text_block.is_body_text:
-            logger.info(f"任务 {task.task_id} 原始块 {i+1} 是正文块，开始翻译")
+            logger.info(f"任务 {task.task_id} 原始块 {index+1} 是正文块，开始翻译")
             # 调用翻译API
             translated_text = translator.translate(
                 text_block.block_text,
@@ -397,11 +437,7 @@ class TranslationService:
                 doc_type=doc_type,
                 glossary=glossary
             )
-            logger.info(f"任务 {task.task_id} 原始块 {i+1} 翻译结果: {translated_text}")
-            # else:
-            #     logger.info(f"任务 {task.task_id} 原始块 {i+1} 是非正文块，直接使用原文")
-            #     # 非正文块直接使用原文
-            #     translated_text = text_block.block_text
+            logger.info(f"任务 {task.task_id} 原始块 {index+1} 翻译结果: {translated_text}")
             
             # 保存翻译结果，用于Word生成
             from models.merged_block import MergedBlock
@@ -419,8 +455,6 @@ class TranslationService:
                 max_height=height
             )
             
-            merged_translations.append(translated_merged_block)
-            
             # 创建翻译后的TextBlock对象
             translated_text_block = TextBlock(
                 block_no=text_block.block_no,
@@ -437,17 +471,51 @@ class TranslationService:
                 flags=text_block.flags
             )
             
-            # 动态创建页面对象（如果不存在）
-            if page_num not in page_translated_blocks_dict:
-                page_translated_blocks_dict[page_num] = PdfPage(page_num, [])
+            return page_num, translated_text_block, translated_merged_block
+        
+        # 使用线程池并行翻译
+        with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+            # 提交所有翻译任务
+            future_to_block = {executor.submit(translate_block, block, i): (block, i) 
+                             for i, block in enumerate(text_blocks)}
             
-            # 添加到对应页面的翻译结果中
-            page_translated_blocks_dict[page_num].text_blocks.append(translated_text_block)
-            translated_blocks += 1
+            # 收集所有结果，保存原始索引
+            results = {}
+            completed_blocks = 0
             
-            # 更新进度
-            progress = 40 + int((translated_blocks / total_original_blocks) * 30)
-            task.update_progress(progress, f'正在翻译文本: {translated_blocks}/{total_original_blocks}')
+            for future in as_completed(future_to_block):
+                try:
+                    block, index = future_to_block[future]
+                    page_num, translated_text_block, translated_merged_block = future.result()
+                    
+                    with results_lock:
+                        # 保存结果和原始索引
+                        results[index] = (page_num, translated_text_block, translated_merged_block)
+                        
+                        # 更新进度
+                        completed_blocks += 1
+                        progress = 40 + int((completed_blocks / total_original_blocks) * 30)
+                        task.update_progress(progress, f'正在翻译文本: {completed_blocks}/{total_original_blocks}')
+                        
+                except Exception as e:
+                    logger.error(f"任务 {task.task_id} 翻译原始块时出错: {str(e)}")
+                    # 继续处理其他块
+                    continue
+            
+            # 按原始顺序处理结果
+            for index in sorted(results.keys()):
+                page_num, translated_text_block, translated_merged_block = results[index]
+                
+                # 添加到合并结果列表（按原始顺序）
+                merged_translations.append(translated_merged_block)
+                
+                # 动态创建页面对象（如果不存在）
+                if page_num not in page_translated_blocks_dict:
+                    page_translated_blocks_dict[page_num] = PdfPage(page_num, [])
+                
+                # 添加到对应页面的翻译结果中
+                page_translated_blocks_dict[page_num].text_blocks.append(translated_text_block)
+                translated_blocks += 1
         
         return page_translated_blocks_dict, merged_translations, translated_blocks
 
@@ -478,41 +546,94 @@ class TranslationService:
                 return None
             
             logger.info(f"任务 {task.task_id} 开始翻译表格内容")
-            for table in tables:
+            
+            # 收集所有需要翻译的单元格
+            cell_tasks = []
+            for table_idx, table in enumerate(tables):
+                for row_idx, row in enumerate(table.cells):
+                    for col_idx, cell in enumerate(row):
+                        if cell and cell.text:
+                            cell_tasks.append((table_idx, row_idx, col_idx, cell))
+            
+            total_cells = len(cell_tasks)
+            translated_cells_count = 0
+            # 线程安全的结果存储
+            cell_results = {}
+            results_lock = threading.Lock()
+            
+            # 定义翻译任务函数
+            def translate_cell(table_idx, row_idx, col_idx, cell):
+                """翻译单个表格单元格"""
+                # 调用翻译API
+                translated_text = translator.translate(
+                    cell.text,
+                    source_lang,
+                    target_lang,
+                    doc_type=doc_type,
+                    glossary=glossary
+                )
+                # 创建翻译后的PdfCell对象
+                translated_cell = PdfCell(
+                    text=translated_text,
+                    bbox=cell.bbox,
+                    row_idx=cell.row_idx,
+                    col_idx=cell.col_idx
+                )
+                return table_idx, row_idx, col_idx, translated_cell
+            
+            # 使用线程池并行翻译
+            with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+                # 提交所有翻译任务
+                future_to_cell = {executor.submit(translate_cell, table_idx, row_idx, col_idx, cell): 
+                                (table_idx, row_idx, col_idx, cell) 
+                                for table_idx, row_idx, col_idx, cell in cell_tasks}
+                
+                # 处理翻译结果
+                for future in as_completed(future_to_cell):
+                    try:
+                        table_idx, row_idx, col_idx, translated_cell = future.result()
+                        
+                        with results_lock:
+                            # 存储翻译结果
+                            if table_idx not in cell_results:
+                                cell_results[table_idx] = {}
+                            if row_idx not in cell_results[table_idx]:
+                                cell_results[table_idx][row_idx] = {}
+                            cell_results[table_idx][row_idx][col_idx] = translated_cell
+                            
+                            # 更新进度
+                            translated_cells_count += 1
+                            if total_cells > 0:
+                                progress = 70 + int((translated_cells_count / total_cells) * 10)
+                                task.update_progress(progress, f'正在翻译表格: {translated_cells_count}/{total_cells}')
+                                
+                    except Exception as e:
+                        logger.error(f"任务 {task.task_id} 翻译表格单元格时出错: {str(e)}")
+                        # 继续处理其他单元格
+                        continue
+            
+            # 构建翻译后的表格
+            for table_idx, table in enumerate(tables):
                 # 创建翻译后的单元格列表
                 translated_cells = []
                 
-                for row in table.cells:
-                    if task.is_canceled():
-                        # 清理临时文件
-                        remove_file(input_filepath)
-                        logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
-                        return None
-                    
+                for row_idx, row in enumerate(table.cells):
                     translated_row = []
-                    for cell in row:
-                        if task.is_canceled():
-                            # 清理临时文件
-                            remove_file(input_filepath)
-                            logger.info(f"任务 {task.task_id} 被取消，已清理临时文件")
-                            return None
-                        
+                    for col_idx, cell in enumerate(row):
                         if cell and cell.text:
-                            # 调用翻译API
-                            translated_text = translator.translate(
-                                cell.text,
-                                source_lang,
-                                target_lang,
-                                doc_type=doc_type,
-                                glossary=glossary
-                            )
-                            # 创建翻译后的PdfCell对象
-                            translated_cell = PdfCell(
-                                text=translated_text,
-                                bbox=cell.bbox,
-                                row_idx=cell.row_idx,
-                                col_idx=cell.col_idx
-                            )
+                            # 查找翻译结果
+                            if (table_idx in cell_results and 
+                                row_idx in cell_results[table_idx] and 
+                                col_idx in cell_results[table_idx][row_idx]):
+                                translated_cell = cell_results[table_idx][row_idx][col_idx]
+                            else:
+                                # 如果没有翻译结果，使用原文
+                                translated_cell = PdfCell(
+                                    text=cell.text,
+                                    bbox=cell.bbox,
+                                    row_idx=cell.row_idx,
+                                    col_idx=cell.col_idx
+                                )
                             translated_row.append(translated_cell)
                         else:
                             # 空单元格

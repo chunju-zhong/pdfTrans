@@ -621,7 +621,7 @@ def merge_semantic_blocks_with_llm(text_blocks, translator, source_lang):
     logger.info(f"初始化第一个合并块: 文本='{current_merged.block_text[:100]}...' (包含 {len(current_merged.original_blocks)} 个原始块)")
 
     # 批量处理参数
-    batch_size = 5  # 每批处理10对文本块
+    batch_size = 10  # 每批处理10对文本块
     i = 1  # 当前处理的块索引
     total_blocks = len(text_blocks)
     logger.info(f"总原始块数量: {total_blocks}, 批量处理大小: {batch_size}")
