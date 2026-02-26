@@ -10,17 +10,21 @@ import logging
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from modules.translator import Translator
+from modules.semantic_analyzer import SemanticAnalyzer
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class TestTranslator(Translator):
-    """测试用翻译器类，模拟语义分析"""
+class TestSemanticAnalyzer(SemanticAnalyzer):
+    """测试用语义分析器类，模拟语义分析"""
     
     def __init__(self):
-        super().__init__(api_key="test_key")
+        super().__init__(
+            api_key="test_key",
+            api_url="https://test-api.example.com/v1",
+            model="test-model"
+        )
     
     def batch_analyze_semantic_relationship(self, text_pairs, source_lang):
         """模拟批量语义分析，返回固定结果"""
@@ -57,8 +61,8 @@ def test_list_item_continuation():
     """测试列表项延续处理效果"""
     logger.info("开始测试列表项延续处理效果")
     
-    # 创建测试翻译器
-    translator = TestTranslator()
+    # 创建测试语义分析器
+    analyzer = TestSemanticAnalyzer()
     
     # 测试用例：使用实际日志中的文本对6和文本对7
     test_cases = [
@@ -69,7 +73,7 @@ def test_list_item_continuation():
     ]
     
     # 执行批量语义分析
-    results = translator.batch_analyze_semantic_relationship(test_cases, "en")
+    results = analyzer.batch_analyze_semantic_relationship(test_cases, "en")
     
     # 验证结果
     logger.info(f"测试结果: {results}")

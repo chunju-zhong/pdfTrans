@@ -9,7 +9,8 @@ from modules.aiping_translator import AipingTranslator
 from modules.silicon_flow_translator import SiliconFlowTranslator
 from modules.pdf_generator import PdfGenerator
 from modules.docx_generator import DocxGenerator
-from modules.markdown_generator import MarkdownGenerator
+from modules.markdown_generator import MarkdownGenerator, create_markdown_generator
+from modules.semantic_analyzer_factory import SemanticAnalyzerFactory
 from models.text_block import TextBlock
 from models.extraction import PdfPage
 from utils.text_processing import merge_semantic_blocks, split_translated_result, merge_semantic_blocks_with_llm
@@ -69,7 +70,7 @@ class TranslationService:
     
     def get_translator(self, translator_type):
         """根据翻译服务类型创建翻译器实例
-        
+
         Args:
             translator_type (str): 翻译服务类型（aiping/silicon_flow）
             
@@ -89,6 +90,38 @@ class TranslationService:
         else:
             raise ValueError(f"不支持的翻译服务类型: {translator_type}")
     
+    def get_semantic_analyzer(self, analyzer_type):
+        """根据分析器类型创建语义分析器实例
+
+        Args:
+            analyzer_type (str): 分析器类型（aiping/default）
+            
+        Returns:
+            SemanticAnalyzer: 语义分析器实例
+        """
+        if analyzer_type == 'aiping':
+            # 创建aiping语义分析器实例
+            if not config.AIPING_API_KEY:
+                raise ValueError("aiping语义分析API配置不完整")
+            return SemanticAnalyzerFactory.create_analyzer(
+                "aiping", 
+                config.AIPING_API_KEY, 
+                config.AIPING_API_URL, 
+                config.AIPING_MODEL
+            )
+        elif analyzer_type == 'silicon_flow':
+            # 创建默认语义分析器实例（硅基流动使用标准OpenAI格式）
+            if not config.SILICON_FLOW_API_KEY:
+                raise ValueError("硅基流动语义分析API配置不完整")
+            return SemanticAnalyzerFactory.create_analyzer(
+                "silicon_flow", 
+                config.SILICON_FLOW_API_KEY, 
+                config.SILICON_FLOW_API_URL, 
+                config.SILICON_FLOW_MODEL
+            )
+        else:
+            raise ValueError("无效的语义分析器类型")
+
     def handle_same_language(self, task, input_filepath, unique_id, filename, page_range):
         """处理源语言和目标语言相同的情况，直接拷贝原始PDF页面
 
@@ -742,7 +775,12 @@ class TranslationService:
                 layout_model = config.AIPING_MODEL_LAYOUT
             
             # 创建Markdown生成器实例
-            markdown_generator = MarkdownGenerator(api_key, api_url, layout_model)
+            markdown_generator = create_markdown_generator(
+                api_type=translator_type,
+                api_key=api_key,
+                api_url=api_url,
+                model=layout_model
+            )
             
             # 记录传递给Markdown生成器的图像信息
             logger.info(f"任务 {task.task_id} 传递 {len(extracted_images)} 个图像到Markdown生成器")
@@ -849,6 +887,12 @@ class TranslationService:
             translator = self.get_translator(translator_type)
             logger.info(f"任务 {task.task_id} 翻译器创建完成")
             
+            # 3. 创建语义分析器实例
+            logger.info(f"任务 {task.task_id} 开始创建语义分析器")
+            # 根据翻译器类型选择对应的语义分析器类型
+            semantic_analyzer = self.get_semantic_analyzer(translator_type)
+            logger.info(f"任务 {task.task_id} 语义分析器创建完成，类型: {translator_type}")
+            
             if task.is_canceled():
                 # 清理临时文件
                 remove_file(input_filepath)
@@ -875,7 +919,7 @@ class TranslationService:
                 if use_llm_merging:
                     logger.info(f"任务 {task.task_id} 使用大模型进行语义块合并")
                     # 使用LLM进行语义块合并
-                    merged_blocks, block_mapping = merge_semantic_blocks_with_llm(text_blocks, translator, source_lang)
+                    merged_blocks, block_mapping = merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang)
                 else:
                     logger.info(f"任务 {task.task_id} 使用规则-based方法进行语义块合并")
                     # 使用规则-based方法进行语义块合并

@@ -573,13 +573,13 @@ def split_translated_result(merged_translation, original_blocks):
     return translated_blocks
 
 
-def merge_semantic_blocks_with_llm(text_blocks, translator, source_lang):
+def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
     """使用大模型按语义合并文本块（批量处理）
 
     Args:
         text_blocks (list): 所有原始块列表（已按垂直位置排序，仅包含正文块）
                           每个元素是TextBlock对象
-        translator: 翻译器实例，用于调用LLM进行语义分析
+        semantic_analyzer: 语义分析器实例，用于调用LLM进行语义分析
         source_lang (str): 源语言代码
 
     Returns:
@@ -668,7 +668,7 @@ def merge_semantic_blocks_with_llm(text_blocks, translator, source_lang):
                 for j, (text1, text2) in enumerate(text_pairs):
                     logger.debug(f"文本对 {j+1}: 块1='{text1[:50]}...', 块2='{text2[:50]}...'")
                 
-                merge_results = translator.batch_analyze_semantic_relationship(
+                merge_results = semantic_analyzer.batch_analyze_semantic_relationship(
                     text_pairs,
                     source_lang
                 )

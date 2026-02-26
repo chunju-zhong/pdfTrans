@@ -6,9 +6,10 @@ from openai import OpenAI
 logger = logging.getLogger(__name__)
 
 class MarkdownGenerator:
-    """Markdown生成器类
+    """Markdown生成器基类
     
-    负责将翻译后的文本使用大模型转换为Markdown格式，支持文本、表格和图像的生成。
+    负责将翻译后的文本转换为Markdown格式，支持文本、表格和图像的生成。
+    可被扩展以支持不同的API平台，如硅基流动等。
     """
     
     def __init__(self, api_key, api_url, model):
@@ -23,12 +24,22 @@ class MarkdownGenerator:
         self.api_url = api_url
         self.model = model
         # 初始化OpenAI客户端
-        self.client = OpenAI(
+        self.client = self._initialize_client()
+        logger.info("Markdown生成器初始化完成")
+    
+    def _initialize_client(self):
+        """初始化API客户端
+        
+        子类可以重写此方法以使用不同的API客户端实现
+        
+        Returns:
+            初始化后的API客户端
+        """
+        return OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
             timeout=30.0,  # 添加超时设置，30秒
         )
-        logger.info("Markdown生成器初始化完成")
     
     def _load_layout_prompt(self):
         """加载布局提示词模板
@@ -100,32 +111,7 @@ class MarkdownGenerator:
         for attempt in range(max_retries):
             try:
                 # 调用布局模型API（使用流式）
-                stream = self.client.chat.completions.create(
-                    model=self.model,
-                    stream=True,  # 启用流式响应
-                    temperature=0.1,  # 降低温度，提高格式一致性
-                    max_tokens=8192,  # 最大token数
-                    timeout=60.0,  # 增加超时时间
-                    n=1,  # 只返回一个结果
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": system_prompt
-                        },
-                        {
-                            "role": "user",
-                            "content": user_prompt
-                        }
-                    ]
-                )
-                
-                # 处理流式响应
-                formatted_text = ""
-                for chunk in stream:
-                    if chunk.choices and len(chunk.choices) > 0:
-                        choice = chunk.choices[0]
-                        if choice.delta and choice.delta.content:
-                            formatted_text += choice.delta.content
+                formatted_text = self._call_api(system_prompt, user_prompt)
                 
                 formatted_text = formatted_text.strip()
                 
@@ -145,6 +131,114 @@ class MarkdownGenerator:
                     logger.error(f"布局模型请求失败: {str(e)}")
                     # 直接抛出异常，不使用降级方案
                     raise Exception(f"布局模型请求失败: {str(e)}")
+    
+    def _call_api(self, system_prompt, user_prompt):
+        """调用API进行文本格式化
+        
+        子类可以重写此方法以使用不同的API调用方式
+        
+        Args:
+            system_prompt (str): 系统提示词
+            user_prompt (str): 用户提示词
+            
+        Returns:
+            str: 格式化后的文本
+        """
+        # 调用布局模型API（使用流式）
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            stream=True,  # 启用流式响应
+            temperature=0.1,  # 降低温度，提高格式一致性
+            max_tokens=8192,  # 最大token数
+            timeout=60.0,  # 增加超时时间
+            n=1,  # 只返回一个结果
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt
+                }
+            ]
+        )
+        
+        # 处理流式响应 - 逐块接收并拼接
+        formatted_text = ""
+        for chunk in stream:
+            if chunk.choices and len(chunk.choices) > 0:
+                choice = chunk.choices[0]
+                if choice.delta and choice.delta.content:
+                    formatted_text += choice.delta.content
+        
+        return formatted_text
+
+
+class AipingMarkdownGenerator(MarkdownGenerator):
+    """Aiping特定的Markdown生成器
+    
+    继承自MarkdownGenerator基类，实现aiping特定的参数设置，
+    特别是在extra_body中定义费用优先策略。
+    """
+    
+    def _call_api(self, system_prompt, user_prompt):
+        """调用Aiping API进行文本格式化
+        
+        重写基类方法以添加aiping特定的参数设置，
+        在extra_body中定义费用优先策略。
+        
+        Args:
+            system_prompt (str): 系统提示词
+            user_prompt (str): 用户提示词
+            
+        Returns:
+            str: 格式化后的文本
+        """
+        # 构建额外参数，定义费用优先策略
+        extra_body = {
+            "provider": {
+                "only": [],
+                "order": [],
+                "sort": "output_price",
+                "input_price_range": [],
+                "output_price_range": [],
+                "input_length_range": [],
+                "throughput_range": [],
+                "latency_range": []
+            }
+        }
+        
+        # 调用布局模型API（使用流式）
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            stream=True,  # 启用流式响应
+            temperature=0.1,  # 降低温度，提高格式一致性
+            max_tokens=8192,  # 最大token数
+            timeout=60.0,  # 增加超时时间
+            n=1,  # 只返回一个结果
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt
+                }
+            ],
+            extra_body=extra_body  # 添加aiping特定参数
+        )
+        
+        # 处理流式响应 - 逐块接收并拼接
+        formatted_text = ""
+        for chunk in stream:
+            if chunk.choices and len(chunk.choices) > 0:
+                choice = chunk.choices[0]
+                if choice.delta and choice.delta.content:
+                    formatted_text += choice.delta.content
+        
+        return formatted_text
     
     def _convert_table_to_markdown(self, table):
         """将表格转换为Markdown格式
@@ -188,10 +282,10 @@ class MarkdownGenerator:
                 cell_text = cell.text if hasattr(cell, 'text') else str(cell)
                 row_cells.append(cell_text)
             if i == len(cells[1:]) - 1:
-                # 最后一行
+                # 最后一行 - 无尾部空格
                 markdown_table.append(" |" + "|".join(row_cells) + "|")
             else:
-                # 非最后一行
+                # 非最后一行 - 保持一致的格式
                 markdown_table.append(" |" + "|".join(row_cells) + "| ")
         
         return "\n".join(markdown_table) + "\n"
@@ -237,6 +331,7 @@ class MarkdownGenerator:
                     # 保持原始图像路径
                     updated_images.append(image)
             else:
+                # 图像路径不存在，保持原始图像路径
                 updated_images.append(image)
         
         return updated_images
@@ -483,7 +578,7 @@ class MarkdownGenerator:
             if not doc_id:
                 doc_id = os.path.splitext(os.path.basename(output_md_path))[0]
             
-            # 复制图像到输出目录
+            # 复制图像到输出目录并更新路径为相对路径
             updated_images = self._copy_images_to_output(images, output_dir, doc_id)
             
             # 按页码组织合并后的翻译结果
@@ -521,7 +616,7 @@ class MarkdownGenerator:
                     # 原始文本块已经按垂直位置排序
                     original_blocks_by_page[page_num] = page.text_blocks
             
-            # 获取所有页码的列表
+            # 获取所有页码的列表并排序
             all_pages = set(merged_by_page.keys())
             all_pages.update(images_by_page.keys())
             all_pages.update(tables_by_page.keys())
@@ -559,13 +654,13 @@ class MarkdownGenerator:
                         'content': table
                     })
                 
-                # 处理元素
+                # 处理元素，按顺序添加到Markdown文档
                 self._process_page_elements(page_elements, original_blocks_by_page, page_num, full_text)
             
             # 合并文本
             combined_text = "\n".join(full_text)
             
-            # 使用布局模型格式化文本
+            # 使用布局模型格式化文本为Markdown
             formatted_text = self._format_with_layout_model(combined_text)
             
             # 保存Markdown文件
@@ -577,3 +672,32 @@ class MarkdownGenerator:
         except Exception as e:
             logger.error(f"生成Markdown文档时出错: {str(e)}", exc_info=True)
             raise Exception(f"生成Markdown文档时出错: {str(e)}")
+
+
+def create_markdown_generator(api_type, api_key, api_url, model):
+    """创建Markdown生成器实例
+    
+    根据API类型返回相应的Markdown生成器实例
+    
+    Args:
+        api_type (str): API类型，如'aiping'或'silicon_flow'
+        api_key (str): API密钥
+        api_url (str): API请求地址
+        model (str): 布局模型名称
+    
+    Returns:
+        MarkdownGenerator: 相应的Markdown生成器实例
+    
+    Raises:
+        ValueError: 当API类型无效时
+    """
+    if api_type == 'aiping':
+        logger.info("创建AipingMarkdownGenerator实例")
+        return AipingMarkdownGenerator(api_key, api_url, model)
+    elif api_type == 'silicon_flow':
+        logger.info("创建基础MarkdownGenerator实例")
+        return MarkdownGenerator(api_key, api_url, model)
+    else:
+        error_msg = f"无效的API类型: {api_type}。支持的类型: 'aiping', 'silicon_flow'"
+        logger.error(error_msg)
+        raise ValueError(error_msg)

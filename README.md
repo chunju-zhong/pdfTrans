@@ -226,6 +226,23 @@ MIT License
 
 ## 更新日志
 
+### 2026-02-26
+- 分离语义分析功能：
+  - 从Translator类中分离语义分析功能，创建独立的SemanticAnalyzer基类和AipingSemanticAnalyzer派生类
+  - 实现SemanticAnalyzerFactory工厂类，用于创建不同类型的语义分析器实例
+  - 修改translation_service.py，添加get_semantic_analyzer方法，用于创建语义分析器实例
+  - 更新merge_semantic_blocks_with_llm函数，使用semantic_analyzer参数替代translator参数
+  - 确保翻译服务直接调用语义分析器进行语义分析，不再通过翻译器间接调用
+- 优化Markdown生成器调用方式：
+  - 修改translation_service.py中的Markdown生成器创建代码，使用create_markdown_generator函数替代直接实例化
+  - 添加create_markdown_generator函数的导入语句
+  - 确保根据选择的翻译API类型自动使用相应的Markdown生成器
+  - 支持aiping和silicon_flow两种API类型的Markdown生成
+- 验证变更：
+  - 运行所有测试用例，确保代码变更不破坏现有功能
+  - 验证不同翻译API类型的Markdown生成器都能正确创建和使用
+  - 确保所有测试用例通过，提高代码质量
+
 ### 2026-02-19
 - 新增多线程并行翻译功能：
   - 在translation_service.py中添加线程池，用于并行翻译文本块和表格单元格
