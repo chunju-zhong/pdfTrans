@@ -23,6 +23,8 @@ class SiliconFlowTranslator(Translator):
             base_url=self.api_url,
             api_key=self.api_key,
         )
+        # 设置max_tokens属性，默认值为8192
+        self.max_tokens = 8192
     
     def translate(self, text, source_lang, target_lang, doc_type, glossary):
         """使用硅基流动翻译API翻译文本
@@ -76,7 +78,7 @@ class SiliconFlowTranslator(Translator):
                 stream=False,  # 非流式调用
                 temperature=0.1,  # 降低温度，提高翻译准确性
                 top_p=0.9,  # 核采样参数
-                max_tokens=8192,  # 最大token数
+                max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                 messages=[
                     {
                         "role": "system",

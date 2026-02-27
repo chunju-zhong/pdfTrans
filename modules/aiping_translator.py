@@ -24,6 +24,8 @@ class AipingTranslator(Translator):
             api_key=self.api_key,
             timeout=30.0,  # 添加超时设置，30秒
         )
+        # 设置max_tokens属性，默认值为8192
+        self.max_tokens = 8192
     
     def translate(self, text, source_lang, target_lang, doc_type, glossary):
         """使用aiping翻译API翻译文本
@@ -82,7 +84,7 @@ class AipingTranslator(Translator):
                     stream=True,  # 保持流式调用，兼容现有测试
                     temperature=0.1,  # 降低温度，提高翻译准确性
                     top_p=0.9,  # 核采样参数
-                    max_tokens=8192,  # 最大token数
+                    max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                     extra_body={
                         "provider": {
                             "only": [],

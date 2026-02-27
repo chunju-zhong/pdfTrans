@@ -22,6 +22,10 @@ class SemanticAnalyzer:
             base_url=self.api_url,
             api_key=self.api_key,
         )
+        # 设置max_tokens属性，默认值为1024（用于单个语义分析）
+        self.max_tokens = 1024
+        # 设置batch_max_tokens属性，默认值为2048（用于批量语义分析）
+        self.batch_max_tokens = 2048
         self.supported_languages = {
             'zh': '中文',
             'en': '英语',
@@ -60,7 +64,7 @@ class SemanticAnalyzer:
                 stream=False,  # 非流式调用
                 temperature=0.1,  # 降低温度，提高分析准确性
                 top_p=0.9,  # 核采样参数
-                max_tokens=1024,  # 最大token数
+                max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                 messages=[
                     {
                         "role": "system",
@@ -133,7 +137,7 @@ class SemanticAnalyzer:
                     stream=False,  # 非流式调用
                     temperature=0.1,  # 降低温度，提高分析准确性
                     top_p=0.9,  # 核采样参数
-                    max_tokens=2048,  # 最大token数
+                    max_tokens=self.batch_max_tokens,  # 使用类属性作为最大token数
                     messages=[
                         {
                             "role": "system",

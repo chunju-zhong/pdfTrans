@@ -227,10 +227,27 @@ MIT License
 ## 更新日志
 
 ### 2026-02-27
+- 实现max_tokens属性配置：
+  - 为多个模块添加max_tokens属性，支持默认值和外部配置
+  - markdown_generator.py：添加max_tokens属性，默认值8192
+  - aiping_semantic_analyzer.py：添加max_tokens（默认1024）和batch_max_tokens（默认2048）属性
+  - aiping_translator.py：添加max_tokens属性，默认值8192
+  - semantic_analyzer.py：添加max_tokens（默认1024）和batch_max_tokens（默认2048）属性
+  - silicon_flow_translator.py：添加max_tokens属性，默认值8192
+  - 更新所有API调用使用类属性作为最大token数
+  - 创建test_max_tokens_property.py测试文件，验证max_tokens属性功能
+- 解决布局模型token限制问题：
+  - 识别并解决布局模型token限制（8192）导致的输出截断问题
+  - 通过可配置的max_tokens属性允许调整token限制
+  - 确保大型文档的完整处理
 - 修复Markdown生成中图像URL元素丢失问题：
   - 分析图像URL元素丢失的原因，发现布局模型可能会删除图像URL元素
   - 修改布局提示词，添加"保留图像元素"的规范要求，明确要求布局模型不要删除或修改任何图像URL元素
   - 在generate_markdown方法中添加详细的日志记录，用于追踪图像URL在布局模型处理前后的状态
+  - 确保图像URL元素在Markdown生成过程中正确保留
+- 更新项目文档：
+  - 创建image_url_issue_plan.md分析计划文件，记录问题分析和解决方案
+  - 更新AI开发进度记录，添加2026-02-27的开发记录
   - 确保图像URL元素在Markdown生成过程中正确保留
 - 更新项目文档：
   - 创建image_url_issue_plan.md分析计划文件，记录问题分析和解决方案
