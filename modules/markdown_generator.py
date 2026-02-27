@@ -84,6 +84,9 @@ class MarkdownGenerator:
 5.  **【!!!】禁止使用代码块标记**：
     * **绝对不要**在输出的开头或结尾添加 ```markdown ``` 或任何其他代码块标记。
     * 直接返回纯 Markdown 文本内容，不需要任何包装或标记。
+6.  **【!!!】保留图像元素**：
+    * **绝对不要**删除或修改任何图像URL元素，保持所有图像URL的完整性。
+    * 图像URL格式为 `![image](path/to/image.png)`，请确保完全保留这些元素。
         """
     
     def _format_with_layout_model(self, text):
@@ -660,8 +663,24 @@ class AipingMarkdownGenerator(MarkdownGenerator):
             # 合并文本
             combined_text = "\n".join(full_text)
             
+            # 记录处理前的文本内容，特别是图像URL
+            logger.info(f"布局模型处理前的文本包含图像URL: {'![](images_' in combined_text}")
+            # 记录前1000个字符，包含图像URL的部分
+            if '![](images_' in combined_text:
+                start_idx = combined_text.find('![](images_')
+                logger.info(f"处理前的图像URL示例: {combined_text[start_idx:start_idx+100]}")
+            
             # 使用布局模型格式化文本为Markdown
             formatted_text = self._format_with_layout_model(combined_text)
+            
+            # 记录处理后的文本内容，特别是图像URL
+            logger.info(f"布局模型处理后的文本包含图像URL: {'![](images_' in formatted_text}")
+            # 记录前1000个字符，检查图像URL是否保留
+            if '![](images_' in formatted_text:
+                start_idx = formatted_text.find('![](images_')
+                logger.info(f"处理后的图像URL示例: {formatted_text[start_idx:start_idx+100]}")
+            else:
+                logger.warning("布局模型处理后丢失了图像URL元素")
             
             # 保存Markdown文件
             with open(output_md_path, 'w', encoding='utf-8') as f:

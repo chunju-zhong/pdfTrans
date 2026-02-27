@@ -226,6 +226,16 @@ MIT License
 
 ## 更新日志
 
+### 2026-02-27
+- 修复Markdown生成中图像URL元素丢失问题：
+  - 分析图像URL元素丢失的原因，发现布局模型可能会删除图像URL元素
+  - 修改布局提示词，添加"保留图像元素"的规范要求，明确要求布局模型不要删除或修改任何图像URL元素
+  - 在generate_markdown方法中添加详细的日志记录，用于追踪图像URL在布局模型处理前后的状态
+  - 确保图像URL元素在Markdown生成过程中正确保留
+- 更新项目文档：
+  - 创建image_url_issue_plan.md分析计划文件，记录问题分析和解决方案
+  - 更新AI开发进度记录，添加2026-02-27的开发记录
+
 ### 2026-02-26
 - 分离语义分析功能：
   - 从Translator类中分离语义分析功能，创建独立的SemanticAnalyzer基类和AipingSemanticAnalyzer派生类
