@@ -43,12 +43,19 @@ class TestPerformanceMultithread:
             text_blocks.append(text_block)
         
         # 创建翻译器实例（使用模拟翻译器避免实际API调用）
+        from models.result_types import TranslationResult
         class MockTranslator:
             """模拟翻译器，用于性能测试"""
             def translate(self, text, source_lang, target_lang, **kwargs):
                 # 模拟翻译API调用的延迟
                 time.sleep(0.1)  # 模拟100ms的翻译延迟
-                return f"[翻译] {text}"
+                from models.result_types import TruncationInfo
+                return TranslationResult(
+                        content=f"[翻译] {text}",
+                        token_usage={},
+                        finish_reason="",
+                        truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
+                    )
         
         translator = MockTranslator()
         

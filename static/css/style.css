@@ -213,6 +213,63 @@ input[type="text"]:focus {
     margin-bottom: 16px;
 }
 
+/* 警告容器样式 */
+.warnings-container {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    text-align: left;
+}
+
+.warnings-container h3 {
+    color: #856404;
+    font-size: 18px;
+    margin-bottom: 12px;
+}
+
+.warnings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.warning-item {
+    padding: 10px;
+    background-color: #fff;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+}
+
+.warning-message {
+    font-weight: 600;
+    color: #856404;
+    margin-bottom: 8px;
+}
+
+.warning-context {
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #ffeaa7;
+}
+
+.progress-text-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.btn-cancel {
+    background-color: #e74c3c;
+    color: #fff;
+    padding: 8px 16px;
+    font-size: 14px;
+}
+
 /* 下载链接容器样式 */
 .download-links {
     display: flex;

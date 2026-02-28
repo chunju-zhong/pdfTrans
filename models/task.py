@@ -20,6 +20,7 @@ class Task:
         self.attachments = []
         self.error = None
         self.canceled = False
+        self.warnings = []
         self.lock = threading.Lock()
     
     def update_progress(self, progress, message=None):
@@ -67,6 +68,18 @@ class Task:
         with self.lock:
             self.attachments.append(attachment_file)
     
+    def add_warning(self, message, context=None):
+        with self.lock:
+            warning = {
+                'message': message,
+                'context': context or {}
+            }
+            self.warnings.append(warning)
+    
+    def get_warnings(self):
+        with self.lock:
+            return self.warnings.copy()
+    
     def to_dict(self):
         with self.lock:
             return {
@@ -78,5 +91,6 @@ class Task:
                 'result_file': self.result_file,
                 'attachments': self.attachments,
                 'error': self.error,
-                'canceled': self.canceled
+                'canceled': self.canceled,
+                'warnings': self.warnings
             }

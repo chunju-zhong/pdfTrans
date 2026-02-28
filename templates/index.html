@@ -130,10 +130,18 @@ autonomous problem-solving: 自主问题解决</textarea>
                 <div id="progress-text" class="progress-text">准备开始...</div>
                 <button id="cancel-btn" class="btn btn-cancel" style="margin-left: 10px;">取消翻译</button>
             </div>
+            <div id="progress-warnings-container" class="warnings-container" style="display: none;">
+                <h3>翻译警告</h3>
+                <div id="progress-warnings-list" class="warnings-list"></div>
+            </div>
         </div>
         
         <div id="result-container" class="result-container" style="display: none;">
             <h2>翻译完成</h2>
+            <div id="warnings-container" class="warnings-container" style="display: none;">
+                <h3>翻译警告</h3>
+                <div id="warnings-list" class="warnings-list"></div>
+            </div>
             <p id="result-message">您的文件已翻译完成，点击下方链接下载：</p>
             <div id="download-links" class="download-links">
                 <a id="download-link" href="#" class="btn btn-success">下载翻译后的文件</a>

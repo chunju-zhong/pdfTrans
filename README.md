@@ -226,6 +226,25 @@ MIT License
 
 ## 更新日志
 
+### 2026-02-28
+- 实现结果类型化：
+  - 创建 `models/result_types.py` 文件，定义 `TruncationInfo`、`Result`、`OpenAIResult`、`TranslationResult` 和 `MarkdownResult` 类
+  - 修改 `aiping_translator.py`，返回 `TranslationResult` 对象而不是字符串
+  - 修改 `markdown_generator.py`，返回 `MarkdownResult` 对象而不是字符串
+  - 添加 `batch_translate` 方法到 `AipingTranslator` 类
+- 优化 API 调用：
+  - 在 `config.py` 中添加 `AIPING_EXTRA_BODY` 配置，集中管理费用优先策略参数
+  - 修改 `aiping_translator.py`、`aiping_semantic_analyzer.py` 和 `markdown_generator.py`，从配置中读取 `extra_body`
+  - 添加流式响应处理、超时检测、token 使用信息捕获和截断检测功能
+- 实现截断警告功能：
+  - 在 `models/result_types.py` 中实现 `TruncationInfo` 类，用于结构化存储截断信息
+  - 在 `services/translation_service.py` 中添加截断检测逻辑，当翻译或 Markdown 生成被截断时添加警告
+  - 在前端 `static/js/main.js` 中实现警告显示逻辑，确保用户能够看到截断警告
+  - 修复警告显示重复的问题，在任务完成时隐藏进度区域的警告
+- 其他优化：
+  - 添加详细的日志记录，便于调试和问题追踪
+  - 提高代码的可读性和可维护性
+
 ### 2026-02-27
 - 实现max_tokens属性配置：
   - 为多个模块添加max_tokens属性，支持默认值和外部配置
@@ -236,10 +255,6 @@ MIT License
   - silicon_flow_translator.py：添加max_tokens属性，默认值8192
   - 更新所有API调用使用类属性作为最大token数
   - 创建test_max_tokens_property.py测试文件，验证max_tokens属性功能
-- 解决布局模型token限制问题：
-  - 识别并解决布局模型token限制（8192）导致的输出截断问题
-  - 通过可配置的max_tokens属性允许调整token限制
-  - 确保大型文档的完整处理
 - 修复Markdown生成中图像URL元素丢失问题：
   - 分析图像URL元素丢失的原因，发现布局模型可能会删除图像URL元素
   - 修改布局提示词，添加"保留图像元素"的规范要求，明确要求布局模型不要删除或修改任何图像URL元素

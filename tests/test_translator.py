@@ -31,7 +31,8 @@ class TestTranslator:
         
         # 测试相同语言翻译，添加doc_type和glossary参数
         result = translator.translate('Hello', 'en', 'en', doc_type="AI技术", glossary=None)
-        assert result == 'Hello'
+        assert hasattr(result, 'content')
+        assert result.content == 'Hello'
 
 class TestContextTranslation:
     """测试上下文翻译功能"""
@@ -81,8 +82,8 @@ class TestTranslatorImplementations:
             mock_create.return_value = [mock_stream_chunk]
             
             # 调用翻译，添加doc_type和glossary参数
-            result = translator.translate('Hello', 'en', 'zh', doc_type="AI技术", glossary=None)
-            assert result == '你好'
+            translation_result = translator.translate('Hello', 'en', 'zh', doc_type="AI技术", glossary=None)
+            assert translation_result.content == '你好'
     
     def test_silicon_flow_translate(self):
         """测试硅基流动翻译器的翻译"""
@@ -100,8 +101,8 @@ class TestTranslatorImplementations:
             mock_create.return_value = mock_response
             
             # 调用翻译，添加doc_type和glossary参数
-            result = translator.translate('Hello', 'en', 'zh', doc_type="AI技术", glossary=None)
-            assert result == '你好'
+            translation_result = translator.translate('Hello', 'en', 'zh', doc_type="AI技术", glossary=None)
+            assert translation_result.content == '你好'
 
 # 运行所有测试
 if __name__ == "__main__":

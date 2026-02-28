@@ -1,3 +1,6 @@
+from models.result_types import TranslationResult, TruncationInfo
+
+
 class Translator:
     """翻译基类
     
@@ -35,12 +38,17 @@ class Translator:
             glossary (str): 术语表，格式为"术语1: 翻译1\n术语2: 翻译2"
             
         Returns:
-            str: 翻译后的文本
+            TranslationResult: 包含翻译结果和截断信息的结果对象
         """
         # 检查原语言与目标语言是否一致
         if source_lang == target_lang:
             # 语言一致，直接返回原文本
-            return text
+            return TranslationResult(
+                content=self._postprocess_text(text, text),
+                token_usage={},
+                finish_reason="",
+                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
+            )
     
         # 语言不一致，调用具体翻译实现
         raise NotImplementedError("子类必须实现translate方法")
@@ -79,17 +87,22 @@ class Translator:
             glossary (str): 术语表，格式为"术语1: 翻译1\n术语2: 翻译2"
             
         Returns:
-            list: 翻译后的文本列表
+            list: 翻译结果对象列表，每个元素为TranslationResult实例
         """
         # 检查原语言与目标语言是否一致
         if source_lang == target_lang:
-            # 语言一致，直接返回原文本列表
-            return texts.copy()
+            # 语言一致，直接返回原文本列表和空截断信息
+            return [TranslationResult(
+                content=text,
+                token_usage={},
+                finish_reason="",
+                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
+            ) for text in texts]
         
         results = []
         for text in texts:
-            translated_text = self.translate(text, source_lang, target_lang, doc_type, glossary)
-            results.append(translated_text)
+            result = self.translate(text, source_lang, target_lang, doc_type, glossary)
+            results.append(result)
         return results
     
     def _validate_language(self, lang_code):

@@ -104,7 +104,8 @@ def get_progress(task_id):
         'result_file': task.result_file,
         'attachments': getattr(task, 'attachments', []),
         'error': task.error,
-        'canceled': task.canceled
+        'canceled': task.canceled,
+        'warnings': getattr(task, 'warnings', [])
     })
 
 @app.route('/cancel/<task_id>', methods=['POST'])

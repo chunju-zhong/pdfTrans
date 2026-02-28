@@ -1,7 +1,9 @@
 import os
 import logging
 import shutil
+import time
 from openai import OpenAI
+from models.result_types import MarkdownResult, TruncationInfo
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +100,7 @@ class MarkdownGenerator:
             text (str): 要格式化的文本
             
         Returns:
-            str: 格式化后的Markdown文本
+            MarkdownResult: 包含格式化后的Markdown文本和截断信息的结果对象
         """
         logger.info("使用布局模型格式化文本为Markdown")
         
@@ -116,15 +118,15 @@ class MarkdownGenerator:
         for attempt in range(max_retries):
             try:
                 # 调用布局模型API（使用流式）
-                formatted_text = self._call_api(system_prompt, user_prompt)
+                markdown_result = self._call_api(system_prompt, user_prompt)
                 
-                formatted_text = formatted_text.strip()
+                formatted_text = markdown_result.content.strip()
                 
                 if not formatted_text:
                     raise Exception("布局模型返回空响应")
                 
                 logger.info("布局模型格式化完成")
-                return formatted_text
+                return markdown_result
                     
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -147,7 +149,7 @@ class MarkdownGenerator:
             user_prompt (str): 用户提示词
             
         Returns:
-            str: 格式化后的文本
+            MarkdownResult: 包含格式化后的文本和截断信息的结果对象
         """
         # 调用布局模型API（使用流式）
         stream = self.client.chat.completions.create(
@@ -156,7 +158,6 @@ class MarkdownGenerator:
             temperature=0.1,  # 降低温度，提高格式一致性
             max_tokens=self.max_tokens,  # 使用类属性作为最大token数
             timeout=60.0,  # 增加超时时间
-            n=1,  # 只返回一个结果
             messages=[
                 {
                     "role": "system",
@@ -171,13 +172,63 @@ class MarkdownGenerator:
         
         # 处理流式响应 - 逐块接收并拼接
         formatted_text = ""
+        token_usage = {}
+        finish_reason = ""
+        start_time = time.time()
+        max_processing_time = 3000  # 最大处理时间（秒）
+        chunk_count = 0
+        
         for chunk in stream:
+            # 检查是否超时
+            if time.time() - start_time > max_processing_time:
+                logger.warning(f"流式响应处理超时，已处理 {chunk_count} 个块，当前文本长度: {len(formatted_text)}")
+                break
+            
+            chunk_count += 1
+            if chunk_count % 10 == 0:
+                logger.info(f"处理中，已接收 {chunk_count} 个块，文本长度: {len(formatted_text)}")
+            
             if chunk.choices and len(chunk.choices) > 0:
                 choice = chunk.choices[0]
                 if choice.delta and choice.delta.content:
                     formatted_text += choice.delta.content
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+                    logger.info(f"收到响应结束标记: {finish_reason}")
+            
+            # 捕获token使用信息
+            if hasattr(chunk, "usage") and chunk.usage:
+                token_usage = {
+                    "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
+                    "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
+                    "total_tokens": getattr(chunk.usage, "total_tokens", 0)
+                }
+                logger.info(f"Token使用情况: {token_usage}")
         
-        return formatted_text
+        processing_time = time.time() - start_time
+        logger.info(f"流式响应处理完成，耗时: {processing_time:.2f}秒，处理了 {chunk_count} 个块")
+        
+        # 检查是否被截断
+        # 标准的 OpenAI 截断标记是 "length"
+        truncated = finish_reason == "length"
+        
+        # 记录截断检测结果
+        logger.info(f"截断检测: finish_reason={finish_reason}, token_usage={token_usage}, truncated={truncated}")
+        
+        # 创建TruncationInfo实例
+        truncation_info = TruncationInfo(
+            truncated=truncated,
+            token_usage=token_usage,
+            finish_reason=finish_reason
+        )
+        
+        # 返回MarkdownResult对象
+        return MarkdownResult(
+            content=formatted_text,
+            token_usage=token_usage,
+            finish_reason=finish_reason,
+            truncation_info=truncation_info
+        )
 
 
 class AipingMarkdownGenerator(MarkdownGenerator):
@@ -198,30 +249,19 @@ class AipingMarkdownGenerator(MarkdownGenerator):
             user_prompt (str): 用户提示词
             
         Returns:
-            str: 格式化后的文本
+            MarkdownResult: 包含格式化后的文本和截断信息的结果对象
         """
-        # 构建额外参数，定义费用优先策略
-        extra_body = {
-            "provider": {
-                "only": [],
-                "order": [],
-                "sort": "output_price",
-                "input_price_range": [],
-                "output_price_range": [],
-                "input_length_range": [],
-                "throughput_range": [],
-                "latency_range": []
-            }
-        }
+        # 从配置中读取额外参数
+        from config import config
+        extra_body = config.AIPING_EXTRA_BODY
         
         # 调用布局模型API（使用流式）
         stream = self.client.chat.completions.create(
             model=self.model,
             stream=True,  # 启用流式响应
             temperature=0.1,  # 降低温度，提高格式一致性
-            max_tokens=8192,  # 最大token数
+            max_tokens=self.max_tokens,
             timeout=60.0,  # 增加超时时间
-            n=1,  # 只返回一个结果
             messages=[
                 {
                     "role": "system",
@@ -237,13 +277,62 @@ class AipingMarkdownGenerator(MarkdownGenerator):
         
         # 处理流式响应 - 逐块接收并拼接
         formatted_text = ""
+        token_usage = {}
+        finish_reason = ""
+        start_time = time.time()
+        max_processing_time = 3000  # 最大处理时间（秒）
+        chunk_count = 0
+        
         for chunk in stream:
+            # 检查是否超时
+            if time.time() - start_time > max_processing_time:
+                logger.warning(f"Aiping API 流式响应处理超时，已处理 {chunk_count} 个块，当前文本长度: {len(formatted_text)}")
+                break
+            
+            chunk_count += 1
+            if chunk_count % 10 == 0:
+                logger.info(f"Aiping API 处理中，已接收 {chunk_count} 个块，文本长度: {len(formatted_text)}")
+            
             if chunk.choices and len(chunk.choices) > 0:
                 choice = chunk.choices[0]
                 if choice.delta and choice.delta.content:
                     formatted_text += choice.delta.content
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
+                    logger.info(f"Aiping API 收到响应结束标记: {finish_reason}")
+            
+            # 捕获token使用信息
+            if hasattr(chunk, "usage") and chunk.usage:
+                token_usage = {
+                    "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
+                    "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
+                    "total_tokens": getattr(chunk.usage, "total_tokens", 0)
+                }
+                logger.info(f"Aiping API Token使用情况: {token_usage}")
         
-        return formatted_text
+        processing_time = time.time() - start_time
+        logger.info(f"Aiping API 流式响应处理完成，耗时: {processing_time:.2f}秒，处理了 {chunk_count} 个块")
+        
+        # 检查是否被截断
+        # 标准的 OpenAI 截断标记是 "length"
+        truncated = finish_reason == "length"
+        # 记录截断检测结果
+        logger.info(f"Aiping API 截断检测: finish_reason={finish_reason}, token_usage={token_usage}, truncated={truncated}")
+        
+        # 创建TruncationInfo实例
+        truncation_info = TruncationInfo(
+            truncated=truncated,
+            token_usage=token_usage,
+            finish_reason=finish_reason
+        )
+        
+        # 返回MarkdownResult对象
+        return MarkdownResult(
+            content=formatted_text,
+            token_usage=token_usage,
+            finish_reason=finish_reason,
+            truncation_info=truncation_info
+        )
     
     def _convert_table_to_markdown(self, table):
         """将表格转换为Markdown格式
@@ -571,6 +660,9 @@ class AipingMarkdownGenerator(MarkdownGenerator):
             output_md_path (str): 输出Markdown文件路径
             target_lang (str): 目标语言代码
             doc_id (str): 文档唯一标识符，用于创建独立的图像目录
+            
+        Returns:
+            MarkdownResult: 包含生成的Markdown文本和截断信息的结果对象
         """
         logger.info(f"开始生成Markdown文档，输出文件: {output_md_path}, 目标语言: {target_lang}")
         
@@ -673,26 +765,40 @@ class AipingMarkdownGenerator(MarkdownGenerator):
                 logger.info(f"处理前的图像URL示例: {combined_text[start_idx:start_idx+100]}")
             
             # 使用布局模型格式化文本为Markdown
-            formatted_text = self._format_with_layout_model(combined_text)
+            markdown_result = self._format_with_layout_model(combined_text)
+            
+            # 检查是否被截断
+            if markdown_result.truncation_info.truncated:
+                logger.warning(f"布局模型响应被截断: {markdown_result.truncation_info}")
             
             # 记录处理后的文本内容，特别是图像URL
-            logger.info(f"布局模型处理后的文本包含图像URL: {'![](images_' in formatted_text}")
+            logger.info(f"布局模型处理后的文本包含图像URL: {'![](images_' in markdown_result.content}")
             # 记录前1000个字符，检查图像URL是否保留
-            if '![](images_' in formatted_text:
-                start_idx = formatted_text.find('![](images_')
-                logger.info(f"处理后的图像URL示例: {formatted_text[start_idx:start_idx+100]}")
+            if '![](images_' in markdown_result.content:
+                start_idx = markdown_result.content.find('![](images_')
+                logger.info(f"处理后的图像URL示例: {markdown_result.content[start_idx:start_idx+100]}")
             else:
                 logger.warning("布局模型处理后丢失了图像URL元素")
             
             # 保存Markdown文件
             with open(output_md_path, 'w', encoding='utf-8') as f:
-                f.write(formatted_text)
+                f.write(markdown_result.content)
             
             logger.info(f"Markdown文档生成完成，输出文件: {output_md_path}")
             
+            # 返回生成的Markdown结果对象
+            return markdown_result
+            
         except Exception as e:
             logger.error(f"生成Markdown文档时出错: {str(e)}", exc_info=True)
-            raise Exception(f"生成Markdown文档时出错: {str(e)}")
+            # 返回默认值
+            return MarkdownResult(
+                content="",
+                token_usage={},
+                finish_reason="",
+                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
+            )
+            
 
 
 def create_markdown_generator(api_type, api_key, api_url, model):

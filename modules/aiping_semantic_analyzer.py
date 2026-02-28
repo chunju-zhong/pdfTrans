@@ -1,4 +1,5 @@
 from .semantic_analyzer import SemanticAnalyzer
+from config import config
 
 class AipingSemanticAnalyzer(SemanticAnalyzer):
     """aiping语义分析器实现
@@ -60,18 +61,7 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                     temperature=0.1,  # 降低温度，提高分析准确性
                     top_p=0.9,  # 核采样参数
                     max_tokens=self.max_tokens,  # 使用类属性作为最大token数
-                    extra_body={
-                        "provider": {
-                            "only": [],
-                            "order": [],
-                            "sort": "output_price",
-                            "input_price_range": [],
-                            "output_price_range": [],
-                            "input_length_range": [],
-                            "throughput_range": [],
-                            "latency_range": []
-                        }
-                    },
+                    extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
                         {
                             "role": "system",
@@ -155,18 +145,7 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                     temperature=0.1,  # 降低温度，提高分析准确性
                     top_p=0.9,  # 核采样参数
                     max_tokens=self.batch_max_tokens,  # 使用类属性作为最大token数
-                    extra_body={
-                        "provider": {
-                            "only": [],
-                            "order": [],
-                            "sort": "output_price",
-                            "input_price_range": [],
-                            "output_price_range": [],
-                            "input_length_range": [],
-                            "throughput_range": [],
-                            "latency_range": []
-                        }
-                    },
+                    extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
                         {
                             "role": "system",

@@ -55,7 +55,7 @@ class TestSiliconFlowTranslator:
         translator = SiliconFlowTranslator(api_key, api_url, model)
         
         # 调用翻译方法
-        result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
+        translation_result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
         
         # 验证OpenAI客户端初始化
         mock_openai.assert_called_once()
@@ -64,8 +64,15 @@ class TestSiliconFlowTranslator:
         mock_chat.completions.create.assert_called_once()
         
         # 验证翻译结果
-        assert isinstance(result, str)
-        assert result == mock_translator_response["choices"][0]["message"]["content"]
+        assert hasattr(translation_result, 'content')
+        assert isinstance(translation_result.content, str)
+        # 验证截断信息
+        assert hasattr(translation_result, 'truncated')
+        assert isinstance(translation_result.truncated, bool)
+        assert hasattr(translation_result, 'token_usage')
+        assert isinstance(translation_result.token_usage, dict)
+        assert hasattr(translation_result, 'finish_reason')
+        assert translation_result.content == mock_translator_response["choices"][0]["message"]["content"]
     
     @patch('modules.silicon_flow_translator.OpenAI')
     def test_translate_api_error(self, mock_openai, sample_text, source_lang, target_lang):

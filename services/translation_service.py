@@ -302,14 +302,26 @@ class TranslationService:
             logger.info(f"任务 {task.task_id} 处理合并块 {index+1}/{len(merged_blocks)}")
             logger.info(f"任务 {task.task_id} 合并块 {index+1} 原文: {merged_block.block_text}")
             
-            merged_translation = translator.translate(
+            translation_result = translator.translate(
                 merged_block.block_text,
                 source_lang,
                 target_lang,
                 doc_type=doc_type,
                 glossary=glossary
             )
+            merged_translation = translation_result.content
             logger.info(f"任务 {task.task_id} 合并块 {index+1} 翻译结果: {merged_translation}")
+            
+            # 检查是否被截断
+            if translation_result.truncated:
+                logger.warning(f"任务 {task.task_id} 合并块 {index+1} 翻译被截断: {translation_result.truncation_info}")
+                # 添加警告到任务对象
+                task.add_warning("翻译被截断", {
+                    "process": "translation",
+                    "block_index": index,
+                    "token_usage": translation_result.token_usage,
+                    "finish_reason": translation_result.finish_reason
+                })
             
             # 保存合并后的翻译结果
             from models.merged_block import MergedBlock
@@ -463,14 +475,26 @@ class TranslationService:
             
             logger.info(f"任务 {task.task_id} 原始块 {index+1} 是正文块，开始翻译")
             # 调用翻译API
-            translated_text = translator.translate(
+            translation_result = translator.translate(
                 text_block.block_text,
                 source_lang,
                 target_lang,
                 doc_type=doc_type,
                 glossary=glossary
             )
+            translated_text = translation_result.content
             logger.info(f"任务 {task.task_id} 原始块 {index+1} 翻译结果: {translated_text}")
+            
+            # 检查是否被截断
+            if translation_result.truncated:
+                logger.warning(f"任务 {task.task_id} 原始块 {index+1} 翻译被截断: {translation_result.truncation_info}")
+                # 添加警告到任务对象
+                task.add_warning("翻译被截断", {
+                    "process": "translation",
+                    "block_index": index,
+                    "token_usage": translation_result.token_usage,
+                    "finish_reason": translation_result.finish_reason
+                })
             
             # 保存翻译结果，用于Word生成
             from models.merged_block import MergedBlock
@@ -598,13 +622,27 @@ class TranslationService:
             def translate_cell(table_idx, row_idx, col_idx, cell):
                 """翻译单个表格单元格"""
                 # 调用翻译API
-                translated_text = translator.translate(
+                translation_result = translator.translate(
                     cell.text,
                     source_lang,
                     target_lang,
                     doc_type=doc_type,
                     glossary=glossary
                 )
+                translated_text = translation_result.content
+                
+                # 检查是否被截断
+                if translation_result.truncated:
+                    logger.warning(f"任务 {task.task_id} 表格单元格翻译被截断: {translation_result.truncation_info}")
+                    # 添加警告到任务对象
+                    task.add_warning("表格翻译被截断", {
+                        "process": "translation",
+                        "table_index": table_idx,
+                        "row_index": row_idx,
+                        "col_index": col_idx,
+                        "token_usage": translation_result.token_usage,
+                        "finish_reason": translation_result.finish_reason
+                    })
                 # 创建翻译后的PdfCell对象
                 translated_cell = PdfCell(
                     text=translated_text,
@@ -790,7 +828,19 @@ class TranslationService:
             # 生成翻译后的Markdown文档
             try:
                 # 使用unique_id作为doc_id，确保每个文档有独立的图像目录
-                markdown_generator.generate_markdown(translated_content, extracted_images, md_filepath, target_lang, doc_id=unique_id)
+                markdown_result = markdown_generator.generate_markdown(translated_content, extracted_images, md_filepath, target_lang, doc_id=unique_id)
+                formatted_text = markdown_result.content
+                
+                # 检查是否被截断
+                if markdown_result.truncated:
+                    logger.warning(f"任务 {task.task_id} Markdown生成被截断: {markdown_result.truncation_info}")
+                    # 添加警告到任务对象
+                    task.add_warning("Markdown生成被截断", {
+                        "process": "markdown_generation",
+                        "token_usage": markdown_result.token_usage,
+                        "finish_reason": markdown_result.finish_reason
+                    })
+                
                 logger.info(f"任务 {task.task_id} Markdown文档生成完成，输出文件: {md_filename}")
                 
                 # 创建包含Markdown文件和当前文档图像目录的zip文件

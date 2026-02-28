@@ -21,6 +21,18 @@ class Config:
     AIPING_API_URL = os.environ.get('AIPING_API_URL') or 'https://aiping.cn/api/v1'
     AIPING_MODEL = os.environ.get('AIPING_MODEL_TRANSLATION') or 'Qwen3-32B'
     AIPING_MODEL_LAYOUT = os.environ.get('AIPING_MODEL_LAYOUT') or 'Qwen3-32B'
+    AIPING_EXTRA_BODY = {
+        "provider": {
+            "only": [],
+            "order": [],
+            "sort": "output_price",
+            "input_price_range": [],
+            "output_price_range": [],
+            "input_length_range": [],
+            "throughput_range": [],
+            "latency_range": []
+        }
+    }
     
     # 硅基流动API配置
     SILICON_FLOW_API_KEY = os.environ.get('SILICON_FLOW_API_KEY')

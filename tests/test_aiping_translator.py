@@ -67,7 +67,7 @@ class TestAipingTranslator:
         translator = AipingTranslator("test_api_key", "https://test-api.aiping.cn/v1", "test-model")
     
         # 调用翻译方法
-        result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
+        translation_result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
 
         # 验证OpenAI客户端初始化
         mock_openai.assert_called_once()
@@ -76,8 +76,15 @@ class TestAipingTranslator:
         mock_chat.completions.create.assert_called_once()
 
         # 验证翻译结果
-        assert isinstance(result, str)
-        assert result == mock_translation
+        assert hasattr(translation_result, 'content')
+        assert isinstance(translation_result.content, str)
+        # 验证截断信息
+        assert hasattr(translation_result, 'truncated')
+        assert isinstance(translation_result.truncated, bool)
+        assert hasattr(translation_result, 'token_usage')
+        assert isinstance(translation_result.token_usage, dict)
+        assert hasattr(translation_result, 'finish_reason')
+        assert translation_result.content == mock_translation
     
     @patch('modules.aiping_translator.OpenAI')
     def test_translate_api_error(self, mock_openai, sample_text, source_lang, target_lang):
@@ -174,17 +181,24 @@ class TestAipingTranslator:
         translator = AipingTranslator("test_api_key", "https://test-api.aiping.cn/v1", "test-model")
         
         # 调用翻译方法
-        result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
-        
+        translation_result = translator.translate(sample_text, source_lang, target_lang, doc_type="AI技术", glossary=None)
+
         # 验证OpenAI客户端初始化
         mock_openai.assert_called_once()
-        
+
         # 验证API调用了3次（2次失败+1次成功）
         assert mock_chat.completions.create.call_count == 3
-        
+
         # 验证sleep被调用了2次（重试间隔）
         assert mock_sleep.call_count == 2
-        
+
         # 验证翻译结果
-        assert isinstance(result, str)
-        assert result == mock_translator_response["choices"][0]["message"]["content"]
+        assert hasattr(translation_result, 'content')
+        assert isinstance(translation_result.content, str)
+        # 验证截断信息
+        assert hasattr(translation_result, 'truncated')
+        assert isinstance(translation_result.truncated, bool)
+        assert hasattr(translation_result, 'token_usage')
+        assert isinstance(translation_result.token_usage, dict)
+        assert hasattr(translation_result, 'finish_reason')
+        assert translation_result.content == mock_translator_response["choices"][0]["message"]["content"]

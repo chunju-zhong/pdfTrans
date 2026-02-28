@@ -110,11 +110,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     const progressData = JSON.parse(xhr.responseText);
                     updateProgress(progressData.progress, progressData.status, progressData.message);
                     
+                    // 检查并显示警告
+                    if (progressData.warnings && progressData.warnings.length > 0) {
+                        showProgressWarnings(progressData.warnings);
+                    } else {
+                        hideProgressWarnings();
+                    }
+                    
                     // 如果翻译完成，停止轮询
                     if (progressData.status === 'completed') {
                         clearInterval(progressInterval);
+                        // 隐藏进度区域的警告，因为会在结果区域显示
+                        hideProgressWarnings();
                         // 显示下载链接
-                        showDownloadLink(progressData.result_file, progressData.attachments || []);
+                        showDownloadLink(progressData.result_file, progressData.attachments || [], progressData.warnings || []);
                     } else if (progressData.status === 'error') {
                         clearInterval(progressInterval);
                     }
@@ -131,6 +140,62 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         xhr.send();
+    }
+    
+    // 显示进度过程中的警告
+    function showProgressWarnings(warnings) {
+        const progressWarningsContainer = document.getElementById('progress-warnings-container');
+        const progressWarningsList = document.getElementById('progress-warnings-list');
+        
+        if (warnings && warnings.length > 0) {
+            progressWarningsContainer.style.display = 'block';
+            progressWarningsList.innerHTML = '';
+            
+            warnings.forEach((warning, index) => {
+                const warningItem = document.createElement('div');
+                warningItem.className = 'warning-item';
+                
+                const warningMessage = document.createElement('div');
+                warningMessage.className = 'warning-message';
+                warningMessage.textContent = warning.message;
+                warningItem.appendChild(warningMessage);
+                
+                if (warning.context) {
+                    const warningContext = document.createElement('div');
+                    warningContext.className = 'warning-context';
+                    
+                    if (warning.context.process) {
+                        const processInfo = document.createElement('div');
+                        processInfo.textContent = `处理过程: ${warning.context.process}`;
+                        warningContext.appendChild(processInfo);
+                    }
+                    
+                    if (warning.context.token_usage) {
+                        const tokenInfo = document.createElement('div');
+                        tokenInfo.textContent = `Token使用: ${warning.context.token_usage.total_tokens} (输入: ${warning.context.token_usage.prompt_tokens}, 输出: ${warning.context.token_usage.completion_tokens})`;
+                        warningContext.appendChild(tokenInfo);
+                    }
+                    
+                    if (warning.context.finish_reason) {
+                        const reasonInfo = document.createElement('div');
+                        reasonInfo.textContent = `结束原因: ${warning.context.finish_reason}`;
+                        warningContext.appendChild(reasonInfo);
+                    }
+                    
+                    warningItem.appendChild(warningContext);
+                }
+                
+                progressWarningsList.appendChild(warningItem);
+            });
+        } else {
+            progressWarningsContainer.style.display = 'none';
+        }
+    }
+    
+    // 隐藏进度过程中的警告
+    function hideProgressWarnings() {
+        const progressWarningsContainer = document.getElementById('progress-warnings-container');
+        progressWarningsContainer.style.display = 'none';
     }
     
     // 更新进度显示
@@ -172,12 +237,59 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 显示下载链接
-    function showDownloadLink(fileName, attachments) {
+    function showDownloadLink(fileName, attachments, warnings) {
         const downloadLinksContainer = document.getElementById('download-links');
         const resultMessage = document.getElementById('result-message');
+        const warningsContainer = document.getElementById('warnings-container');
+        const warningsList = document.getElementById('warnings-list');
         
         // 清空现有的下载链接
         downloadLinksContainer.innerHTML = '';
+        
+        // 显示警告
+        if (warnings && warnings.length > 0) {
+            warningsContainer.style.display = 'block';
+            warningsList.innerHTML = '';
+            
+            warnings.forEach((warning, index) => {
+                const warningItem = document.createElement('div');
+                warningItem.className = 'warning-item';
+                
+                const warningMessage = document.createElement('div');
+                warningMessage.className = 'warning-message';
+                warningMessage.textContent = warning.message;
+                warningItem.appendChild(warningMessage);
+                
+                if (warning.context) {
+                    const warningContext = document.createElement('div');
+                    warningContext.className = 'warning-context';
+                    
+                    if (warning.context.process) {
+                        const processInfo = document.createElement('div');
+                        processInfo.textContent = `处理过程: ${warning.context.process}`;
+                        warningContext.appendChild(processInfo);
+                    }
+                    
+                    if (warning.context.token_usage) {
+                        const tokenInfo = document.createElement('div');
+                        tokenInfo.textContent = `Token使用: ${warning.context.token_usage.total_tokens} (输入: ${warning.context.token_usage.prompt_tokens}, 输出: ${warning.context.token_usage.completion_tokens})`;
+                        warningContext.appendChild(tokenInfo);
+                    }
+                    
+                    if (warning.context.finish_reason) {
+                        const reasonInfo = document.createElement('div');
+                        reasonInfo.textContent = `结束原因: ${warning.context.finish_reason}`;
+                        warningContext.appendChild(reasonInfo);
+                    }
+                    
+                    warningItem.appendChild(warningContext);
+                }
+                
+                warningsList.appendChild(warningItem);
+            });
+        } else {
+            warningsContainer.style.display = 'none';
+        }
         
         // 添加主要文件下载链接
         const mainLink = document.createElement('a');

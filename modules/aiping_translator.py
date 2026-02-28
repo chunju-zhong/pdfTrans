@@ -1,5 +1,7 @@
 from openai import OpenAI
 from .translator import Translator
+from models.result_types import TranslationResult, TruncationInfo
+from config import config
 
 class AipingTranslator(Translator):
     """aiping翻译API实现
@@ -38,12 +40,17 @@ class AipingTranslator(Translator):
             glossary (str): 术语表
             
         Returns:
-            str: 翻译后的文本
+            TranslationResult: 包含翻译结果和截断信息的结果对象
         """
         # 检查原语言与目标语言是否一致
         if source_lang == target_lang:
             # 语言一致，直接返回原文本
-            return text
+            return TranslationResult(
+                content=self._postprocess_text(text, text),
+                token_usage={},
+                finish_reason="",
+                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
+            )
         
         # 验证语言代码
         if not self._validate_language(source_lang) or not self._validate_language(target_lang):
@@ -85,18 +92,7 @@ class AipingTranslator(Translator):
                     temperature=0.1,  # 降低温度，提高翻译准确性
                     top_p=0.9,  # 核采样参数
                     max_tokens=self.max_tokens,  # 使用类属性作为最大token数
-                    extra_body={
-                        "provider": {
-                            "only": [],
-                            "order": [],
-                            "sort": "output_price",
-                            "input_price_range": [],
-                            "output_price_range": [],
-                            "input_length_range": [],
-                            "throughput_range": [],
-                            "latency_range": []
-                        }
-                    },
+                    extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
                         {
                             "role": "system",
@@ -111,6 +107,9 @@ class AipingTranslator(Translator):
                 
                 # 处理响应 - stream=True时直接处理流式响应
                 translated_text = ""
+                token_usage = {}
+                finish_reason = ""
+                
                 for chunk in response:
                     if hasattr(chunk, "choices") and len(chunk.choices) > 0:
                         delta = chunk.choices[0].delta
@@ -119,9 +118,41 @@ class AipingTranslator(Translator):
                         elif hasattr(delta, "reasoning_content"):
                             # 跳过思考内容
                             continue
+                    
+                    # 捕获token使用信息
+                    if hasattr(chunk, "usage") and chunk.usage:
+                        token_usage = {
+                            "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
+                            "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
+                            "total_tokens": getattr(chunk.usage, "total_tokens", 0)
+                        }
+                    
+                    # 捕获finish_reason
+                    if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                        choice = chunk.choices[0]
+                        if hasattr(choice, "finish_reason") and choice.finish_reason:
+                            finish_reason = choice.finish_reason
+                
+                # 检查是否被截断
+                truncated = finish_reason == "length"
+                
+                # 创建TruncationInfo实例
+                truncation_info = TruncationInfo(
+                    truncated=truncated,
+                    token_usage=token_usage,
+                    finish_reason=finish_reason
+                )
                 
                 # 文本后处理
-                return self._postprocess_text(translated_text, text)
+                processed_translated_text = self._postprocess_text(translated_text, text)
+                
+                # 返回翻译结果和截断信息
+                return TranslationResult(
+                    content=processed_translated_text,
+                    token_usage=token_usage,
+                    finish_reason=finish_reason,
+                    truncation_info=truncation_info
+                )
                     
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -131,5 +162,34 @@ class AipingTranslator(Translator):
                 else:
                     # 最后一次尝试失败，抛出异常
                     raise Exception(f"aiping翻译API请求失败: {str(e)}")
+    
+    def batch_translate(self, texts, source_lang, target_lang, doc_type="AI技术", glossary=""):
+        """批量翻译文本
+        
+        Args:
+            texts (list): 要翻译的文本列表
+            source_lang (str): 源语言代码
+            target_lang (str): 目标语言代码
+            doc_type (str): 文档类型
+            glossary (str): 术语表，格式为"术语1: 翻译1\n术语2: 翻译2"
+            
+        Returns:
+            list: 翻译结果对象列表，每个元素为TranslationResult实例
+        """
+        # 检查原语言与目标语言是否一致
+        if source_lang == target_lang:
+            # 语言一致，直接返回原文本列表和空截断信息
+            return [TranslationResult(
+                content=text,
+                token_usage={},
+                finish_reason="",
+                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
+            ) for text in texts]
+        
+        results = []
+        for text in texts:
+            result = self.translate(text, source_lang, target_lang, doc_type, glossary)
+            results.append(result)
+        return results
 
 
