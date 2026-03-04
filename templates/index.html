@@ -88,6 +88,21 @@ paradigm: 范式
 passive, discrete tasks: 被动式、离散型任务
 prompt: 提示词
 autonomous problem-solving: 自主问题解决</textarea>
+                <div style="margin-top: 10px;">
+                    <div style="display: flex; align-items: center;">
+                        <button type="button" id="extract-glossary-btn" class="btn btn-secondary">提取术语</button>
+                        <div id="glossary-progress-container" class="progress-container" style="display: none; margin-left: 10px; flex-grow: 1;">
+                            <div class="progress">
+                                <div id="glossary-progress-bar" class="progress-bar" style="width: 0%;">0%</div>
+                            </div>
+                            <div class="progress-text-container">
+                                <div id="glossary-progress-text" class="progress-text">正在提取术语...</div>
+                                <button id="glossary-cancel-btn" class="btn btn-cancel" style="margin-left: 10px;">取消提取</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-hint" style="margin-top: 5px;">从上传的PDF中自动提取术语表</div>
+                </div>
             </div>
             
             <div class="form-group">
@@ -147,6 +162,8 @@ autonomous problem-solving: 自主问题解决</textarea>
                 <a id="download-link" href="#" class="btn btn-success">下载翻译后的文件</a>
             </div>
         </div>
+        
+
     </div>
     
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

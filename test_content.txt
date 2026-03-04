@@ -1,0 +1,1 @@
+AI agents are autonomous problem-solving systems that use large language models (LLMs) to perform tasks. The agent paradigm represents a shift from passive, discrete tasks to active, continuous problem-solving.

@@ -9,6 +9,7 @@ from utils.logging_config import setup_logging, get_logger
 from utils.file_utils import allowed_file, ensure_directory_exists
 from services.task_service import task_service
 from services.translation_service import translation_service
+from services.glossary_service import glossary_service
 
 # 配置日志
 setup_logging()
@@ -163,6 +164,121 @@ def get_pdf_pages():
             return jsonify({'success': False, 'message': f"获取PDF页数失败: {str(e)}"})
     
     return jsonify({'success': False, 'message': '不支持的文件类型'})
+
+# 术语提取相关路由
+@app.route('/extract_glossary', methods=['POST'])
+def extract_glossary():
+    """提取术语表路由（异步）"""
+    # 检查请求中是否包含文件
+    if 'pdf_file' not in request.files:
+        return jsonify({'success': False, 'message': '没有选择文件'})
+    
+    file = request.files['pdf_file']
+    
+    # 检查文件是否为空
+    if file.filename == '':
+        return jsonify({'success': False, 'message': '没有选择文件'})
+    
+    # 检查文件类型
+    if file and allowed_file(file.filename):
+        try:
+            # 获取参数
+            source_lang = request.form.get('source_lang', config.DEFAULT_SOURCE_LANGUAGE)
+            target_lang = request.form.get('target_lang', config.DEFAULT_TARGET_LANGUAGE)
+            translator_type = request.form.get('translator', 'aiping')
+            
+            # 保存文件
+            filename = secure_filename(file.filename)
+            unique_id = str(uuid.uuid4())[:8]
+            input_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"glossary_{unique_id}_{filename}")
+            file.save(input_filepath)
+            
+            # 创建任务ID
+            task_id = str(uuid.uuid4())
+            
+            # 创建任务对象
+            task = task_service.create_task(task_id, file.filename)
+            task.update_progress(10, '文件保存完成...')
+            
+            # 启动异步术语提取任务
+            threading.Thread(target=process_glossary_extraction, 
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename)).start()
+            
+            # 返回任务ID
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': '术语提取任务已启动'
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'message': f"创建任务失败: {str(e)}"})
+    
+    return jsonify({'success': False, 'message': '不支持的文件类型'})
+
+@app.route('/glossary_progress/<task_id>')
+def get_glossary_progress(task_id):
+    """获取术语提取任务进度API"""
+    task = task_service.get_task(task_id)
+    if not task:
+        return jsonify({'success': False, 'message': '任务不存在'}), 404
+    
+    return jsonify({
+        'success': True,
+        'task_id': task_id,
+        'status': task.status,
+        'progress': task.progress,
+        'message': task.message,
+        'glossary': getattr(task, 'glossary', ''),
+        'error': task.error
+    })
+
+@app.route('/glossary_cancel/<task_id>', methods=['POST'])
+def cancel_glossary_task(task_id):
+    """取消术语提取任务API"""
+    if not task_service.cancel_task(task_id):
+        return jsonify({'success': False, 'message': '任务不存在'}), 404
+    
+    return jsonify({
+        'success': True,
+        'message': '术语提取任务已取消'
+    })
+
+def process_glossary_extraction(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename):
+    """异步术语提取任务处理函数"""
+    try:
+        logger.info(f"开始处理术语提取任务 {task.task_id}，文件: {filename}")
+        # 更新任务状态为处理中
+        task.set_status('processing')
+        
+        # 提取术语表
+        task.update_progress(30, '正在提取PDF文本...')
+        
+        # 调用术语提取服务
+        glossary = glossary_service.extract_glossary_from_pdf(
+            input_filepath, source_lang, target_lang, translator_type
+        )
+        
+        task.update_progress(80, '术语提取完成...')
+        
+        # 清理临时文件
+        if os.path.exists(input_filepath):
+            os.remove(input_filepath)
+        logger.info(f"任务 {task.task_id} 已清理临时文件")
+        
+        task.update_progress(100, '术语提取完成！')
+        # 设置任务结果
+        task.set_status('completed')
+        task.glossary = glossary
+        logger.info(f"任务 {task.task_id} 完成，提取到 {len(glossary.split('\n')) if glossary else 0} 个术语")
+        
+    except Exception as e:
+        logger.error(f"术语提取任务失败: {str(e)}")
+        task.set_status('error')
+        task.error = str(e)
+        # 清理临时文件
+        if os.path.exists(input_filepath):
+            os.remove(input_filepath)
 
 if __name__ == '__main__':
     import sys

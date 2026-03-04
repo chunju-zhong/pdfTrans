@@ -21,6 +21,7 @@ class Config:
     AIPING_API_URL = os.environ.get('AIPING_API_URL') or 'https://aiping.cn/api/v1'
     AIPING_MODEL = os.environ.get('AIPING_MODEL_TRANSLATION') or 'Qwen3-32B'
     AIPING_MODEL_LAYOUT = os.environ.get('AIPING_MODEL_LAYOUT') or 'Qwen3-32B'
+    AIPING_MODEL_GLOSSARY = os.environ.get('AIPING_MODEL_GLOSSARY') or 'Qwen3-32B'
     AIPING_EXTRA_BODY = {
         "provider": {
             "only": [],
@@ -39,6 +40,7 @@ class Config:
     SILICON_FLOW_API_URL = os.environ.get('SILICON_FLOW_API_URL') or 'https://api.siliconflow.cn/v1'
     SILICON_FLOW_MODEL = os.environ.get('SILICON_FLOW_MODEL_TRANSLATION') or 'tencent/Hunyuan-MT-7B'
     SILICON_FLOW_MODEL_LAYOUT = os.environ.get('SILICON_FLOW_MODEL_LAYOUT') or 'Qwen/Qwen3-32B'
+    SILICON_FLOW_MODEL_GLOSSARY = os.environ.get('SILICON_FLOW_MODEL_GLOSSARY') or 'Qwen/Qwen3-32B'
     
     # 支持的语言列表
     SUPPORTED_LANGUAGES = {

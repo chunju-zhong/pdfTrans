@@ -513,4 +513,236 @@ document.addEventListener('DOMContentLoaded', function() {
             cancelTranslation();
         }
     });
+    
+    // 术语提取相关元素
+    const extractGlossaryBtn = document.getElementById('extract-glossary-btn');
+    const glossaryProgressContainer = document.getElementById('glossary-progress-container');
+    const glossaryProgressBar = document.getElementById('glossary-progress-bar');
+    const glossaryProgressText = document.getElementById('glossary-progress-text');
+    const glossaryCancelBtn = document.getElementById('glossary-cancel-btn');
+    const glossaryTextarea = document.getElementById('glossary');
+    
+    let glossaryProgressInterval = null;
+    let glossaryTaskId = null;
+    
+    // 提取术语按钮点击事件处理
+    extractGlossaryBtn.addEventListener('click', function() {
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('请先选择PDF文件');
+            return;
+        }
+        
+        // 显示进度容器
+        glossaryProgressContainer.style.display = 'block';
+        
+        // 初始化进度
+        glossaryProgressBar.style.width = '0%';
+        glossaryProgressBar.textContent = '0%';
+        glossaryProgressText.textContent = '正在提取术语...';
+        
+        // 准备表单数据
+        const formData = new FormData();
+        formData.append('pdf_file', file);
+        formData.append('source_lang', sourceLangSelect.value);
+        formData.append('target_lang', targetLangSelect.value);
+        formData.append('translator', translatorSelect.value);
+        
+        // 异步提取术语
+        extractGlossary(formData);
+    });
+    
+    // 异步提取术语函数
+    function extractGlossary(formData) {
+        const xhr = new XMLHttpRequest();
+        
+        // 设置请求
+        xhr.open('POST', '/extract_glossary', true);
+        
+        // 处理响应
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        glossaryTaskId = response.task_id;
+                        // 开始轮询进度
+                        startGlossaryProgressPolling();
+                    } else {
+                        updateGlossaryProgress(0, 'error', response.message || '提取术语请求失败');
+                    }
+                } catch (error) {
+                    updateGlossaryProgress(0, 'error', '解析响应失败: ' + error.message);
+                }
+            } else {
+                updateGlossaryProgress(0, 'error', '服务器错误: ' + xhr.status);
+            }
+        };
+        
+        // 处理网络错误
+        xhr.onerror = function() {
+            updateGlossaryProgress(0, 'error', '网络连接错误');
+        };
+        
+        // 发送请求
+        xhr.send(formData);
+    }
+    
+    // 开始术语提取进度轮询
+    function startGlossaryProgressPolling() {
+        // 清除可能存在的旧轮询
+        if (glossaryProgressInterval) {
+            clearInterval(glossaryProgressInterval);
+        }
+        
+        // 每1秒查询一次进度
+        glossaryProgressInterval = setInterval(function() {
+            getGlossaryProgress();
+        }, 1000);
+        
+        // 立即查询一次
+        getGlossaryProgress();
+    }
+    
+    // 查询术语提取进度
+    function getGlossaryProgress() {
+        if (!glossaryTaskId) return;
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `/glossary_progress/${glossaryTaskId}`, true);
+        
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    const progressData = JSON.parse(xhr.responseText);
+                    updateGlossaryProgress(progressData.progress, progressData.status, progressData.message);
+                    
+                    // 如果提取完成，停止轮询
+                    if (progressData.status === 'completed') {
+                        clearInterval(glossaryProgressInterval);
+                        // 回填术语表
+                        if (progressData.glossary) {
+                            glossaryTextarea.value = progressData.glossary;
+                        }
+                        // 进度条不自动消失，让用户看到结果
+                    } else if (progressData.status === 'error') {
+                        clearInterval(glossaryProgressInterval);
+                        // 进度条不自动消失，让用户看到错误信息
+                    }
+                } catch (error) {
+                    console.error('解析进度响应失败:', error);
+                }
+            } else {
+                console.error('获取进度失败:', xhr.status);
+            }
+        };
+        
+        xhr.onerror = function() {
+            console.error('获取进度网络错误');
+        };
+        
+        xhr.send();
+    }
+    
+    // 更新术语提取进度显示
+    function updateGlossaryProgress(percentage, status, message) {
+        // 确保百分比在0-100之间
+        const safePercentage = Math.max(0, Math.min(100, percentage));
+        
+        glossaryProgressBar.style.width = safePercentage + '%';
+        glossaryProgressBar.textContent = safePercentage + '%';
+        
+        // 根据状态更新文本
+        let statusText = message;
+        if (!statusText) {
+            switch (status) {
+                case 'processing':
+                    statusText = '正在提取术语...';
+                    break;
+                case 'completed':
+                    statusText = '术语提取完成！';
+                    break;
+                case 'error':
+                    statusText = '提取失败！';
+                    break;
+                default:
+                    statusText = '准备开始...';
+            }
+        }
+        
+        glossaryProgressText.textContent = statusText;
+        
+        // 根据状态更新样式
+        if (status === 'error') {
+            glossaryProgressBar.className = 'progress-bar error';
+        } else if (status === 'completed') {
+            glossaryProgressBar.className = 'progress-bar completed';
+        } else {
+            glossaryProgressBar.className = 'progress-bar processing';
+        }
+        
+        // 根据状态显示或隐藏取消按钮
+        if (status === 'completed' || status === 'error') {
+            glossaryCancelBtn.style.display = 'none';
+        } else {
+            glossaryCancelBtn.style.display = 'inline-block';
+        }
+    }
+    
+    // 取消术语提取任务
+    function cancelGlossaryExtraction() {
+        if (!glossaryTaskId) return;
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/glossary_cancel/${glossaryTaskId}`, true);
+        
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        updateGlossaryProgress(0, 'error', '术语提取已取消');
+                    } else {
+                        updateGlossaryProgress(0, 'error', '取消失败: ' + response.message);
+                    }
+                } catch (error) {
+                    updateGlossaryProgress(0, 'error', '取消失败: 解析响应错误');
+                }
+            } else {
+                updateGlossaryProgress(0, 'error', '取消失败: 服务器错误');
+            }
+            
+            // 清理资源
+            cleanupGlossaryTask();
+        };
+        
+        xhr.onerror = function() {
+            updateGlossaryProgress(0, 'error', '取消失败: 网络错误');
+            cleanupGlossaryTask();
+        };
+        
+        xhr.send();
+    }
+    
+    // 清理术语提取任务资源
+    function cleanupGlossaryTask() {
+        // 清除进度轮询
+        if (glossaryProgressInterval) {
+            clearInterval(glossaryProgressInterval);
+            glossaryProgressInterval = null;
+        }
+        
+        // 重置任务ID
+        glossaryTaskId = null;
+        
+        // 隐藏进度容器
+        glossaryProgressContainer.style.display = 'none';
+    }
+    
+    // 术语提取取消按钮事件处理
+    glossaryCancelBtn.addEventListener('click', function() {
+        if (confirm('确定要取消术语提取吗？')) {
+            cancelGlossaryExtraction();
+        }
+    });
 });

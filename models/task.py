@@ -21,6 +21,7 @@ class Task:
         self.error = None
         self.canceled = False
         self.warnings = []
+        self.glossary = ''
         self.lock = threading.Lock()
     
     def update_progress(self, progress, message=None):
@@ -92,5 +93,6 @@ class Task:
                 'attachments': self.attachments,
                 'error': self.error,
                 'canceled': self.canceled,
-                'warnings': self.warnings
+                'warnings': self.warnings,
+                'glossary': self.glossary
             }
