@@ -270,7 +270,9 @@ def process_glossary_extraction(task, input_filepath, source_lang, target_lang, 
         # 设置任务结果
         task.set_status('completed')
         task.glossary = glossary
-        logger.info(f"任务 {task.task_id} 完成，提取到 {len(glossary.split('\n')) if glossary else 0} 个术语")
+        # 修复f-string中的反斜杠问题
+        line_count = len(glossary.split('\n')) if glossary else 0
+        logger.info(f"任务 {task.task_id} 完成，提取到 {line_count} 个术语")
         
     except Exception as e:
         logger.error(f"术语提取任务失败: {str(e)}")

@@ -43,7 +43,9 @@ class GlossaryService:
                 logger.info("未提取到术语")
                 return ""
             
-            logger.info(f"术语提取完成，提取到 {len(glossary.split('\n'))} 个术语")
+            # 修复f-string中的反斜杠问题
+            line_count = len(glossary.split('\n'))
+            logger.info(f"术语提取完成，提取到 {line_count} 个术语")
             return glossary
             
         except Exception as e:
