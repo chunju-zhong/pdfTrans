@@ -12,7 +12,7 @@ class Config:
     DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
     
     # 上传配置
-    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
     OUTPUT_FOLDER = os.path.join(os.getcwd(), 'outputs')
     

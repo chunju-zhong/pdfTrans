@@ -186,6 +186,29 @@ def extract_glossary():
             source_lang = request.form.get('source_lang', config.DEFAULT_SOURCE_LANGUAGE)
             target_lang = request.form.get('target_lang', config.DEFAULT_TARGET_LANGUAGE)
             translator_type = request.form.get('translator', 'aiping')
+            page_range = request.form.get('page_range', '')
+            doc_type = request.form.get('doc_type', config.DEFAULT_DOC_TYPE)
+            
+            # 解析页码范围
+            pages = None
+            if page_range:
+                try:
+                    # 解析页码范围，支持如"1-3,5,7-9"格式
+                    page_list = []
+                    ranges = page_range.split(',')
+                    for r in ranges:
+                        r = r.strip()
+                        if '-' in r:
+                            start, end = r.split('-')
+                            page_list.extend(range(int(start), int(end) + 1))
+                        else:
+                            page_list.append(int(r))
+                    # 去重并排序
+                    pages = sorted(list(set(page_list)))
+                    logger.info(f"解析页码范围: {page_range} -> {pages}")
+                except Exception as e:
+                    logger.warning(f"解析页码范围失败: {str(e)}")
+                    pages = None
             
             # 保存文件
             filename = secure_filename(file.filename)
@@ -202,7 +225,7 @@ def extract_glossary():
             
             # 启动异步术语提取任务
             threading.Thread(target=process_glossary_extraction, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, pages, doc_type)).start()
             
             # 返回任务ID
             return jsonify({
@@ -244,7 +267,7 @@ def cancel_glossary_task(task_id):
         'message': '术语提取任务已取消'
     })
 
-def process_glossary_extraction(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename):
+def process_glossary_extraction(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, pages=None, doc_type=None):
     """异步术语提取任务处理函数"""
     try:
         logger.info(f"开始处理术语提取任务 {task.task_id}，文件: {filename}")
@@ -254,17 +277,10 @@ def process_glossary_extraction(task, input_filepath, source_lang, target_lang, 
         # 提取术语表
         task.update_progress(30, '正在提取PDF文本...')
         
-        # 调用术语提取服务
+        # 调用术语提取服务，传递task对象用于进度更新
         glossary = glossary_service.extract_glossary_from_pdf(
-            input_filepath, source_lang, target_lang, translator_type
+            input_filepath, source_lang, target_lang, translator_type, pages, doc_type, task
         )
-        
-        task.update_progress(80, '术语提取完成...')
-        
-        # 清理临时文件
-        if os.path.exists(input_filepath):
-            os.remove(input_filepath)
-        logger.info(f"任务 {task.task_id} 已清理临时文件")
         
         task.update_progress(100, '术语提取完成！')
         # 设置任务结果

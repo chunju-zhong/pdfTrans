@@ -547,6 +547,12 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('source_lang', sourceLangSelect.value);
         formData.append('target_lang', targetLangSelect.value);
         formData.append('translator', translatorSelect.value);
+        formData.append('doc_type', document.getElementById('doc_type').value);
+        
+        // 添加页码范围
+        if (!selectAllPagesCheckbox.checked && pageRangeInput.value) {
+            formData.append('page_range', pageRangeInput.value);
+        }
         
         // 异步提取术语
         extractGlossary(formData);
@@ -744,5 +750,63 @@ document.addEventListener('DOMContentLoaded', function() {
         if (confirm('确定要取消术语提取吗？')) {
             cancelGlossaryExtraction();
         }
+    });
+    
+    // 加载术语文件按钮事件处理
+    const loadGlossaryBtn = document.getElementById('load-glossary-btn');
+    const glossaryFileInput = document.getElementById('glossary-file-input');
+    
+    loadGlossaryBtn.addEventListener('click', function() {
+        glossaryFileInput.click();
+    });
+    
+    glossaryFileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    glossaryTextarea.value = content;
+                    alert('术语表加载成功！');
+                } catch (error) {
+                    alert('加载文件失败：' + error.message);
+                }
+            };
+            reader.onerror = function() {
+                alert('读取文件失败，请重试');
+            };
+            reader.readAsText(file);
+        }
+        // 重置文件输入，以便可以重复选择同一个文件
+        e.target.value = '';
+    });
+    
+    // 保存术语到文件按钮事件处理
+    const saveGlossaryBtn = document.getElementById('save-glossary-btn');
+    
+    saveGlossaryBtn.addEventListener('click', function() {
+        const content = glossaryTextarea.value;
+        if (!content.trim()) {
+            alert('术语表为空，没有内容可保存');
+            return;
+        }
+        
+        // 创建Blob对象
+        const blob = new Blob([content], { type: 'text/plain' });
+        
+        // 创建下载链接
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'glossary.txt';
+        a.click();
+        
+        // 释放URL对象
+        setTimeout(function() {
+            URL.revokeObjectURL(url);
+        }, 100);
+        
+        alert('术语表保存成功！');
     });
 });

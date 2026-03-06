@@ -82,11 +82,12 @@ class PdfExtractor:
             logger.error(f"提取PDF元数据时出错: {str(e)}", exc_info=True)
             raise Exception(f"提取PDF元数据时出错: {str(e)}")
     
-    def extract(self, pages=None):
+    def extract(self, pages=None, mark_non_body=True):
         """提取PDF中的文本内容，可以指定页面
 
         Args:
             pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
+            mark_non_body (bool): 是否标记非正文文本块（页眉、页脚、页码），默认为True
             
         Returns:
             PdfExtraction: 包含提取的文本内容和元数据的对象
@@ -154,7 +155,8 @@ class PdfExtractor:
                 pdf_images=pdf_images,
                 pdf_tables=pdf_tables,
                 page_sizes=page_sizes,
-                total_pages=total_pages
+                total_pages=total_pages,
+                mark_non_body=mark_non_body
             )
             
         except Exception as e:
@@ -397,7 +399,7 @@ class PdfExtractor:
         
         return pdf_page
     
-    def _finalize_extraction(self, pdf_pages, pdf_images, pdf_tables, page_sizes, total_pages):
+    def _finalize_extraction(self, pdf_pages, pdf_images, pdf_tables, page_sizes, total_pages, mark_non_body=True):
         """完成提取过程
         
         Args:
@@ -406,6 +408,7 @@ class PdfExtractor:
             pdf_tables (list[PdfTable]): 表格列表
             page_sizes (dict): 页面尺寸字典
             total_pages (int): 总页数
+            mark_non_body (bool): 是否标记非正文文本块，默认为True
             
         Returns:
             PdfExtraction: 提取结果对象
@@ -415,7 +418,7 @@ class PdfExtractor:
         logger.info(f"提取完成: 总文本块={total_text_blocks}, 总表格={len(pdf_tables)}")
         
         # 标记非正文文本块（页眉、页脚、页码）
-        mark_non_body_text(pdf_pages, page_sizes)
+        mark_non_body_text(pdf_pages, page_sizes, mark_non_body)
         
         # 日志记录 - 移到标记非正文文本块之后
         for pdf_page in pdf_pages:

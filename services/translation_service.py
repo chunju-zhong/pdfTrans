@@ -219,7 +219,8 @@ class TranslationService:
         
         # 1.2 解析页码范围
         target_pages = self.parse_page_range(page_range, total_pages)
-        logger.info(f"任务 {task.task_id} 需要翻译的页码: {sorted(target_pages)}")
+        sorted_target_pages = sorted(target_pages)
+        logger.info(f"任务 {task.task_id} 需要翻译的页码: {sorted_target_pages}")
         
         # 1.3 根据页码范围提取PDF文本
         logger.info(f"任务 {task.task_id} 开始提取PDF文本")
@@ -257,7 +258,12 @@ class TranslationService:
         # 收集所有页面的所有块，方便上下文查找
         # 只收集正文块，简化后续流程
         text_blocks = []
-        for page in extracted_content.pages:
+        page_count = len(extracted_content.pages)
+        for i, page in enumerate(extracted_content.pages):
+            # 更新页面处理进度
+            progress = 20 + int((i + 1) / page_count * 10)
+            task.update_progress(progress, f'正在提取第 {page.page_num} 页...')
+            
             # 页面的text_blocks已经是按垂直位置排序的
             for text_block in page.text_blocks:
                 # 只添加正文块
@@ -295,6 +301,13 @@ class TranslationService:
         # 线程安全的结果收集
         merged_translations = []
         results_lock = threading.Lock()
+        
+        # 获取所有唯一的页码
+        unique_pages = set()
+        for block in merged_blocks:
+            unique_pages.add(block.page_num)
+        total_pages = len(unique_pages)
+        processed_pages = set()
         
         # 定义翻译任务函数
         def translate_block(merged_block, index):
@@ -390,7 +403,7 @@ class TranslationService:
                 
                 block_results.append((page_num, translated_text_block))
             
-            return translated_merged_block, block_results
+            return translated_merged_block, block_results, page_num
         
         # 使用线程池并行翻译
         with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
@@ -405,13 +418,21 @@ class TranslationService:
             for future in as_completed(future_to_block):
                 try:
                     block, index = future_to_block[future]
-                    translated_merged_block, block_results = future.result()
+                    translated_merged_block, block_results, page_num = future.result()
                     
                     with results_lock:
                         # 保存结果和原始索引
                         results[index] = (translated_merged_block, block_results)
                         
-                        # 更新进度
+                        # 标记当前页面为已处理
+                        if page_num not in processed_pages:
+                            processed_pages.add(page_num)
+                            processed_page_count = len(processed_pages)
+                            # 更新页面处理进度
+                            progress = 40 + int((processed_page_count / total_pages) * 15)
+                            task.update_progress(progress, f'正在翻译第 {page_num} 页...')
+                        
+                        # 更新块处理进度
                         completed_blocks += 1
                         progress = 40 + int((completed_blocks / len(merged_blocks)) * 30)
                         task.update_progress(progress, f'正在翻译文本: {completed_blocks}/{len(merged_blocks)}')
@@ -463,6 +484,13 @@ class TranslationService:
         merged_translations = []
         # 线程安全的结果收集
         results_lock = threading.Lock()
+        
+        # 获取所有唯一的页码
+        unique_pages = set()
+        for block in text_blocks:
+            unique_pages.add(block.page_num)
+        total_pages = len(unique_pages)
+        processed_pages = set()
         
         # 定义翻译任务函数
         def translate_block(block_info, index):
@@ -549,7 +577,15 @@ class TranslationService:
                         # 保存结果和原始索引
                         results[index] = (page_num, translated_text_block, translated_merged_block)
                         
-                        # 更新进度
+                        # 标记当前页面为已处理
+                        if page_num not in processed_pages:
+                            processed_pages.add(page_num)
+                            processed_page_count = len(processed_pages)
+                            # 更新页面处理进度
+                            progress = 40 + int((processed_page_count / total_pages) * 15)
+                            task.update_progress(progress, f'正在翻译第 {page_num} 页...')
+                        
+                        # 更新块处理进度
                         completed_blocks += 1
                         progress = 40 + int((completed_blocks / total_original_blocks) * 30)
                         task.update_progress(progress, f'正在翻译文本: {completed_blocks}/{total_original_blocks}')
@@ -606,7 +642,10 @@ class TranslationService:
             
             # 收集所有需要翻译的单元格
             cell_tasks = []
+            # 获取所有唯一的页码
+            unique_pages = set()
             for table_idx, table in enumerate(tables):
+                unique_pages.add(table.page_num)
                 for row_idx, row in enumerate(table.cells):
                     for col_idx, cell in enumerate(row):
                         if cell and cell.text:
@@ -617,6 +656,11 @@ class TranslationService:
             # 线程安全的结果存储
             cell_results = {}
             results_lock = threading.Lock()
+            
+            # 获取表格的页面信息
+            table_pages = {}
+            for table_idx, table in enumerate(tables):
+                table_pages[table_idx] = table.page_num
             
             # 定义翻译任务函数
             def translate_cell(table_idx, row_idx, col_idx, cell):
@@ -650,7 +694,7 @@ class TranslationService:
                     row_idx=cell.row_idx,
                     col_idx=cell.col_idx
                 )
-                return table_idx, row_idx, col_idx, translated_cell
+                return table_idx, row_idx, col_idx, translated_cell, table_pages.get(table_idx, 0)
             
             # 使用线程池并行翻译
             with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
@@ -660,9 +704,12 @@ class TranslationService:
                                 for table_idx, row_idx, col_idx, cell in cell_tasks}
                 
                 # 处理翻译结果
+                processed_pages = set()
+                total_pages = len(unique_pages)
+                
                 for future in as_completed(future_to_cell):
                     try:
-                        table_idx, row_idx, col_idx, translated_cell = future.result()
+                        table_idx, row_idx, col_idx, translated_cell, page_num = future.result()
                         
                         with results_lock:
                             # 存储翻译结果
@@ -672,7 +719,15 @@ class TranslationService:
                                 cell_results[table_idx][row_idx] = {}
                             cell_results[table_idx][row_idx][col_idx] = translated_cell
                             
-                            # 更新进度
+                            # 标记当前页面为已处理
+                            if page_num not in processed_pages:
+                                processed_pages.add(page_num)
+                                processed_page_count = len(processed_pages)
+                                # 更新页面处理进度
+                                progress = 70 + int((processed_page_count / total_pages) * 5)
+                                task.update_progress(progress, f'正在翻译表格 - 第 {page_num} 页...')
+                            
+                            # 更新单元格处理进度
                             translated_cells_count += 1
                             if total_cells > 0:
                                 progress = 70 + int((translated_cells_count / total_cells) * 10)
