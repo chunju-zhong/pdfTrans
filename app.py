@@ -57,8 +57,21 @@ def translate():
             glossary = request.form.get('glossary', '')
             page_range = request.form.get('page_range', '')
             output_format = request.form.get('output_format', 'pdf')
-            semantic_merge = request.form.get('semantic_merge', 'on') == 'on'
+            semantic_merge = request.form.get('semantic_merge', '') == 'on'
             use_llm_merging = request.form.get('use_llm_merging', '') == 'on'
+            chapter_split = request.form.get('chapter_split', '') == 'on'
+            
+            # 打印所有参数值
+            logger.info(f"前端传递的参数值:")
+            logger.info(f"  source_lang: {source_lang}")
+            logger.info(f"  target_lang: {target_lang}")
+            logger.info(f"  translator_type: {translator_type}")
+            logger.info(f"  doc_type: {doc_type}")
+            logger.info(f"  page_range: {page_range}")
+            logger.info(f"  output_format: {output_format}")
+            logger.info(f"  semantic_merge: {semantic_merge}")
+            logger.info(f"  use_llm_merging: {use_llm_merging}")
+            logger.info(f"  chapter_split: {chapter_split}")
             
             # 保存文件（在主线程中完成）
             filename = secure_filename(file.filename)
@@ -75,7 +88,7 @@ def translate():
             
             # 启动异步翻译任务，传递文件路径、unique_id和filename
             threading.Thread(target=translation_service.process_translation, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge, use_llm_merging)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge, use_llm_merging, chapter_split)).start()
             
             # 返回任务ID
             return jsonify({

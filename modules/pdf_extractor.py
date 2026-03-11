@@ -10,6 +10,7 @@ from .extractors import (
     analyze_text_block_style,
     update_text_block_style
 )
+from .chapter_identifier import ChapterIdentifier
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class PdfExtractor:
         self.pdf_path = pdf_path
         self.metadata = None
         self.total_pages = 0
+        self.chapter_identifier = ChapterIdentifier()
         
         if pdf_path:
             self.metadata = self.get_metadata()
@@ -82,12 +84,29 @@ class PdfExtractor:
             logger.error(f"提取PDF元数据时出错: {str(e)}", exc_info=True)
             raise Exception(f"提取PDF元数据时出错: {str(e)}")
     
-    def extract(self, pages=None, mark_non_body=True):
+    def get_chapters(self):
+        """获取PDF文档的章节信息
+
+        Returns:
+            list: 章节列表
+        """
+        return self.chapter_identifier.get_chapters()
+    
+    def has_chapters(self):
+        """检查PDF文档是否有章节信息
+
+        Returns:
+            bool: 是否有章节信息
+        """
+        return self.chapter_identifier.has_chapters()
+    
+    def extract(self, pages=None, mark_non_body=True, chapter_split=True):
         """提取PDF中的文本内容，可以指定页面
 
         Args:
             pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
             mark_non_body (bool): 是否标记非正文文本块（页眉、页脚、页码），默认为True
+            chapter_split (bool): 是否提取章节信息，默认为True
             
         Returns:
             PdfExtraction: 包含提取的文本内容和元数据的对象
@@ -97,6 +116,7 @@ class PdfExtractor:
                     - text_blocks (list[TextBlock]): 文本块列表，按垂直位置从上到下排序
                 - tables (list[PdfTable]): 提取的表格列表
         """
+        logger.info(f"PdfExtractor.extract方法接收到的chapter_split值: {chapter_split}")
         if not self.pdf_path:
             raise ValueError("PDF文件路径不能为空")
         
@@ -118,6 +138,13 @@ class PdfExtractor:
         
         try:
             logger.info(f"开始提取PDF: {self.pdf_path}")
+            
+            # 提取章节信息
+            logger.info("重置章节信息")
+            self.chapter_identifier.reset()
+            if chapter_split:
+                self.chapter_identifier.extract_bookmarks(self.pdf_path)
+                logger.info("已提取章节信息")
             
             # 先提取表格
             pdf_tables, page_tables = self.extract_tables(pages)
@@ -150,7 +177,7 @@ class PdfExtractor:
                         page_sizes[current_page_num] = page_size
             
             # 完成提取过程
-            return self._finalize_extraction(
+            extraction_result = self._finalize_extraction(
                 pdf_pages=pdf_pages,
                 pdf_images=pdf_images,
                 pdf_tables=pdf_tables,
@@ -158,6 +185,24 @@ class PdfExtractor:
                 total_pages=total_pages,
                 mark_non_body=mark_non_body
             )
+            
+            # 关联文本块、表格和图像到章节
+            if self.chapter_identifier.has_chapters():
+                # 关联文本块
+                all_text_blocks = []
+                for page in extraction_result.pages:
+                    all_text_blocks.extend(page.text_blocks)
+                self.chapter_identifier.associate_text_blocks(all_text_blocks)
+                
+                # 关联表格
+                if extraction_result.tables:
+                    self.chapter_identifier.associate_tables(extraction_result.tables)
+                
+                # 关联图像
+                if extraction_result.images:
+                    self.chapter_identifier.associate_images(extraction_result.images)
+            
+            return extraction_result
             
         except Exception as e:
             logger.error(f"提取PDF文本时出错: {str(e)}", exc_info=True)

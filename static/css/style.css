@@ -135,6 +135,30 @@ input[type="text"]:focus {
     transition: all 0.3s;
 }
 
+/* 禁用按钮样式 */
+.btn:disabled {
+    background-color: #ccc;
+    color: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-primary:disabled {
+    background-color: #ccc;
+    color: #666;
+}
+
+.btn-success:disabled {
+    background-color: #ccc;
+    color: #666;
+}
+
+.btn-cancel:disabled {
+    background-color: #ccc;
+    color: #666;
+}
+
 .btn-primary {
     background-color: #3498db;
     color: #fff;

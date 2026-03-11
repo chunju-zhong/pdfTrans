@@ -28,6 +28,7 @@ class MergedBlock:
             self.bold = first_block.bold
             self.italic = first_block.italic
             self.page_num = first_block.page_num
+            
         else:
             # 默认值
             self.font = ""

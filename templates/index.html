@@ -123,6 +123,14 @@ autonomous problem-solving: 自主问题解决</textarea>
                 </select>
             </div>
             
+            <div class="form-group" id="chapter-split-option">
+                <label class="checkbox-option">
+                    <input type="checkbox" id="chapter_split" name="chapter_split" checked>
+                    按章节拆分Markdown
+                </label>
+                <div class="form-hint">启用后会按PDF章节结构拆分生成多个Markdown文件</div>
+            </div>
+            
             <div class="form-group">
                 <label class="checkbox-option">
                     <input type="checkbox" id="semantic_merge" name="semantic_merge" checked>
@@ -140,7 +148,7 @@ autonomous problem-solving: 自主问题解决</textarea>
             </div>
             
             <div class="form-group">
-                <button type="submit" class="btn btn-primary">开始翻译</button>
+                <button type="submit" id="start-translation-btn" class="btn btn-primary">开始翻译</button>
             </div>
         </form>
         

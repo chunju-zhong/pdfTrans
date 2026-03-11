@@ -191,17 +191,19 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 完成，输出文件: {output_filename}")
         return output_filename
 
-    def extract_pdf_content(self, task, input_filepath, page_range):
-        """提取PDF文本内容
-
+    def extract_pdf_content(self, task, input_filepath, page_range, chapter_split=True):
+        """提取PDF内容
+        
         Args:
             task: 任务对象
             input_filepath: 输入文件路径
             page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
+            chapter_split: 是否提取章节信息 (默认: True)
 
         Returns:
-            tuple: (text_blocks, tables, extracted_images)
+            tuple: (text_blocks, tables, extracted_images, chapters)
         """
+        logger.info(f"任务 {task.task_id} extract_pdf_content方法接收到的chapter_split值: {chapter_split}")
         task.update_progress(20, '正在提取PDF文本...')
         
         # 1.1 先获取总页数
@@ -224,8 +226,7 @@ class TranslationService:
         
         # 1.3 根据页码范围提取PDF文本
         logger.info(f"任务 {task.task_id} 开始提取PDF文本")
-        pdf_extractor = PdfExtractor(input_filepath)
-        extracted_content = pdf_extractor.extract(pages=list(target_pages))
+        extracted_content = pdf_extractor.extract(pages=list(target_pages), chapter_split=chapter_split)
         logger.info(f"任务 {task.task_id} PDF文本提取完成")
         
         # 保存提取的图像信息
@@ -270,12 +271,20 @@ class TranslationService:
                 if text_block.is_body_text:
                     text_blocks.append(text_block)
         
-        if not text_blocks:
+        if not text_blocks or len(text_blocks) <= 0:
             logger.warning(f"任务 {task.task_id} 没有找到需要翻译的文本块")
             task.update_progress(100, '没有找到需要翻译的文本块')
             return None
         
-        return text_blocks, tables, extracted_images
+        # 获取章节信息
+        chapters = []
+        if chapter_split and hasattr(pdf_extractor, 'get_chapters'):
+            chapters = pdf_extractor.get_chapters()
+            logger.info(f"任务 {task.task_id} 获取到 {len(chapters)} 个章节")
+        elif not chapter_split:
+            logger.info(f"任务 {task.task_id} 未开启章节拆分，跳过章节提取")
+        
+        return text_blocks, tables, extracted_images, chapters
 
 
     def process_merged_blocks(self, task, merged_blocks, translator, source_lang, target_lang, doc_type, glossary):
@@ -389,6 +398,11 @@ class TranslationService:
                     block_type=text_block.block_type,
                     page_num=page_num
                 )
+                
+                # 复制所有其他属性（包括章节信息）
+                for attr_name, attr_value in vars(text_block).items():
+                    if attr_name not in ['block_no', 'block_text', 'block_bbox', 'block_type', 'page_num']:
+                        setattr(translated_text_block, attr_name, attr_value)
                 
                 # 更新样式信息 - 使用每个拆分块的原始样式
                 translated_text_block.update_style(
@@ -547,6 +561,11 @@ class TranslationService:
                 bbox=text_block.block_bbox,
                 block_type=text_block.block_type
             )
+            
+            # 复制所有其他属性（包括章节信息）
+            for attr_name, attr_value in vars(text_block).items():
+                if attr_name not in ['block_no', 'block_text', 'block_bbox', 'block_type']:
+                    setattr(translated_text_block, attr_name, attr_value)
             
             # 更新样式信息
             translated_text_block.update_style(
@@ -788,7 +807,7 @@ class TranslationService:
         
         return translated_tables
 
-    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping'):
+    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True):
         """生成输出文件
 
         Args:
@@ -801,6 +820,7 @@ class TranslationService:
             extracted_images: 提取的图像
             target_lang: 目标语言
             translator_type: 翻译器类型（aiping/silicon_flow）
+            chapter_split: 是否按章节拆分Markdown (默认: True)
 
         Returns:
             list: 输出文件名列表
@@ -880,10 +900,18 @@ class TranslationService:
             for i, image in enumerate(extracted_images):
                 logger.info(f"任务 {task.task_id} 传递图像 {i+1}: 页码={image.page_num}, 路径={image.image_path}, 边界框={image.bbox}")
             
+            # 使用传入的章节信息
+            logger.info(f"任务 {task.task_id} 接收到 {len(chapters) if chapters else 0} 个章节，章节拆分: {chapter_split}")
+            
             # 生成翻译后的Markdown文档
             try:
                 # 使用unique_id作为doc_id，确保每个文档有独立的图像目录
-                markdown_result = markdown_generator.generate_markdown(translated_content, extracted_images, md_filepath, target_lang, doc_id=unique_id)
+                # 根据chapter_split参数决定是否传递章节信息
+                markdown_result = markdown_generator.generate_markdown(
+                    translated_content, extracted_images, md_filepath, target_lang, 
+                    doc_id=unique_id, 
+                    chapters=chapters if chapters and len(chapters) > 0 else None
+                )
                 formatted_text = markdown_result.content
                 
                 # 检查是否被截断
@@ -896,26 +924,54 @@ class TranslationService:
                         "finish_reason": markdown_result.finish_reason
                     })
                 
-                logger.info(f"任务 {task.task_id} Markdown文档生成完成，输出文件: {md_filename}")
-                
-                # 创建包含Markdown文件和当前文档图像目录的zip文件
-                zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
-                zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
-                
-                # 检查是否存在当前文档的图像目录
-                images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
-                directories_to_include = []
-                if os.path.exists(images_dir):
-                    directories_to_include.append(images_dir)
-                
-                # 创建zip文件
-                create_zip(zip_filepath, [md_filepath], directories_to_include)
-                logger.info(f"任务 {task.task_id} Markdown压缩文件生成完成，输出文件: {zip_filename}")
-                
-                # 添加zip文件到输出文件列表
-                output_files.append(zip_filename)
+                # 构建输出文件列表
+                if chapter_split and chapters and len(chapters) > 0:
+                    # 如果开启章节拆分且有章节信息，查找生成的章节文件
+                    import glob
+                    chapter_files = glob.glob(os.path.join(config.OUTPUT_FOLDER, f"*.md"))
+                    logger.info(f"找到的MD文件: {[os.path.basename(f) for f in chapter_files]}")
+                    # 过滤出章节文件
+                    chapter_files = [f for f in chapter_files if os.path.basename(f) != md_filename]
+                    logger.info(f"过滤后的章节文件: {[os.path.basename(f) for f in chapter_files]}")
+                    
+                    # 创建包含所有Markdown文件和图像目录的zip文件
+                    zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
+                    zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
+                    
+                    # 检查是否存在当前文档的图像目录
+                    images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
+                    directories_to_include = []
+                    if os.path.exists(images_dir):
+                        directories_to_include.append(images_dir)
+                    
+                    # 创建zip文件
+                    create_zip(zip_filepath, chapter_files, directories_to_include)
+                    logger.info(f"任务 {task.task_id} 章节Markdown压缩文件生成完成，输出文件: {zip_filename}")
+                    
+                    # 添加zip文件到输出文件列表
+                    output_files.append(zip_filename)
+                else:
+                    logger.info(f"任务 {task.task_id} Markdown文档生成完成，输出文件: {md_filename}")
+                    
+                    # 创建包含Markdown文件和当前文档图像目录的zip文件
+                    zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
+                    zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
+                    
+                    # 检查是否存在当前文档的图像目录
+                    images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
+                    directories_to_include = []
+                    if os.path.exists(images_dir):
+                        directories_to_include.append(images_dir)
+                    
+                    # 创建zip文件
+                    create_zip(zip_filepath, [md_filepath], directories_to_include)
+                    logger.info(f"任务 {task.task_id} Markdown压缩文件生成完成，输出文件: {zip_filename}")
+                    
+                    # 添加zip文件到输出文件列表
+                    output_files.append(zip_filename)
                 
                 # 清理临时图像目录
+                images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
                 if os.path.exists(images_dir):
                     import shutil
                     shutil.rmtree(images_dir)
@@ -950,7 +1006,7 @@ class TranslationService:
             remove_file(output_filepath)
             logger.info(f"任务 {task.task_id} 已清理输出文件")
 
-    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False):
+    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False, chapter_split=True):
         """异步翻译任务处理函数
 
         Args:
@@ -967,9 +1023,11 @@ class TranslationService:
             output_format: 输出格式，可选值: "pdf", "docx", "both"
             semantic_merge: 是否启用语义块合并 (默认: True)
             use_llm_merging: 是否使用大模型进行语义块合并 (默认: True)
+            chapter_split: 是否按章节拆分Markdown (默认: True)
         """
         try:
             logger.info(f"开始处理任务 {task.task_id}，文件: {filename}")
+            logger.info(f"后端接收到的chapter_split值: {chapter_split}")
             # 更新任务状态为处理中
             task.set_status('processing')
             
@@ -978,12 +1036,27 @@ class TranslationService:
                 self.handle_same_language(task, input_filepath, unique_id, filename, page_range)
                 return
             
+            # 清理输出目录中的旧文件
+            if os.path.exists(config.OUTPUT_FOLDER):
+                for file_name in os.listdir(config.OUTPUT_FOLDER):
+                    file_path = os.path.join(config.OUTPUT_FOLDER, file_name)
+                    if os.path.isfile(file_path):
+                        # 清理所有类型的输出文件
+                        if file_path.endswith(('.pdf', '.docx', '.md', '.zip')):
+                            os.remove(file_path)
+                            logger.info(f"清理旧输出文件: {file_path}")
+                    elif os.path.isdir(file_path) and file_name.startswith('images_'):
+                        # 清理图像目录
+                        shutil.rmtree(file_path)
+                        logger.info(f"清理旧图像目录: {file_path}")
+                logger.info("输出目录清理完成")
+            
             # 提取PDF内容
-            extract_result = self.extract_pdf_content(task, input_filepath, page_range)
+            extract_result = self.extract_pdf_content(task, input_filepath, page_range, chapter_split)
             if not extract_result:
                 return
             
-            text_blocks, tables, extracted_images = extract_result
+            text_blocks, tables, extracted_images, chapters = extract_result
             
             task.update_progress(30, '正在创建翻译器...')
             
@@ -1094,7 +1167,7 @@ class TranslationService:
             
             # 生成输出文件
             output_files = self.generate_output_files(
-                task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type
+                task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split
             )
             
             if task.is_canceled():

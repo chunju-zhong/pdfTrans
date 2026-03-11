@@ -96,6 +96,11 @@ class PdfTable:
         self.bbox = bbox
         self.row_heights = row_heights or []
         self.col_widths = col_widths or []
+        # 章节信息
+        self.chapter_id = None  # 章节ID
+        self.chapter_title = None  # 章节标题
+        self.chapter_level = 0  # 章节层级
+        self.chapter_number = None  # 章节编号
     
     def to_dict(self):
         """转换为字典格式
@@ -117,7 +122,11 @@ class PdfTable:
             'cells': cells_dict,
             'bbox': self.bbox,
             'row_heights': self.row_heights,
-            'col_widths': self.col_widths
+            'col_widths': self.col_widths,
+            'chapter_id': self.chapter_id,
+            'chapter_title': self.chapter_title,
+            'chapter_level': self.chapter_level,
+            'chapter_number': self.chapter_number
         }
 
 
@@ -140,6 +149,11 @@ class PdfImage:
         self.image_idx = image_idx
         self.image_path = image_path
         self.bbox = bbox
+        # 章节信息
+        self.chapter_id = None  # 章节ID
+        self.chapter_title = None  # 章节标题
+        self.chapter_level = 0  # 章节层级
+        self.chapter_number = None  # 章节编号
     
     def to_dict(self):
         """转换为字典格式
@@ -151,7 +165,11 @@ class PdfImage:
             'page_num': self.page_num,
             'image_idx': self.image_idx,
             'image_path': self.image_path,
-            'bbox': self.bbox
+            'bbox': self.bbox,
+            'chapter_id': self.chapter_id,
+            'chapter_title': self.chapter_title,
+            'chapter_level': self.chapter_level,
+            'chapter_number': self.chapter_number
         }
 
 

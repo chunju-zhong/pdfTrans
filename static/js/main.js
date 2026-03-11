@@ -19,14 +19,23 @@ document.addEventListener('DOMContentLoaded', function() {
     let translationTaskId = null;
     let currentTotalPages = 0;
     
+    // 开始翻译按钮
+    const startTranslationBtn = document.getElementById('start-translation-btn');
+    
     // 表单提交事件处理
     form.addEventListener('submit', function(e) {
         // 阻止表单默认提交行为
         e.preventDefault();
         
+        // 禁用开始翻译按钮
+        startTranslationBtn.disabled = true;
+        
         // 显示进度容器，隐藏结果容器
         progressContainer.style.display = 'block';
         resultContainer.style.display = 'none';
+        
+        // 显示取消翻译按钮
+        cancelBtn.style.display = 'inline-block';
         
         // 初始化进度
         progressBar.style.width = '0%';
@@ -39,6 +48,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // 如果全选，则不传递page_range参数或传递空值
         if (selectAllPagesCheckbox.checked) {
             formData.delete('page_range');
+        }
+        
+        // 如果按章节拆分选项被隐藏，则不传递chapter_split参数
+        if (chapterSplitOption.style.display === 'none') {
+            formData.delete('chapter_split');
         }
         
         // 异步提交表单
@@ -229,6 +243,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // 根据状态更新样式
         if (status === 'error') {
             progressBar.className = 'progress-bar error';
+            // 重新启用开始翻译按钮
+            startTranslationBtn.disabled = false;
+            // 隐藏取消翻译按钮
+            cancelBtn.style.display = 'none';
         } else if (status === 'completed') {
             progressBar.className = 'progress-bar completed';
         } else {
@@ -334,6 +352,12 @@ document.addEventListener('DOMContentLoaded', function() {
             resultMessage.textContent = '您的文件已翻译完成，点击下方链接下载：';
         }
         
+        // 重新启用开始翻译按钮
+        startTranslationBtn.disabled = false;
+        
+        // 隐藏取消翻译按钮
+        cancelBtn.style.display = 'none';
+        
         // 显示结果容器
         resultContainer.style.display = 'block';
     }
@@ -383,6 +407,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 重置任务ID
         translationTaskId = null;
+        
+        // 重新启用开始翻译按钮
+        startTranslationBtn.disabled = false;
     }
     
     // 重置表单和进度
@@ -505,6 +532,33 @@ document.addEventListener('DOMContentLoaded', function() {
     // 语义块合并开关变化事件处理
     semanticMergeCheckbox.addEventListener('change', function(e) {
         updateLlmMergingOptionVisibility();
+    });
+    
+    // 输出格式相关元素
+    const outputFormatSelect = document.getElementById('output_format');
+    const chapterSplitOption = document.getElementById('chapter-split-option'); // 按章节拆分Markdown选项的父容器
+    
+    // 更新按章节拆分选项的可见性
+    function updateChapterSplitOptionVisibility() {
+        const selectedFormat = outputFormatSelect.value;
+        // 检查输出格式是否包含Markdown
+        const includesMarkdown = selectedFormat === 'md' || selectedFormat === 'all';
+        
+        if (includesMarkdown) {
+            chapterSplitOption.style.display = 'block';
+        } else {
+            chapterSplitOption.style.display = 'none';
+            // 当选项被隐藏时，取消勾选复选框
+            document.getElementById('chapter_split').checked = false;
+        }
+    }
+    
+    // 初始调用，设置正确的显示状态
+    updateChapterSplitOptionVisibility();
+    
+    // 输出格式变化事件处理
+    outputFormatSelect.addEventListener('change', function(e) {
+        updateChapterSplitOptionVisibility();
     });
     
     // 取消按钮事件处理
