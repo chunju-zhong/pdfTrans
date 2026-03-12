@@ -227,6 +227,31 @@ MIT License
 
 ## 更新日志
 
+### 2026-03-12
+- 实现语义块合并功能优化：
+  - 优化 `merge_semantic_blocks` 函数，添加垂直距离检查（阈值：10单位）
+  - 改进句子延续判断逻辑，支持中英文文本
+  - 增加章节信息处理，确保同章节的文本块正确合并
+  - 修复 `merge_semantic_blocks_with_llm` 函数，添加章节信息支持
+  - 调整批量处理大小为10，优化性能
+- 实现Markdown生成功能改进：
+  - 优化章节内容组织，使用合并块替代原始文本块
+  - 实现并行章节Markdown生成，提高处理速度
+  - 改进结果对象，添加章节级别的成功/失败状态和警告信息
+  - 修复章节索引生成逻辑
+- 修复函数参数名：
+  - 将 `chapter_split` 参数重命名为 `extract_chapter`，提高代码可读性
+  - 更新相关函数调用，确保参数传递正确
+- 运行回归测试：
+  - 执行完整的测试套件，验证代码变更不破坏现有功能
+  - 修复测试用例，确保所有测试都通过
+- 相关文件：
+  - `utils/text_processing.py`
+  - `modules/markdown_generator.py`
+  - `modules/pdf_extractor.py`
+  - `services/translation_service.py`
+  - `tests/test_title_body_separation.py`
+
 ### 2026-03-11
 - 实现章节Markdown生成功能优化：
   - 修复章节映射逻辑，确保所有页码都能正确关联到对应的章节

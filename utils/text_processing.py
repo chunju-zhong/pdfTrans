@@ -21,7 +21,13 @@ def _is_sentence_continuation(curr_text):
     if stripped_text[0] in (',', ';', '-', '—', '、'):
         return True
     
-    return False
+    # 检查是否以大写字母开头（英语新句子）
+    if stripped_text[0].isupper():
+        return False
+    
+    # 对于中文文本，默认视为延续
+    # 因为中文句子没有大小写区分，无法通过首字母大小写判断
+    return True
 
 def merge_semantic_blocks(text_blocks):
     """按语义合并文本块
@@ -62,17 +68,25 @@ def merge_semantic_blocks(text_blocks):
         max_width=first_width,  # 初始化为第一个块的宽度
         max_height=first_height  # 初始化为第一个块的高度
     )
+    # 记录当前合并块的章节信息
+    current_chapter_id = getattr(first_text_block, 'chapter_id', None)
     
     for i in range(1, len(text_blocks)):
         # 通过索引i-1直接判断上一块（已按垂直位置排序）
-        # prev_block_info = all_blocks[i-1]  # 上一块信息
+        prev_block_info = text_blocks[i-1]  # 上一块信息
         curr_block_info = text_blocks[i]    # 当前块信息
         curr_text_block = curr_block_info
+        prev_text_block = prev_block_info
+        
+        # 获取当前块的章节信息
+        curr_chapter_id = getattr(curr_text_block, 'chapter_id', None)
+        curr_chapter_title = getattr(curr_text_block, 'chapter_title', None)
         
         # 位置相邻检查（垂直距离小于阈值）
-        # prev_bbox = prev_text_block.block_bbox
+        prev_bbox = prev_text_block.block_bbox
         curr_bbox = curr_text_block.block_bbox
-        # vertical_distance = curr_bbox[1] - prev_bbox[3]  # y0 - previous y1
+        vertical_distance = curr_bbox[1] - prev_bbox[3]  # y0 - previous y1
+        is_vertically_adjacent = vertical_distance < 10  # 阈值设为10
         
         # 内容完整检查（前一块不是完整句子结束）
         prev_merged_text = current_merged.block_text
@@ -81,9 +95,73 @@ def merge_semantic_blocks(text_blocks):
         # 检查当前块是否延续前一个句子
         is_continuation = _is_sentence_continuation(curr_text_block.block_text)
         
-        # 合并条件：
-        # 前一块是不完整句子且当前块是其延续
-        if (not prev_ends_with_sentence and is_continuation):
+        # 检查是否是不同章节
+        is_different_chapter = curr_chapter_id != current_chapter_id
+        
+        # 检查当前块是否为章节标题
+        is_chapter_title = False
+        curr_chapter_title = getattr(curr_text_block, 'chapter_title', None)
+        if curr_chapter_title and curr_text_block.block_text in curr_chapter_title:
+            is_chapter_title = True
+        
+        # 检查当前合并块是否为章节标题
+        current_is_title = False
+        first_block = current_merged.original_blocks[0]
+        first_chapter_title = getattr(first_block, 'chapter_title', None)
+        if first_chapter_title and first_block.block_text in first_chapter_title:
+            current_is_title = True
+        
+        # 检查是否需要开始新的合并块
+        # 1. 如果当前块是章节标题，且当前合并块不是标题，则结束当前合并块
+        # 2. 如果当前块不是章节标题，且当前合并块是标题，则结束当前合并块
+        # 3. 如果是不同章节，则结束当前合并块
+        # 4. 如果不满足合并条件，则结束当前合并块
+        should_end_current_block = False
+        
+        # 检查是否满足合并条件
+        can_merge = False
+        if not is_different_chapter:
+            if current_is_title and is_chapter_title:
+                # 两个标题块合并
+                can_merge = True
+            elif not current_is_title and not is_chapter_title:
+                # 两个正文块合并需要满足：垂直相邻
+                if is_vertically_adjacent:
+                    # 检查当前块是否延续前一个句子
+                    is_continuation = _is_sentence_continuation(curr_text_block.block_text)
+                    # 合并条件：
+                    # 1. 有章节信息，或者
+                    # 2. 前一块不是完整句子结束，或者
+                    # 3. 当前块是句子延续
+                    can_merge = (current_chapter_id is not None) or (not prev_ends_with_sentence) or is_continuation
+        
+        # 检查是否需要结束当前合并块
+        if is_chapter_title and not current_is_title:
+            should_end_current_block = True
+        elif not is_chapter_title and current_is_title:
+            should_end_current_block = True
+        elif is_different_chapter:
+            should_end_current_block = True
+        elif not can_merge:
+            should_end_current_block = True
+        
+        if should_end_current_block:
+            # 保存当前合并块
+            merged_blocks.append(current_merged)
+            block_mapping.append(current_merged.original_blocks)
+            
+            # 开始新的合并块
+            curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
+            curr_height = curr_bbox[3] - curr_bbox[1]  # y1 - y0
+            current_merged = MergedBlock(
+                block_text=curr_text_block.block_text,
+                original_blocks=[curr_block_info],
+                max_width=curr_width,
+                max_height=curr_height
+            )
+            # 更新当前合并块的章节信息
+            current_chapter_id = curr_chapter_id
+        else:
             # 合并块，处理空格
             prev_text = current_merged.block_text
             curr_text = curr_text_block.block_text
@@ -108,20 +186,6 @@ def merge_semantic_blocks(text_blocks):
             # 更新最大宽度和高度
             current_merged.max_width = max(current_merged.max_width, curr_width)
             current_merged.max_height = max(current_merged.max_height, curr_height)
-        else:
-            # 保存当前合并块
-            merged_blocks.append(current_merged)
-            block_mapping.append(current_merged.original_blocks)
-            
-            # 开始新的合并块
-            curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
-            curr_height = curr_bbox[3] - curr_bbox[1]  # y1 - y0
-            current_merged = MergedBlock(
-                block_text=curr_text_block.block_text,
-                original_blocks=[curr_block_info],
-                max_width=curr_width,
-                max_height=curr_height
-            )
     
     # 添加最后一个合并块（如果存在）
     if current_merged is not None:
@@ -618,7 +682,9 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
         max_width=first_width,
         max_height=first_height
     )
-    logger.info(f"初始化第一个合并块: 文本='{current_merged.block_text[:100]}...' (包含 {len(current_merged.original_blocks)} 个原始块)")
+    # 记录当前合并块的章节信息
+    current_chapter_id = getattr(first_block, 'chapter_id', None)
+    logger.info(f"初始化第一个合并块: 文本='{current_merged.block_text[:100]}...' (包含 {len(current_merged.original_blocks)} 个原始块), 章节ID={current_chapter_id}")
 
     # 批量处理参数
     batch_size = 10  # 每批处理10对文本块
@@ -680,13 +746,73 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
                 
                 # 处理批量分析结果
                 for j, (should_merge, curr_block) in enumerate(zip(merge_results, batch_blocks)):
+                    # 获取当前块的章节信息
+                    curr_chapter_id = getattr(curr_block, 'chapter_id', None)
+                    curr_chapter_title = getattr(curr_block, 'chapter_title', None)
+                    # 检查是否是不同章节
+                    is_different_chapter = curr_chapter_id != current_chapter_id
+                    
+                    # 检查当前块是否为章节标题
+                    is_chapter_title = False
+                    if curr_chapter_title and curr_block.block_text in curr_chapter_title:
+                        is_chapter_title = True
+                    
+                    # 检查当前合并块是否为章节标题
+                    current_is_title = False
+                    first_block = current_merged.original_blocks[0]
+                    first_chapter_title = getattr(first_block, 'chapter_title', None)
+                    if first_chapter_title and first_block.block_text in first_chapter_title:
+                        current_is_title = True
+                    
                     # 获取当前文本对的实际文本
                     prev_text = text_pairs[j][0]
                     curr_text = text_pairs[j][1]
                     
-                    logger.info(f"处理文本对 {j+1}: 合并={should_merge}, 块1='{prev_text[:50]}...', 块2='{curr_text[:50]}...'")
+                    logger.info(f"处理文本对 {j+1}: 合并={should_merge}, 块1='{prev_text[:50]}...', 块2='{curr_text[:50]}...', 章节ID={curr_chapter_id}, 是否不同章节={is_different_chapter}, 是否标题={is_chapter_title}")
                     
-                    if should_merge:
+                    # 检查是否需要开始新的合并块
+                    # 1. 如果当前块是章节标题，且当前合并块不是标题，则结束当前合并块
+                    # 2. 如果当前块不是章节标题，且当前合并块是标题，则结束当前合并块
+                    # 3. 如果是不同章节，则结束当前合并块
+                    # 4. 如果不满足合并条件，则结束当前合并块
+                    should_end_current_block = False
+                    
+                    # 检查是否满足合并条件
+                    can_merge = ((should_merge and not is_different_chapter) or 
+                                 (current_is_title and is_chapter_title and not is_different_chapter))
+                    
+                    # 检查是否需要结束当前合并块
+                    if is_chapter_title and not current_is_title:
+                        should_end_current_block = True
+                    elif not is_chapter_title and current_is_title:
+                        should_end_current_block = True
+                    elif is_different_chapter:
+                        should_end_current_block = True
+                    elif not can_merge:
+                        should_end_current_block = True
+                    
+                    if should_end_current_block:
+                        # 保存当前合并块
+                        merged_blocks.append(current_merged)
+                        block_mapping.append(current_merged.original_blocks)
+                        logger.info(f"保存当前合并块: 文本='{current_merged.block_text[:100]}...', 包含 {len(current_merged.original_blocks)} 个原始块")
+
+                        # 开始新的合并块
+                        curr_bbox = curr_block.block_bbox
+                        curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
+                        curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
+
+                        current_merged = MergedBlock(
+                            block_text=curr_block.block_text,
+                            original_blocks=[curr_block],
+                            max_width=curr_width,
+                            max_height=curr_height
+                        )
+                        # 更新当前合并块的章节信息
+                        current_chapter_id = curr_chapter_id
+                        
+                        logger.info(f"开始新合并块: 文本='{current_merged.block_text[:100]}...', 章节ID={current_chapter_id}")
+                    else:
                         # 合并块，处理空格
                         # 使用文本对中的实际文本进行合并，确保与分析时使用的文本一致
                         if current_merged.block_text.endswith(' ') and curr_block.block_text.startswith(' '):
@@ -715,25 +841,6 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
                         
                         logger.info(f"合并块成功: 合并后文本长度={len(current_merged.block_text)}, 包含 {len(current_merged.original_blocks)} 个原始块")
                         logger.debug(f"合并后文本: '{current_merged.block_text[:100]}...'")
-                    else:
-                        # 保存当前合并块
-                        merged_blocks.append(current_merged)
-                        block_mapping.append(current_merged.original_blocks)
-                        logger.info(f"保存当前合并块: 文本='{current_merged.block_text[:100]}...', 包含 {len(current_merged.original_blocks)} 个原始块")
-
-                        # 开始新的合并块
-                        curr_bbox = curr_block.block_bbox
-                        curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
-                        curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
-
-                        current_merged = MergedBlock(
-                            block_text=curr_block.block_text,
-                            original_blocks=[curr_block],
-                            max_width=curr_width,
-                            max_height=curr_height
-                        )
-                        
-                        logger.info(f"开始新合并块: 文本='{current_merged.block_text[:100]}...'")
             except Exception as e:
                 logger.error(f"批量语义分析失败: {str(e)}")
                 # 分析失败时，不回退到单对分析，直接跳过当前批次

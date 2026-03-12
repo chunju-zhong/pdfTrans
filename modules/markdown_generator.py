@@ -2,8 +2,10 @@ import os
 import logging
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 from models.result_types import MarkdownResult, TruncationInfo
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +74,10 @@ class MarkdownGenerator:
 
 1.  **内容结构**：
     * 保持内容不变情况下，以易于阅读为原则组织文章段落结构。
-    * 注意要与原文意思一致，不丢失原文内容，不出现原文没有的内容
+    * 使用不同级别的子标题（如 `##`、`###`）来组织文章脉络，使其逻辑清晰。
+    * 适当使用项目符号（`-`）或编号列表（`1.`）来呈现并列或顺序关系。
     * 适当合并过短段落，适当拆分长分段，保持逻辑清晰
+    * 注意要与原文意思一致，不丢失原文内容，不出现原文没有的内容
 2.  **突出重点 (句子优先)**：
     * 内容要与原文意思一致，不丢失原文内容，不出现原文没有的内容，
     * **有选择性地**使用粗体 (`**`) 来突出你在步骤 A.1 确定的**核心论点**、**关键结论**、**重要定义**或**金句**。
@@ -375,33 +379,15 @@ class MarkdownGenerator:
         full_text = []
         
         for page_num in sorted_pages:
-            # 收集当前页的所有元素
-            page_elements = []
+            # 构建页面内容字典
+            page_content = {
+                'text_blocks': merged_by_page.get(page_num, []),
+                'images': images_by_page.get(page_num, []),
+                'tables': tables_by_page.get(page_num, [])
+            }
             
-            # 添加文本块元素
-            text_blocks = merged_by_page.get(page_num, [])
-            for block_idx, block in enumerate(text_blocks):
-                page_elements.append({
-                    'type': 'text',
-                    'content': block,
-                    'block_idx': block_idx
-                })
-            
-            # 添加图像元素
-            page_images = images_by_page.get(page_num, [])
-            for image_idx, image in enumerate(page_images):
-                page_elements.append({
-                    'type': 'image',
-                    'content': image
-                })
-            
-            # 添加表格元素
-            page_tables = tables_by_page.get(page_num, [])
-            for table_idx, table in enumerate(page_tables):
-                page_elements.append({
-                    'type': 'table',
-                    'content': table
-                })
+            # 组织页面元素
+            page_elements = self._organize_page_elements(page_content)
             
             # 处理元素，按顺序添加到Markdown文档
             self._process_page_elements(page_elements, original_blocks_by_page, page_num, full_text)
@@ -409,24 +395,53 @@ class MarkdownGenerator:
         # 合并文本
         return "\n".join(full_text)
     
-    def _process_page_elements(self, page_elements, original_blocks_by_page, page_num, full_text):
-        """处理页面元素，按顺序添加到Markdown文档
+    def _organize_page_elements(self, page_content):
+        """组织页面元素
+        
+        Args:
+            page_content (dict): 页面内容，包含text_blocks, images, tables
+            
+        Returns:
+            list: 页面元素列表
+        """
+        page_elements = []
+        
+        # 添加文本块元素
+        text_blocks = page_content.get('text_blocks', [])
+        for block_idx, block in enumerate(text_blocks):
+            page_elements.append({
+                'type': 'text',
+                'content': block,
+                'block_idx': block_idx
+            })
+        
+        # 添加图像元素
+        page_images = page_content.get('images', [])
+        for image_idx, image in enumerate(page_images):
+            page_elements.append({
+                'type': 'image',
+                'content': image
+            })
+        
+        # 添加表格元素
+        page_tables = page_content.get('tables', [])
+        for table_idx, table in enumerate(page_tables):
+            page_elements.append({
+                'type': 'table',
+                'content': table
+            })
+        
+        return page_elements
+    
+    def _separate_elements(self, page_elements):
+        """分离文本块和图表元素
         
         Args:
             page_elements (list): 页面元素列表
-            original_blocks_by_page: 按页码组织的原始文本块
-            page_num: 当前页码
-            full_text: 完整文本列表，用于存储生成的Markdown内容
+            
+        Returns:
+            tuple: (text_elements, chart_elements)
         """
-        logger.info(f"开始处理页面元素，元素数量: {len(page_elements)}")
-        
-        # 跟踪已处理的文本块索引
-        processed_blocks = set()
-        
-        # 获取当前页面的原始文本块（已排序）
-        original_blocks = original_blocks_by_page.get(page_num, [])
-        
-        # 分离文本块和图表元素
         text_elements = []
         chart_elements = []
         
@@ -436,7 +451,19 @@ class MarkdownGenerator:
             else:
                 chart_elements.append(element)
         
-        # 处理图表元素，确定它们的插入位置
+        return text_elements, chart_elements
+    
+    def _process_chart_positions(self, chart_elements, original_blocks, text_elements):
+        """处理图表元素位置
+        
+        Args:
+            chart_elements (list): 图表元素列表
+            original_blocks (list): 原始文本块列表
+            text_elements (list): 文本元素列表
+            
+        Returns:
+            list: 图表插入信息列表
+        """
         chart_insertions = []
         for chart in chart_elements:
             if chart['type'] == 'image' or chart['type'] == 'table':
@@ -464,6 +491,30 @@ class MarkdownGenerator:
                     # 如果没有找到合适的合并块，直接添加图表/表格
                     logger.info(f"未找到合并块，将{chart['type']}添加到文档末尾")
                     chart_insertions.append((None, 'end', chart))
+        return chart_insertions
+    
+    def _process_page_elements(self, page_elements, original_blocks_by_page, page_num, full_text):
+        """处理页面元素，按顺序添加到Markdown文档
+        
+        Args:
+            page_elements (list): 页面元素列表
+            original_blocks_by_page: 按页码组织的原始文本块
+            page_num: 当前页码
+            full_text: 完整文本列表，用于存储生成的Markdown内容
+        """
+        logger.info(f"开始处理页面元素，元素数量: {len(page_elements)}")
+        
+        # 跟踪已处理的文本块索引
+        processed_blocks = set()
+        
+        # 获取当前页面的原始文本块（已排序）
+        original_blocks = original_blocks_by_page.get(page_num, [])
+        
+        # 分离文本块和图表元素
+        text_elements, chart_elements = self._separate_elements(page_elements)
+        
+        # 处理图表元素，确定它们的插入位置
+        chart_insertions = self._process_chart_positions(chart_elements, original_blocks, text_elements)
         
         # 处理文本块和图表
         for element in text_elements:
@@ -613,6 +664,25 @@ class MarkdownGenerator:
         logger.info("未找到包含图表前后原始块的块")
         return None, None
     
+    def _organize_original_blocks(self, translated_content):
+        """按页码组织原始文本块
+        
+        Args:
+            translated_content (dict): 翻译后的内容
+            
+        Returns:
+            dict: 按页码组织的原始文本块
+        """
+        original_blocks_by_page = {}
+        if 'blocks' in translated_content:
+            for page in translated_content['blocks']:
+                page_num = page.page_num
+                if page_num not in original_blocks_by_page:
+                    original_blocks_by_page[page_num] = []
+                # 原始文本块已经按垂直位置排序
+                original_blocks_by_page[page_num] = page.text_blocks
+        return original_blocks_by_page
+    
     def generate_markdown(self, translated_content, images, output_md_path, target_lang="zh", doc_id=None, chapters=None):
         """生成翻译后的Markdown文档
 
@@ -650,8 +720,10 @@ class MarkdownGenerator:
             chapters (list, optional): 章节列表. Defaults to None.
             
         Returns:
-            MarkdownResult: 包含生成的Markdown文本和截断信息的结果对象
+            MarkdownGenerationResult: 包含生成结果和警告信息的结果对象
         """
+        from models.result_types import MarkdownGenerationResult
+        
         logger.info(f"开始生成Markdown文档，输出文件: {output_md_path}, 目标语言: {target_lang}")
         
         try:
@@ -673,14 +745,7 @@ class MarkdownGenerator:
             else:
                 logger.info("没有检测到章节信息，生成单个Markdown文件")
                 # 按页码组织原始文本块
-                original_blocks_by_page = {}
-                if 'blocks' in translated_content:
-                    for page in translated_content['blocks']:
-                        page_num = page.page_num
-                        if page_num not in original_blocks_by_page:
-                            original_blocks_by_page[page_num] = []
-                        # 原始文本块已经按垂直位置排序
-                        original_blocks_by_page[page_num] = page.text_blocks
+                original_blocks_by_page = self._organize_original_blocks(translated_content)
                 
                 # 处理所有页面内容
                 combined_text = self._process_pages(translated_content, updated_images, original_blocks_by_page)
@@ -688,29 +753,43 @@ class MarkdownGenerator:
                 # 使用布局模型格式化文本为Markdown
                 markdown_result = self._format_with_layout_model(combined_text)
                 
-                # 检查是否被截断
-                if markdown_result.truncation_info.truncated:
-                    logger.warning(f"布局模型响应被截断: {markdown_result.truncation_info}")
-                
-                
                 # 保存Markdown文件
                 with open(output_md_path, 'w', encoding='utf-8') as f:
                     f.write(markdown_result.content)
                 
                 logger.info(f"Markdown文档生成完成，输出文件: {output_md_path}")
                 
+                # 创建结果对象
+                result = MarkdownGenerationResult(
+                    content=markdown_result.content,
+                    truncation_info=markdown_result.truncation_info
+                )
+                
+                # 检查是否被截断
+                if markdown_result.truncation_info.truncated:
+                    logger.warning(f"布局模型响应被截断: {markdown_result.truncation_info}")
+                    # 添加截断警告
+                    result.add_warning("Markdown生成被截断", {
+                        'truncation_info': {
+                            'token_usage': markdown_result.token_usage,
+                            'finish_reason': markdown_result.finish_reason
+                        }
+                    })
+                
                 # 返回生成的Markdown结果对象
-                return markdown_result
+                return result
             
         except Exception as e:
-            logger.error(f"生成Markdown文档时出错: {str(e)}", exc_info=True)
-            # 返回默认值
-            return MarkdownResult(
-                content="",
-                token_usage={},
-                finish_reason="",
-                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
-            )
+            error_message = str(e)
+            logger.error(f"生成Markdown文档时出错: {error_message}", exc_info=True)
+            # 创建结果对象
+            result = MarkdownGenerationResult()
+            # 添加错误警告
+            result.add_warning("Markdown生成失败", {
+                'error_message': error_message
+            })
+            # 返回结果对象
+            return result
     
     def _process_chapter_pages(self, chapter_pages):
         """处理章节中的所有页面内容
@@ -732,36 +811,26 @@ class MarkdownGenerator:
                 page_content = chapter_pages[page_num]
                 logger.info(f"  处理页码: {page_num}, 文本块数量: {len(page_content['text_blocks'])}, 图像数量: {len(page_content['images'])}, 表格数量: {len(page_content['tables'])}")
                 
-                # 收集当前页的所有元素
-                page_elements = []
+                # 构建页面内容字典
+                page_content = {
+                    'text_blocks': page_content['text_blocks'],
+                    'images': page_content['images'],
+                    'tables': page_content['tables']
+                }
                 
-                # 添加文本块元素
-                text_blocks = page_content['text_blocks']
-                for block_idx, block in enumerate(text_blocks):
-                    page_elements.append({
-                        'type': 'text',
-                        'content': block,
-                        'block_idx': block_idx
-                    })
+                # 组织页面元素
+                page_elements = self._organize_page_elements(page_content)
                 
-                # 添加图像元素
-                page_images = page_content['images']
-                for image_idx, image in enumerate(page_images):
-                    page_elements.append({
-                        'type': 'image',
-                        'content': image
-                    })
+                # 提取原始块列表用于图表定位
+                original_blocks = []
+                for block in page_content['text_blocks']:
+                    original_blocks.extend(block.original_blocks)
                 
-                # 添加表格元素
-                page_tables = page_content['tables']
-                for table_idx, table in enumerate(page_tables):
-                    page_elements.append({
-                        'type': 'table',
-                        'content': table
-                    })
+                # 按垂直位置排序原始块
+                original_blocks.sort(key=lambda b: b.block_bbox[1])
                 
                 # 处理元素，按顺序添加到Markdown文档
-                self._process_page_elements(page_elements, {page_num: text_blocks}, page_num, full_text)
+                self._process_page_elements(page_elements, {page_num: original_blocks}, page_num, full_text)
             
             # 合并文本
             result = "\n".join(full_text)
@@ -771,6 +840,78 @@ class MarkdownGenerator:
             logger.error(f"处理章节页面时出错: {str(e)}", exc_info=True)
             # 返回空字符串，避免整个章节生成失败
             return ""
+    
+    def _collect_all_chapters(self, chapters):
+        """递归收集所有章节，包括子章节
+        
+        Args:
+            chapters (list): 章节列表
+            
+        Returns:
+            list: 所有章节的扁平列表
+        """
+        all_chapters = []
+        for chapter in chapters:
+            all_chapters.append(chapter)
+            if chapter.children:
+                all_chapters.extend(self._collect_all_chapters(chapter.children))
+        return all_chapters
+    
+    def _generate_chapter_file(self, chapter_id, content, output_dir):
+        """生成单个章节的Markdown文件
+        
+        Args:
+            chapter_id (str): 章节ID
+            content (dict): 章节内容
+            output_dir (str): 输出目录
+            
+        Returns:
+            tuple: (file_path, success, error_message, markdown_result)
+                file_path: 生成的文件路径，如果失败则返回None
+                success: 是否生成成功
+                error_message: 错误信息，如果成功则返回None
+                markdown_result: MarkdownResult实例，如果失败则返回None
+        """
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                # 生成文件名
+                filename = f"{content['number']} {content['title']}.md"
+                # 清理文件名中的非法字符
+                filename = self._sanitize_filename(filename)
+                file_path = os.path.join(output_dir, filename)
+                logger.info(f"生成章节文件 (尝试 {attempt+1}/{max_retries}): {file_path}")
+                
+                # 构建章节内容
+                full_text = []
+                
+                # 处理章节中的所有页面内容
+                chapter_text = self._process_chapter_pages(content['pages'])
+                full_text.append(chapter_text)
+                
+                # 合并文本
+                combined_text = "\n".join(full_text)
+                
+                # 使用布局模型格式化文本为Markdown
+                markdown_result = self._format_with_layout_model(combined_text)
+                
+                # 保存Markdown文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(markdown_result.content)
+                
+                logger.info(f"章节Markdown文件生成完成: {file_path}")
+                return file_path, True, None, markdown_result
+            except Exception as e:
+                error_message = str(e)
+                logger.error(f"生成章节 {content['number']} - {content['title']} 的Markdown文件时出错 (尝试 {attempt+1}/{max_retries}): {error_message}", exc_info=True)
+                if attempt < max_retries - 1:
+                    logger.info(f"将在 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"章节 {content['number']} - {content['title']} 生成失败，已达到最大重试次数")
+                    return None, False, error_message, None
     
     def _generate_chapter_markdowns(self, translated_content, images, output_dir, target_lang, doc_id, chapters):
         """按章节生成Markdown文件
@@ -784,20 +925,15 @@ class MarkdownGenerator:
             chapters (list): 章节列表
             
         Returns:
-            MarkdownResult: 包含生成的Markdown文本和截断信息的结果对象
+            MarkdownGenerationResult: 包含生成结果和警告信息的结果对象
         """
+        from models.result_types import MarkdownGenerationResult
+        
         # 按章节组织内容
         chapter_content = {}
         
         # 递归收集所有章节，包括子章节
-        all_chapters = []
-        def collect_chapters(chapters):
-            for chapter in chapters:
-                all_chapters.append(chapter)
-                if chapter.children:
-                    collect_chapters(chapter.children)
-        
-        collect_chapters(chapters)
+        all_chapters = self._collect_all_chapters(chapters)
         logger.info(f"开始按章节组织内容，章节列表长度: {len(all_chapters)}")
         
         # 首先为所有章节创建条目，确保即使章节没有内容也能生成文件
@@ -809,24 +945,33 @@ class MarkdownGenerator:
                 'pages': {}  # 按页码组织内容
             }
         
-        # 组织文本块、图像和表格，按章节和页码分组
-        if 'blocks' in translated_content:
-            logger.info(f"处理文本块，页面数量: {len(translated_content['blocks'])}")
-            for page in translated_content['blocks']:
-                logger.info(f"处理页码: {page.page_num}, 文本块数量: {len(page.text_blocks)}")
-                for text_block in page.text_blocks:
-                    logger.info(f"  文本块: block_no={text_block.block_no}, chapter_id={text_block.chapter_id}, chapter_number={text_block.chapter_number}, chapter_title={text_block.chapter_title}")
-                    if text_block.chapter_id and text_block.chapter_id in chapter_content:
-                        if page.page_num not in chapter_content[text_block.chapter_id]['pages']:
-                            chapter_content[text_block.chapter_id]['pages'][page.page_num] = {
-                                'text_blocks': [],
-                                'images': [],
-                                'tables': []
-                            }
-                        chapter_content[text_block.chapter_id]['pages'][page.page_num]['text_blocks'].append(text_block)
-                        logger.info(f"  文本块添加到章节: {text_block.chapter_number} - {text_block.chapter_title}, 页码: {page.page_num}")
-                    else:
-                        logger.warning(f"  文本块未找到对应章节: chapter_id={text_block.chapter_id}, chapter_content中存在: {text_block.chapter_id in chapter_content}")
+        # 组织合并块、图像和表格，按章节和页码分组
+        if 'merged_translations' in translated_content:
+            logger.info(f"处理合并块，数量: {len(translated_content['merged_translations'])}")
+            for merged_block in translated_content['merged_translations']:
+                # 从合并块的原始块中获取章节信息
+                chapter_id = None
+                if merged_block.original_blocks:
+                    first_block = merged_block.original_blocks[0]
+                    chapter_id = getattr(first_block, 'chapter_id', None)
+                
+                if chapter_id and chapter_id in chapter_content:
+                    # 获取页码信息（从第一个原始块中获取）
+                    page_num = getattr(merged_block, 'page_num', None)
+                    if not page_num and merged_block.original_blocks:
+                        page_num = getattr(merged_block.original_blocks[0], 'page_num', 1)
+                    
+                    if page_num not in chapter_content[chapter_id]['pages']:
+                        chapter_content[chapter_id]['pages'][page_num] = {
+                            'text_blocks': [],
+                            'images': [],
+                            'tables': []
+                        }
+                    # 添加合并块到文本块列表
+                    chapter_content[chapter_id]['pages'][page_num]['text_blocks'].append(merged_block)
+                    logger.info(f"  合并块添加到章节: 章节ID={chapter_id}, 页码: {page_num}")
+                else:
+                    logger.warning(f"  合并块未找到对应章节: chapter_id={chapter_id}, chapter_content中存在: {chapter_id in chapter_content}")
         
         # 组织图像
         for image in images:
@@ -868,49 +1013,76 @@ class MarkdownGenerator:
         # 生成章节Markdown文件
         chapter_files = []
         
-        for chapter_id, content in chapter_content.items():
-            try:
-                # 生成文件名
-                filename = f"{content['number']} {content['title']}.md"
-                # 清理文件名中的非法字符
-                filename = self._sanitize_filename(filename)
-                file_path = os.path.join(output_dir, filename)
-                logger.info(f"生成章节文件: {file_path}")
-                
-                # 构建章节内容
-                full_text = []
-                
-                # 处理章节中的所有页面内容
-                chapter_text = self._process_chapter_pages(content['pages'])
-                full_text.append(chapter_text)
-                
-                # 合并文本
-                combined_text = "\n".join(full_text)
-                
-                # 使用布局模型格式化文本为Markdown
-                markdown_result = self._format_with_layout_model(combined_text)
-                
-                # 保存Markdown文件
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(markdown_result.content)
-                
-                chapter_files.append(file_path)
-                logger.info(f"章节Markdown文件生成完成: {file_path}")
-            except Exception as e:
-                logger.error(f"生成章节 {content['number']} - {content['title']} 的Markdown文件时出错: {str(e)}", exc_info=True)
-                # 继续处理下一个章节，避免整个生成过程失败
+        # 创建结果对象
+        result = MarkdownGenerationResult()
+        
+        # 使用线程池并行生成章节文件
+        with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+            # 提交所有章节生成任务
+            future_to_chapter = {executor.submit(self._generate_chapter_file, chapter_id, content, output_dir): (chapter_id, content)
+                               for chapter_id, content in chapter_content.items()}
+            
+            # 收集所有结果
+            for future in as_completed(future_to_chapter):
+                chapter_id, content = future_to_chapter[future]
+                try:
+                    file_path, success, error_message, markdown_result = future.result()
+                    if success:
+                        chapter_files.append(file_path)
+                        logger.info(f"章节 {content['number']} - {content['title']} 生成成功")
+                        # 添加章节结果
+                        result.add_chapter_result(content['number'], content['title'], True)
+                        # 检查是否有截断警告
+                        if markdown_result and markdown_result.truncated:
+                            warning_message = f"章节 {content['number']} - {content['title']} 的Markdown生成被截断"
+                            result.add_warning(warning_message, {
+                                'chapter_number': content['number'],
+                                'chapter_title': content['title'],
+                                'truncation_info': {
+                                    'token_usage': markdown_result.token_usage,
+                                    'finish_reason': markdown_result.finish_reason
+                                }
+                            })
+                    else:
+                        logger.error(f"章节 {content['number']} - {content['title']} 生成失败: {error_message}")
+                        # 添加章节结果
+                        result.add_chapter_result(content['number'], content['title'], False, error_message)
+                        # 添加警告
+                        warning_message = f"章节 {content['number']} - {content['title']} 生成失败"
+                        result.add_warning(warning_message, {
+                            'chapter_number': content['number'],
+                            'chapter_title': content['title'],
+                            'error_message': error_message
+                        })
+                except Exception as e:
+                    error_message = str(e)
+                    logger.error(f"处理章节 {content['number']} - {content['title']} 时出错: {error_message}", exc_info=True)
+                    # 添加章节结果
+                    result.add_chapter_result(content['number'], content['title'], False, error_message)
+                    # 添加警告
+                    warning_message = f"处理章节 {content['number']} - {content['title']} 时出错"
+                    result.add_warning(warning_message, {
+                        'chapter_number': content['number'],
+                        'chapter_title': content['title'],
+                        'error_message': error_message
+                    })
         
         # 生成章节索引文件
         index_path = os.path.join(output_dir, "章节索引.md")
         self._generate_chapter_index(chapters, chapter_files, index_path)
         
-        # 返回默认结果
-        return MarkdownResult(
-            content="",
-            token_usage={},
-            finish_reason="",
-            truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
-        )
+        # 记录失败的章节
+        failed_chapters = [cr for cr in result.chapter_results if not cr['success']]
+        if failed_chapters:
+            # 构建失败章节的字符串列表
+            failed_chapter_strings = []
+            for cr in failed_chapters:
+                failed_chapter_strings.append(f"{cr['chapter_number']} - {cr['chapter_title']}")
+            # 记录失败的章节
+            logger.warning(f"以下章节生成失败: {', '.join(failed_chapter_strings)}")
+        
+        # 返回结果对象
+        return result
     
     def _sanitize_filename(self, filename):
         """清理文件名中的非法字符
@@ -946,25 +1118,37 @@ class MarkdownGenerator:
         for chapter in chapters:
             chapter_map[chapter.id] = chapter
         
-        # 递归添加章节到索引
-        def add_chapters_to_index(chapters, level=0):
-            for chapter in chapters:
-                indent = "  " * level
-                filename = f"{chapter.number} {chapter.title}.md"
-                filename = self._sanitize_filename(filename)
-                link = f"[{chapter.title}]({filename})"
-                index_content.append(f"{indent}- {link}")
-                
-                if chapter.children:
-                    add_chapters_to_index(chapter.children, level + 1)
-        
-        add_chapters_to_index(chapters)
+        # 使用类方法构建章节索引内容
+        index_content.extend(self._build_chapter_index_content(chapters))
         
         # 保存索引文件
         with open(index_path, 'w', encoding='utf-8') as f:
             f.write("\n".join(index_content))
         
         logger.info(f"章节索引文件生成完成: {index_path}")
+    
+    def _build_chapter_index_content(self, chapters, level=0):
+        """递归构建章节索引内容
+        
+        Args:
+            chapters (list): 章节列表
+            level (int): 当前层级
+            
+        Returns:
+            list: 索引内容行列表
+        """
+        index_lines = []
+        for chapter in chapters:
+            indent = "  " * level
+            filename = f"{chapter.number} {chapter.title}.md"
+            filename = self._sanitize_filename(filename)
+            link = f"[{chapter.title}]({filename})"
+            index_lines.append(f"{indent}- {link}")
+            
+            if chapter.children:
+                index_lines.extend(self._build_chapter_index_content(chapter.children, level + 1))
+        
+        return index_lines
 
 
 class AipingMarkdownGenerator(MarkdownGenerator):

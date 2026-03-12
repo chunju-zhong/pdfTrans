@@ -86,3 +86,54 @@ class MarkdownResult(OpenAIResult):
             truncation_info: Dictionary containing truncation information
         """
         super().__init__(content, token_usage, finish_reason, truncation_info)
+
+
+class MarkdownGenerationResult(Result):
+    """Result class for Markdown generation results, including batch processing.
+    
+    This class is used to return aggregated results from Markdown generation,
+    including both single Markdown and chapter-based Markdown generation.
+    """
+
+    def __init__(self, content="", chapter_results=None, warnings=None, truncation_info=None):
+        """Initialize a MarkdownGenerationResult instance.
+
+        Args:
+            content: The main Markdown content (for single Markdown generation)
+            chapter_results: List of chapter generation results
+            warnings: List of warnings from the generation process
+            truncation_info: TruncationInfo instance containing truncation information
+        """
+        super().__init__(content, truncation_info)
+        self.chapter_results = chapter_results or []
+        self.warnings = warnings or []
+
+    def add_warning(self, message, context=None):
+        """Add a warning to the result.
+
+        Args:
+            message: Warning message
+            context: Additional context information
+        """
+        warning = {
+            'message': message,
+            'context': context or {}
+        }
+        self.warnings.append(warning)
+
+    def add_chapter_result(self, chapter_number, chapter_title, success, error_message=None):
+        """Add a chapter generation result.
+
+        Args:
+            chapter_number: Chapter number
+            chapter_title: Chapter title
+            success: Whether the chapter was generated successfully
+            error_message: Error message if generation failed
+        """
+        chapter_result = {
+            'chapter_number': chapter_number,
+            'chapter_title': chapter_title,
+            'success': success,
+            'error_message': error_message
+        }
+        self.chapter_results.append(chapter_result)

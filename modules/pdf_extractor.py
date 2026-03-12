@@ -100,13 +100,13 @@ class PdfExtractor:
         """
         return self.chapter_identifier.has_chapters()
     
-    def extract(self, pages=None, mark_non_body=True, chapter_split=True):
+    def extract(self, pages=None, mark_non_body=True, extract_chapter=True):
         """提取PDF中的文本内容，可以指定页面
 
         Args:
             pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
             mark_non_body (bool): 是否标记非正文文本块（页眉、页脚、页码），默认为True
-            chapter_split (bool): 是否提取章节信息，默认为True
+            extract_chapter (bool): 是否提取章节信息，默认为True  
             
         Returns:
             PdfExtraction: 包含提取的文本内容和元数据的对象
@@ -116,7 +116,7 @@ class PdfExtractor:
                     - text_blocks (list[TextBlock]): 文本块列表，按垂直位置从上到下排序
                 - tables (list[PdfTable]): 提取的表格列表
         """
-        logger.info(f"PdfExtractor.extract方法接收到的chapter_split值: {chapter_split}")
+        logger.info(f"PdfExtractor.extract方法接收到的extract_chapter值: {extract_chapter}")
         if not self.pdf_path:
             raise ValueError("PDF文件路径不能为空")
         
@@ -142,7 +142,7 @@ class PdfExtractor:
             # 提取章节信息
             logger.info("重置章节信息")
             self.chapter_identifier.reset()
-            if chapter_split:
+            if extract_chapter:
                 self.chapter_identifier.extract_bookmarks(self.pdf_path)
                 logger.info("已提取章节信息")
             

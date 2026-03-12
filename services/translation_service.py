@@ -191,19 +191,19 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 完成，输出文件: {output_filename}")
         return output_filename
 
-    def extract_pdf_content(self, task, input_filepath, page_range, chapter_split=True):
+    def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True):
         """提取PDF内容
         
         Args:
             task: 任务对象
             input_filepath: 输入文件路径
             page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
-            chapter_split: 是否提取章节信息 (默认: True)
+            extract_chapter: 是否提取章节信息 (默认: True)
 
         Returns:
             tuple: (text_blocks, tables, extracted_images, chapters)
         """
-        logger.info(f"任务 {task.task_id} extract_pdf_content方法接收到的chapter_split值: {chapter_split}")
+        logger.info(f"任务 {task.task_id} extract_pdf_content方法接收到的extract_chapter值: {extract_chapter}")
         task.update_progress(20, '正在提取PDF文本...')
         
         # 1.1 先获取总页数
@@ -226,7 +226,7 @@ class TranslationService:
         
         # 1.3 根据页码范围提取PDF文本
         logger.info(f"任务 {task.task_id} 开始提取PDF文本")
-        extracted_content = pdf_extractor.extract(pages=list(target_pages), chapter_split=chapter_split)
+        extracted_content = pdf_extractor.extract(pages=list(target_pages), extract_chapter=extract_chapter)
         logger.info(f"任务 {task.task_id} PDF文本提取完成")
         
         # 保存提取的图像信息
@@ -278,11 +278,11 @@ class TranslationService:
         
         # 获取章节信息
         chapters = []
-        if chapter_split and hasattr(pdf_extractor, 'get_chapters'):
+        if extract_chapter and hasattr(pdf_extractor, 'get_chapters'):
             chapters = pdf_extractor.get_chapters()
             logger.info(f"任务 {task.task_id} 获取到 {len(chapters)} 个章节")
-        elif not chapter_split:
-            logger.info(f"任务 {task.task_id} 未开启章节拆分，跳过章节提取")
+        elif not extract_chapter:
+            logger.info(f"任务 {task.task_id} 跳过章节提取")
         
         return text_blocks, tables, extracted_images, chapters
 
@@ -910,23 +910,20 @@ class TranslationService:
                 markdown_result = markdown_generator.generate_markdown(
                     translated_content, extracted_images, md_filepath, target_lang, 
                     doc_id=unique_id, 
-                    chapters=chapters if chapters and len(chapters) > 0 else None
+                    chapters=chapters if chapter_split and chapters and len(chapters) > 0 else None
                 )
-                formatted_text = markdown_result.content
                 
-                # 检查是否被截断
-                if markdown_result.truncated:
-                    logger.warning(f"任务 {task.task_id} Markdown生成被截断: {markdown_result.truncation_info}")
-                    # 添加警告到任务对象
-                    task.add_warning("Markdown生成被截断", {
-                        "process": "markdown_generation",
-                        "token_usage": markdown_result.token_usage,
-                        "finish_reason": markdown_result.finish_reason
-                    })
+                # 处理返回的MarkdownGenerationResult
+                # 检查是否有警告信息
+                if hasattr(markdown_result, 'warnings') and markdown_result.warnings:
+                    for warning in markdown_result.warnings:
+                        logger.warning(f"任务 {task.task_id} Markdown生成警告: {warning['message']}")
+                        # 添加警告到任务对象
+                        task.add_warning(warning['message'], warning['context'])
                 
                 # 构建输出文件列表
                 if chapter_split and chapters and len(chapters) > 0:
-                    # 如果开启章节拆分且有章节信息，查找生成的章节文件
+                    # 如果开启章节拆分且有章节找生成的章节文件
                     import glob
                     chapter_files = glob.glob(os.path.join(config.OUTPUT_FOLDER, f"*.md"))
                     logger.info(f"找到的MD文件: {[os.path.basename(f) for f in chapter_files]}")
@@ -1052,7 +1049,7 @@ class TranslationService:
                 logger.info("输出目录清理完成")
             
             # 提取PDF内容
-            extract_result = self.extract_pdf_content(task, input_filepath, page_range, chapter_split)
+            extract_result = self.extract_pdf_content(task, input_filepath, page_range)
             if not extract_result:
                 return
             
