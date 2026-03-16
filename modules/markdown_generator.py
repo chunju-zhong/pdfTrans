@@ -73,11 +73,8 @@ class MarkdownGenerator:
 请根据你的内部推理，生成符合以下所有规范的 Markdown 文本：
 
 1.  **内容结构**：
-    * 保持内容不变情况下，以易于阅读为原则组织文章段落结构。
-    * 使用不同级别的子标题（如 `##`、`###`）来组织文章脉络，使其逻辑清晰。
-    * 适当使用项目符号（`-`）或编号列表（`1.`）来呈现并列或顺序关系。
-    * 适当合并过短段落，适当拆分长分段，保持逻辑清晰
-    * 注意要与原文意思一致，不丢失原文内容，不出现原文没有的内容
+    * 适当拆分长分段，保持逻辑清晰
+    * 内容跟原文一致，不丢失原文内容，不出现原文没有的内容
 2.  **突出重点 (句子优先)**：
     * 内容要与原文意思一致，不丢失原文内容，不出现原文没有的内容，
     * **有选择性地**使用粗体 (`**`) 来突出你在步骤 A.1 确定的**核心论点**、**关键结论**、**重要定义**或**金句**。
@@ -462,7 +459,7 @@ class MarkdownGenerator:
             text_elements (list): 文本元素列表
             
         Returns:
-            list: 图表插入信息列表
+            list: 图表插入信息列表，每项为 (merged_block, position, chart, insertion_ratio)
         """
         chart_insertions = []
         for chart in chart_elements:
@@ -474,7 +471,9 @@ class MarkdownGenerator:
                 
                 # 查找图表/表格在原始文本块中的位置
                 before_block, after_block = None, None
+                chart_y = None
                 if hasattr(chart['content'], 'bbox'):
+                    chart_y = chart['content'].bbox[1]
                     # 如果有bbox属性，使用与图像相同的位置查找逻辑
                     logger.info(f"处理{chart['type']}的位置计算: bbox={chart['content'].bbox if hasattr(chart['content'], 'bbox') else 'N/A'}")
                     before_block, after_block = self._find_chart_position(chart['content'], original_blocks)
@@ -482,15 +481,15 @@ class MarkdownGenerator:
                 # 查找包含图表/表格前后原始块的合并块
                 merged_blocks = [e['content'] for e in text_elements]
                 logger.info(f"查找合并块: before_block={before_block.block_no if before_block else None}, after_block={after_block.block_no if after_block else None}")
-                merged_block, position = self._find_merged_block(before_block, after_block, merged_blocks)
+                merged_block, position, is_within, insertion_ratio = self._find_merged_block(before_block, after_block, merged_blocks, chart_y)
                 
                 if merged_block:
-                    logger.info(f"找到合并块: 内容='{merged_block.block_text[:50]}...', 位置={position}")
-                    chart_insertions.append((merged_block, position, chart))
+                    logger.info(f"找到合并块: 内容='{merged_block.block_text[:50]}...', 位置={position}, 是否在合并块内部={is_within}")
+                    chart_insertions.append((merged_block, position, chart, insertion_ratio))
                 else:
                     # 如果没有找到合适的合并块，直接添加图表/表格
                     logger.info(f"未找到合并块，将{chart['type']}添加到文档末尾")
-                    chart_insertions.append((None, 'end', chart))
+                    chart_insertions.append((None, 'end', chart, None))
         return chart_insertions
     
     def _process_page_elements(self, page_elements, original_blocks_by_page, page_num, full_text):
@@ -523,7 +522,7 @@ class MarkdownGenerator:
             
             if block_idx not in processed_blocks:
                 # 检查是否有图表需要插入到当前块之前
-                for merged_block, position, chart in chart_insertions:
+                for merged_block, position, chart, insertion_ratio in chart_insertions:
                     if merged_block == block and position == 'before':
                         # 插入图表到当前块之前
                         if chart['type'] == 'image':
@@ -535,29 +534,42 @@ class MarkdownGenerator:
                             logger.info(f"  插入位置: 文本块内容='{block.block_text[:50]}...'")
                             self._add_table_to_markdown(table, full_text)
                 
-                # 添加文本块
-                logger.info(f"  添加文本块 {block_idx+1}: 内容='{block.block_text[:50]}...'")
-
-                full_text.append(block.block_text)
-                full_text.append("")
-                processed_blocks.add(block_idx)
-                logger.info(f"  文本块 {block_idx+1} 处理完成")
+                # 检查是否有图表需要插入到当前块内部
+                for merged_block, position, chart, insertion_ratio in chart_insertions:
+                    if merged_block == block and position == 'within':
+                        # 在合并块内部插入图表，拆分文本
+                        ratio_str = f"{insertion_ratio:.2f}" if insertion_ratio is not None else "0.5"
+                        logger.info(f"  在合并块内部插入图表，插入点比例: {ratio_str}")
+                        self._insert_element_in_merged_block(block, chart, insertion_ratio, full_text)
+                        processed_blocks.add(block_idx)
+                        logger.info(f"  合并块内部插入完成")
+                        break
                 
-                # 检查是否有图表需要插入到当前块之后
-                for merged_block, position, chart in chart_insertions:
-                    if merged_block == block and position == 'after':
-                        # 插入图表到当前块之后
-                        if chart['type'] == 'image':
-                            logger.info(f"  在文本块之后插入图像: {chart['content'].image_path}")
-                            self._add_image_to_markdown(chart['content'], full_text)
-                        elif chart['type'] == 'table':
-                            table = chart['content']
-                            logger.info(f"  在文本块之后插入表格: 页码={table.page_num}, 表格索引={table.table_idx}")
-                            logger.info(f"  插入位置: 文本块内容='{block.block_text[:50]}...'")
-                            self._add_table_to_markdown(table, full_text)
+                # 如果没有在块内部插入，则正常添加文本块
+                if block_idx not in processed_blocks:
+                    # 添加文本块
+                    logger.info(f"  添加文本块 {block_idx+1}: 内容='{block.block_text[:50]}...'")
+
+                    full_text.append(block.block_text)
+                    full_text.append("")
+                    processed_blocks.add(block_idx)
+                    logger.info(f"  文本块 {block_idx+1} 处理完成")
+                    
+                    # 检查是否有图表需要插入到当前块之后
+                    for merged_block, position, chart, insertion_ratio in chart_insertions:
+                        if merged_block == block and position == 'after':
+                            # 插入图表到当前块之后
+                            if chart['type'] == 'image':
+                                logger.info(f"  在文本块之后插入图像: {chart['content'].image_path}")
+                                self._add_image_to_markdown(chart['content'], full_text)
+                            elif chart['type'] == 'table':
+                                table = chart['content']
+                                logger.info(f"  在文本块之后插入表格: 页码={table.page_num}, 表格索引={table.table_idx}")
+                                logger.info(f"  插入位置: 文本块内容='{block.block_text[:50]}...'")
+                                self._add_table_to_markdown(table, full_text)
         
         # 处理需要添加到文档末尾的图表
-        for merged_block, position, chart in chart_insertions:
+        for merged_block, position, chart, insertion_ratio in chart_insertions:
             if position == 'end':
                 if chart['type'] == 'image':
                     logger.info(f"  在文档末尾插入图像: {chart['content'].image_path}")
@@ -596,6 +608,52 @@ class MarkdownGenerator:
             full_text.append(table_md)
             full_text.append("")
     
+    def _insert_element_in_merged_block(self, merged_block, element, insertion_point, full_text):
+        """在合并块内部插入元素，拆分文本
+        
+        Args:
+            merged_block: 合并块对象
+            element: 要插入的元素
+            insertion_point: 插入点比例（0-1）
+            full_text: 完整文本列表
+        """
+        logger.info(f"拆分合并块，插入点: {insertion_point:.2f}, 合并块内容: '{merged_block.block_text[:50]}...'")
+        
+        text = merged_block.block_text
+        text_length = len(text)
+        
+        # 计算插入位置
+        split_index = int(text_length * insertion_point)
+        
+        # 尝试在单词边界拆分
+        if split_index > 0 and split_index < text_length:
+            while split_index > 0 and text[split_index-1].isalnum():
+                split_index -= 1
+        
+        # 拆分为前后两段
+        text_before = text[:split_index].rstrip()
+        text_after = text[split_index:].lstrip()
+        
+        logger.info(f"拆分结果: 前半部分='{text_before[:30]}...', 后半部分='{text_after[:30]}...'")
+        
+        # 添加前段文本
+        if text_before:
+            full_text.append(text_before)
+            full_text.append("")
+        
+        # 添加元素
+        if element['type'] == 'image':
+            self._add_image_to_markdown(element['content'], full_text)
+            logger.info("添加图像完成")
+        elif element['type'] == 'table':
+            self._add_table_to_markdown(element['content'], full_text)
+            logger.info("添加表格完成")
+        
+        # 添加后段文本
+        if text_after:
+            full_text.append(text_after)
+            full_text.append("")
+    
     def _find_chart_position(self, image, original_blocks):
         """查找图表在原始文本块中的位置
         
@@ -624,16 +682,21 @@ class MarkdownGenerator:
         logger.info(f"图表位置查找完成: before_block={before_block.block_no if before_block else None}, after_block={after_block.block_no if after_block else None}")
         return before_block, after_block
     
-    def _find_merged_block(self, before_block, after_block, merged_blocks):
+    def _find_merged_block(self, before_block, after_block, merged_blocks, chart_y=None):
         """查找包含图表前后原始块的合并块
         
         Args:
             before_block: 图表前的原始块
             after_block: 图表后的原始块
             merged_blocks: 合并块列表或原始文本块列表
+            chart_y: 图表的y坐标（可选），用于计算在合并块内的插入点
             
         Returns:
-            tuple: (merged_block, position) - 包含图表的合并块和位置关系
+            tuple: (merged_block, position, is_within_merged_block, insertion_ratio)
+                - merged_block: 包含图表的合并块
+                - position: 位置关系 ('before', 'after', 'within')
+                - is_within_merged_block: 图表是否位于合并块内部
+                - insertion_ratio: 图表在合并块中的相对位置比例（0-1）
         """
         for block in merged_blocks:
             # 检查是合并块还是原始文本块
@@ -641,28 +704,50 @@ class MarkdownGenerator:
                 # 合并块
                 original_blocks = block.original_blocks
                 original_block_nos = [b.block_no for b in original_blocks]
-                                
+                
+                # 检查before_block和after_block是否都在同一个合并块中
+                before_in_block = before_block and before_block.block_no in original_block_nos
+                after_in_block = after_block and after_block.block_no in original_block_nos
+                
+                if before_in_block and after_in_block:
+                    # 图表位于合并块内部
+                    logger.info(f"图表位于合并块内部: {block.block_text[:50]}...")
+                    
+                    if chart_y is not None:
+                        # 计算插入点比例
+                        merged_start_y = min(b.block_bbox[1] for b in original_blocks)
+                        merged_end_y = max(b.block_bbox[3] for b in original_blocks)
+                        merged_height = merged_end_y - merged_start_y
+                        
+                        if merged_height > 0:
+                            insertion_ratio = (chart_y - merged_start_y) / merged_height
+                            insertion_ratio = max(0.1, min(0.9, insertion_ratio))
+                            logger.info(f"计算合并块内插入点比例: {insertion_ratio:.2f}, 合并块范围: y0={merged_start_y}, y1={merged_end_y}")
+                            return block, 'within', True, insertion_ratio
+                    
+                    return block, 'within', True, 0.5
+                
                 # 检查before_block是否在当前合并块中（使用块编号）
                 if before_block and before_block.block_no in original_block_nos:
                     logger.info(f"找到包含before_block的合并块: {block.block_text[:50]}...")
-                    return block, 'after'  # 图表在before_block之后
+                    return block, 'after', False, None
                 
                 # 检查after_block是否在当前合并块中（使用块编号）
                 if after_block and after_block.block_no in original_block_nos:
                     logger.info(f"找到包含after_block的合并块: {block.block_text[:50]}...")
-                    return block, 'before'  # 图表在after_block之前
+                    return block, 'before', False, None
             else:
                 # 原始文本块
                 if before_block and before_block.block_no == block.block_no:
                     logger.info(f"找到包含before_block的原始文本块: {block.block_text[:50]}...")
-                    return block, 'after'  # 图表在before_block之后
+                    return block, 'after', False, None
                 
                 if after_block and after_block.block_no == block.block_no:
                     logger.info(f"找到包含after_block的原始文本块: {block.block_text[:50]}...")
-                    return block, 'before'  # 图表在after_block之前
+                    return block, 'before', False, None
         
         logger.info("未找到包含图表前后原始块的块")
-        return None, None
+        return None, None, False, None
     
     def _organize_original_blocks(self, translated_content):
         """按页码组织原始文本块
@@ -971,7 +1056,20 @@ class MarkdownGenerator:
                     chapter_content[chapter_id]['pages'][page_num]['text_blocks'].append(merged_block)
                     logger.info(f"  合并块添加到章节: 章节ID={chapter_id}, 页码: {page_num}")
                 else:
-                    logger.warning(f"  合并块未找到对应章节: chapter_id={chapter_id}, chapter_content中存在: {chapter_id in chapter_content}")
+                    # 获取合并块的内容预览
+                    content_preview = ''
+                    if hasattr(merged_block, 'block_text'):
+                        content_preview = merged_block.block_text[:50] + '...' if len(merged_block.block_text) > 50 else merged_block.block_text
+                    
+                    # 获取页码信息
+                    page_num = getattr(merged_block, 'page_num', None)
+                    if not page_num and merged_block.original_blocks:
+                        page_num = getattr(merged_block.original_blocks[0], 'page_num', None)
+                    
+                    # 获取原始块数量
+                    original_blocks_count = len(merged_block.original_blocks) if merged_block.original_blocks else 0
+                    
+                    logger.warning(f"  合并块未找到对应章节: chapter_id={chapter_id}, chapter_content中存在: {chapter_id in chapter_content}, 内容预览: '{content_preview}', 页码: {page_num}, 原始块数量: {original_blocks_count}")
         
         # 组织图像
         for image in images:
@@ -987,16 +1085,22 @@ class MarkdownGenerator:
         
         # 组织表格
         if 'tables' in translated_content:
+            logger.info(f"处理表格，数量: {len(translated_content['tables'])}")
             for table in translated_content['tables']:
-                if table.chapter_id and table.chapter_id in chapter_content:
-                    if table.page_num not in chapter_content[table.chapter_id]['pages']:
-                        chapter_content[table.chapter_id]['pages'][table.page_num] = {
+                table_chapter_id = getattr(table, 'chapter_id', None)
+                logger.info(f"  表格: 页码={table.page_num}, chapter_id={table_chapter_id}, chapter_title={getattr(table, 'chapter_title', None)}")
+                
+                if table_chapter_id and table_chapter_id in chapter_content:
+                    if table.page_num not in chapter_content[table_chapter_id]['pages']:
+                        chapter_content[table_chapter_id]['pages'][table.page_num] = {
                             'text_blocks': [],
                             'images': [],
                             'tables': []
                         }
-                    chapter_content[table.chapter_id]['pages'][table.page_num]['tables'].append(table)
-                    logger.debug(f"表格添加到章节: {table.chapter_number} - {table.chapter_title}, 页码: {table.page_num}")
+                    chapter_content[table_chapter_id]['pages'][table.page_num]['tables'].append(table)
+                    logger.info(f"  表格添加到章节: chapter_id={table_chapter_id}, 页码={table.page_num}")
+                else:
+                    logger.warning(f"  表格未找到对应章节: table_chapter_id={table_chapter_id}, chapter_content中存在: {table_chapter_id in chapter_content if table_chapter_id else 'N/A'}")
         
         # 清理没有内容的章节
         chapter_content = {k: v for k, v in chapter_content.items() if v['pages']}

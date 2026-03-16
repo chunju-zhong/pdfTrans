@@ -3,10 +3,11 @@
 PDF提取结果模型
 """
 
+from models.copyable import CopyableMixin
 from models.text_block import TextBlock
 
 
-class PdfPage:
+class PdfPage(CopyableMixin):
     """单页提取结果模型
     
     表示PDF单页的提取结果，包含页码和文本块列表
@@ -34,7 +35,7 @@ class PdfPage:
         }
 
 
-class PdfCell:
+class PdfCell(CopyableMixin):
     """表格单元格模型
     
     表示PDF表格中的单个单元格，包含文本、边界框和大小信息
@@ -73,7 +74,7 @@ class PdfCell:
         }
 
 
-class PdfTable:
+class PdfTable(CopyableMixin):
     """单表提取结果模型
     
     表示PDF单表的提取结果，包含页码、表格索引、单元格信息和边界框信息
@@ -130,7 +131,7 @@ class PdfTable:
         }
 
 
-class PdfImage:
+class PdfImage(CopyableMixin):
     """单图提取结果模型
     
     表示PDF单图的提取结果，包含页码、图像索引、图像路径和位置信息
@@ -173,7 +174,7 @@ class PdfImage:
         }
 
 
-class PdfExtraction:
+class PdfExtraction(CopyableMixin):
     """整体提取结果模型
     
     表示PDF整体的提取结果，包含总页数、每页结果列表、表格列表和图像列表

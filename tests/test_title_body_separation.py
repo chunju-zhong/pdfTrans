@@ -29,12 +29,15 @@ class TestTitleBodySeparation:
         blocks[0].chapter_id = "chapter1"
         blocks[0].chapter_title = "第一章 介绍"
         blocks[0].chapter_level = 1
+        blocks[0].is_title_block = True
         
         blocks[1].chapter_id = "chapter1"
         blocks[1].chapter_title = "第一章 介绍"
+        blocks[1].is_title_block = False
         
         blocks[2].chapter_id = "chapter1"
         blocks[2].chapter_title = "第一章 介绍"
+        blocks[2].is_title_block = False
         
         # 执行语义合并
         merged_blocks, block_mapping = merge_semantic_blocks(blocks)
@@ -63,6 +66,9 @@ class TestTitleBodySeparation:
             blocks[i].chapter_title = "第二章 方法"
             if i < 2:
                 blocks[i].chapter_level = 1
+                blocks[i].is_title_block = True
+            else:
+                blocks[i].is_title_block = False
         
         # 执行语义合并
         merged_blocks, block_mapping = merge_semantic_blocks(blocks)
@@ -88,9 +94,11 @@ class TestTitleBodySeparation:
         blocks[0].chapter_id = "chapter3"
         blocks[0].chapter_title = "第三章 结果"
         blocks[0].chapter_level = 1
+        blocks[0].is_title_block = True
         
         blocks[1].chapter_id = "chapter3"
         blocks[1].chapter_title = "第三章 结果"
+        blocks[1].is_title_block = False
         
         # 创建模拟语义分析器
         semantic_analyzer = MockSemanticAnalyzer()
@@ -122,6 +130,9 @@ class TestTitleBodySeparation:
             blocks[i].chapter_title = "第四章 讨论"
             if i < 2:
                 blocks[i].chapter_level = 1
+                blocks[i].is_title_block = True
+            else:
+                blocks[i].is_title_block = False
         
         # 创建模拟语义分析器
         semantic_analyzer = MockSemanticAnalyzer()
@@ -199,16 +210,20 @@ class TestTitleBodySeparation:
         blocks[0].chapter_id = "chapter1"
         blocks[0].chapter_title = "第一章 介绍"
         blocks[0].chapter_level = 1
+        blocks[0].is_title_block = True
         
         blocks[1].chapter_id = "chapter1"
         blocks[1].chapter_title = "第一章 介绍"
+        blocks[1].is_title_block = False
         
         blocks[2].chapter_id = "chapter2"
         blocks[2].chapter_title = "第二章 方法"
         blocks[2].chapter_level = 1
+        blocks[2].is_title_block = True
         
         blocks[3].chapter_id = "chapter2"
         blocks[3].chapter_title = "第二章 方法"
+        blocks[3].is_title_block = False
         
         # 执行语义合并
         merged_blocks, block_mapping = merge_semantic_blocks(blocks)

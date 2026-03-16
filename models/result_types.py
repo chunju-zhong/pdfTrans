@@ -1,7 +1,9 @@
 """Result type classes for translation and Markdown generation results."""
 
+from models.copyable import CopyableMixin
 
-class TruncationInfo:
+
+class TruncationInfo(CopyableMixin):
     """Truncation information model."""
 
     def __init__(self, truncated=False, token_usage=None, finish_reason=None):
@@ -17,7 +19,7 @@ class TruncationInfo:
         self.finish_reason = finish_reason
 
 
-class Result:
+class Result(CopyableMixin):
     """Base result class with common fields."""
 
     def __init__(self, content, truncation_info=None):

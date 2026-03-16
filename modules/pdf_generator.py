@@ -420,11 +420,21 @@ class PdfGenerator:
         """
         # 使用cells属性
         table_cells = table.cells
+        logger.info(f"[表格绘制] 接收到表格数据: 页码={table.page_num}, 表格索引={table.table_idx}, cells行数={len(table_cells) if table_cells else 0}")
+        
         if not table_cells:
-            logger.warning("表格数据为空，跳过绘制")
+            logger.warning("[表格绘制] 表格数据为空，跳过绘制")
             return
         
-        logger.info(f"开始绘制表格，共 {len(table_cells)} 行 {len(table_cells[0])} 列")
+        # 记录表格所有单元格的内容，用于诊断
+        logger.info(f"[表格绘制] 表格所有单元格内容预览:")
+        for row_idx, row in enumerate(table_cells):
+            for col_idx, cell in enumerate(row):
+                if cell and hasattr(cell, 'text') and cell.text:
+                    text_preview = cell.text[:30] + '...' if len(cell.text) > 30 else cell.text
+                    logger.info(f"[表格绘制] 单元格 ({row_idx},{col_idx}): '{text_preview}'")
+        
+        logger.info(f"[表格绘制] 开始绘制表格，共 {len(table_cells)} 行 {len(table_cells[0])} 列")
         
         # 获取表格边界框信息
         table_bbox = table.bbox
@@ -456,15 +466,25 @@ class PdfGenerator:
                 if isinstance(cell, dict):
                     cell_text = cell.get('text', '')
                     cell_bbox = cell.get('bbox')
-                    logger.info(f"单元格是字典，文本: '{cell_text}', 边界框: {cell_bbox}")
+                    logger.info(f"[表格绘制] 单元格 ({i},{j}) 是字典，文本: '{cell_text}', 边界框: {cell_bbox}")
                 elif hasattr(cell, 'text') and hasattr(cell, 'bbox'):
                     cell_text = cell.text
                     cell_bbox = cell.bbox
-                    logger.info(f"单元格是对象，文本: '{cell_text}', 边界框: {cell_bbox}")
+                    text_preview = cell_text[:50] + '...' if len(cell_text) > 50 else cell_text
+                    logger.info(f"[表格绘制] 单元格 ({i},{j}) 是对象，文本: '{text_preview}', 边界框: {cell_bbox}")
+                    # 增加关键日志：判断是否为原文
+                    if cell_text and len(cell_text) > 0:
+                        # 简单判断：如果包含英文字母且没有中文字符，可能是原文
+                        has_english = any(c.isalpha() and ord(c) < 128 for c in cell_text)
+                        has_chinese = any('\u4e00' <= c <= '\u9fff' for c in cell_text)
+                        if has_english and not has_chinese and target_lang == 'zh':
+                            logger.warning(f"[表格绘制] ⚠️ 单元格 ({i},{j}) 可能包含原文(英文)而非译文: '{text_preview}'")
+                        elif has_chinese and target_lang == 'zh':
+                            logger.info(f"[表格绘制] ✅ 单元格 ({i},{j}) 包含中文译文: '{text_preview}'")
                 else:
                     cell_text = str(cell)
                     cell_bbox = None
-                    logger.info(f"单元格是其他类型，转换为文本: '{cell_text}', 无边界框")
+                    logger.info(f"[表格绘制] 单元格 ({i},{j}) 是其他类型，转换为文本: '{cell_text}', 无边界框")
                 
                 # 如果有单元格边界框信息，使用它
                 if cell_bbox:

@@ -1,4 +1,7 @@
-class TextBlock:
+from models.copyable import CopyableMixin
+
+
+class TextBlock(CopyableMixin):
     """文本块模型
     
     封装PDF文本块的所有属性，包括内容和样式信息

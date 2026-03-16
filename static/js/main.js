@@ -5,7 +5,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const progressContainer = document.getElementById('progress-container');
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
+    const progressTime = document.getElementById('progress-time');
     const resultContainer = document.getElementById('result-container');
+    const resultTime = document.getElementById('result-time');
     const downloadLink = document.getElementById('download-link');
     const cancelBtn = document.getElementById('cancel-btn');
     
@@ -41,6 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
         progressBar.style.width = '0%';
         progressBar.textContent = '0%';
         progressText.textContent = '准备开始...';
+        progressTime.textContent = '耗时: 00:00';
         
         // 准备表单数据
         const formData = new FormData(form);
@@ -122,7 +125,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (xhr.status === 200) {
                 try {
                     const progressData = JSON.parse(xhr.responseText);
-                    updateProgress(progressData.progress, progressData.status, progressData.message);
+                    updateProgress(progressData.progress, progressData.status, progressData.message, progressData.total_time);
                     
                     // 检查并显示警告
                     if (progressData.warnings && progressData.warnings.length > 0) {
@@ -137,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         // 隐藏进度区域的警告，因为会在结果区域显示
                         hideProgressWarnings();
                         // 显示下载链接
-                        showDownloadLink(progressData.result_file, progressData.attachments || [], progressData.warnings || []);
+                        showDownloadLink(progressData.result_file, progressData.attachments || [], progressData.warnings || [], progressData.total_time);
                     } else if (progressData.status === 'error') {
                         clearInterval(progressInterval);
                     }
@@ -213,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 更新进度显示
-    function updateProgress(percentage, status, message) {
+    function updateProgress(percentage, status, message, totalTime) {
         // 确保百分比在0-100之间
         const safePercentage = Math.max(0, Math.min(100, percentage));
         
@@ -240,6 +243,11 @@ document.addEventListener('DOMContentLoaded', function() {
         
         progressText.textContent = statusText;
         
+        // 更新耗时显示
+        if (totalTime !== undefined) {
+            progressTime.textContent = `耗时: ${formatTime(totalTime)}`;
+        }
+        
         // 根据状态更新样式
         if (status === 'error') {
             progressBar.className = 'progress-bar error';
@@ -255,9 +263,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 显示下载链接
-    function showDownloadLink(fileName, attachments, warnings) {
+    function showDownloadLink(fileName, attachments, warnings, totalTime) {
         const downloadLinksContainer = document.getElementById('download-links');
         const resultMessage = document.getElementById('result-message');
+        const resultTime = document.getElementById('result-time');
         const warningsContainer = document.getElementById('warnings-container');
         const warningsList = document.getElementById('warnings-list');
         
@@ -307,6 +316,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         } else {
             warningsContainer.style.display = 'none';
+        }
+        
+        // 更新耗时显示
+        if (totalTime !== undefined) {
+            resultTime.textContent = `翻译总耗时：${formatTime(totalTime)}`;
         }
         
         // 添加主要文件下载链接
@@ -395,6 +409,13 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         xhr.send();
+    }
+    
+    // 格式化时间（秒）为分:秒格式
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     
     // 清理任务资源
@@ -536,9 +557,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 输出格式相关元素
     const outputFormatSelect = document.getElementById('output_format');
-    const chapterSplitOption = document.getElementById('chapter-split-option'); // 按章节拆分Markdown选项的父容器
+    const chapterSplitOption = document.getElementById('chapter-split-option'); // 按章节翻译Markdown选项的父容器
     
-    // 更新按章节拆分选项的可见性
+    // 更新按章节翻译选项的可见性
     function updateChapterSplitOptionVisibility() {
         const selectedFormat = outputFormatSelect.value;
         // 检查输出格式是否包含Markdown

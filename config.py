@@ -69,5 +69,10 @@ class Config:
     MAX_WORKERS = int(os.environ.get('MAX_WORKERS', '8'))  # 最大线程数
     TRANSLATION_BATCH_SIZE = int(os.environ.get('TRANSLATION_BATCH_SIZE', '10'))  # 翻译批处理大小
 
+    # 两阶段并行合并配置
+    USE_TWO_PHASE_MERGE = os.environ.get('USE_TWO_PHASE_MERGE', 'true').lower() == 'true'  # 是否使用两阶段并行合并
+    MERGE_MAX_WORKERS = int(os.environ.get('MERGE_MAX_WORKERS', '5'))  # 并行合并的最大线程数
+    MERGE_BATCH_SIZE = int(os.environ.get('MERGE_BATCH_SIZE', '20'))  # 每批处理的文本对数量
+
 # 创建配置实例
 config = Config()

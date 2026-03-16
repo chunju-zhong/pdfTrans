@@ -42,10 +42,10 @@ class GlossaryService:
             # 2. 预先提取所有页面的文本，避免在多线程中重复打开PDF文件
             logger.info("开始预提取所有页面的文本")
             if task:
-                task.update_progress(5, '开始提取PDF文本...')
+                task.update_phase_progress('init', 100, '开始提取PDF文本...')
             page_texts = self._extract_text_from_pdf(pdf_path, pages)
             if task:
-                task.update_progress(30, 'PDF文本提取完成，开始提取术语...')
+                task.update_phase_progress('pdf_extraction', 100, 'PDF文本提取完成，开始提取术语...')
             
             # 3. 获取提取到的页码列表
             pages = list(page_texts.keys())
@@ -84,9 +84,9 @@ class GlossaryService:
                     
                     # 更新进度
                     if task:
-                        progress = 30 + int((processed_pages / total_pages) * 60)
-                        task.update_progress(progress, f'正在处理第{page_num}页，共{total_pages}页...')
-                        logger.info(f"任务进度更新: 第{page_num}页，进度{progress}%")
+                        phase_percent = int((processed_pages / total_pages) * 100)
+                        task.update_phase_progress('term_extraction', phase_percent, f'正在处理第{page_num}页，共{total_pages}页...')
+                        logger.info(f"任务进度更新: 第{page_num}页，阶段进度{phase_percent}%")
                     
                     try:
                         result = future.result()
@@ -123,7 +123,7 @@ class GlossaryService:
             
             # 确保任务状态更新为100%
             if task:
-                task.update_progress(100, '术语提取完成！')
+                task.update_phase_progress('term_extraction', 100, '术语提取完成！')
             
             return final_glossary
             

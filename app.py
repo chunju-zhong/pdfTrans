@@ -84,7 +84,7 @@ def translate():
             
             # 创建任务对象
             task = task_service.create_task(task_id, file.filename)
-            task.update_progress(10, '文件保存完成...')
+            task.update_phase_progress('init', 100, '文件保存完成...')
             
             # 启动异步翻译任务，传递文件路径、unique_id和filename
             threading.Thread(target=translation_service.process_translation, 
@@ -109,6 +109,9 @@ def get_progress(task_id):
     if not task:
         return jsonify({'success': False, 'message': '任务不存在'}), 404
     
+    # 获取总耗时
+    total_time = getattr(task, 'get_total_time', lambda: 0)()
+    
     return jsonify({
         'success': True,
         'task_id': task_id,
@@ -119,7 +122,8 @@ def get_progress(task_id):
         'attachments': getattr(task, 'attachments', []),
         'error': task.error,
         'canceled': task.canceled,
-        'warnings': getattr(task, 'warnings', [])
+        'warnings': getattr(task, 'warnings', []),
+        'total_time': total_time
     })
 
 @app.route('/cancel/<task_id>', methods=['POST'])
@@ -234,7 +238,7 @@ def extract_glossary():
             
             # 创建任务对象
             task = task_service.create_task(task_id, file.filename)
-            task.update_progress(10, '文件保存完成...')
+            task.update_phase_progress('init', 100, '文件保存完成...')
             
             # 启动异步术语提取任务
             threading.Thread(target=process_glossary_extraction, 
@@ -284,18 +288,17 @@ def process_glossary_extraction(task, input_filepath, source_lang, target_lang, 
     """异步术语提取任务处理函数"""
     try:
         logger.info(f"开始处理术语提取任务 {task.task_id}，文件: {filename}")
-        # 更新任务状态为处理中
+        task.set_task_type('glossary')
         task.set_status('processing')
         
-        # 提取术语表
-        task.update_progress(30, '正在提取PDF文本...')
+        task.update_phase_progress('pdf_extraction', 0, '正在提取PDF文本...')
         
         # 调用术语提取服务，传递task对象用于进度更新
         glossary = glossary_service.extract_glossary_from_pdf(
             input_filepath, source_lang, target_lang, translator_type, pages, doc_type, task
         )
         
-        task.update_progress(100, '术语提取完成！')
+        task.update_phase_progress('term_extraction', 100, '术语提取完成！')
         # 设置任务结果
         task.set_status('completed')
         task.glossary = glossary

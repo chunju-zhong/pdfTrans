@@ -4,7 +4,8 @@ import logging
 from models.text_block import TextBlock
 from models.extraction import PdfPage, PdfTable, PdfImage, PdfExtraction
 from .extractors import (
-    extract_tables as extract_tables_impl,
+    extract_tables_by_camelot,
+    extract_tables_by_pymupdf,
     mark_non_body_text,
     process_page_numbers,
     analyze_text_block_style,
@@ -21,16 +22,18 @@ class PdfExtractor:
     负责从PDF文件中提取文本内容，包括普通文本和表格内容，并保留文本的位置信息。
     """
     
-    def __init__(self, pdf_path=None):
+    def __init__(self, pdf_path=None, table_extractor='pymupdf'):
         """初始化PdfExtractor对象
 
         Args:
             pdf_path (str, optional): PDF文件路径. Defaults to None.
+            table_extractor (str, optional): 表格提取器类型，可选值: 'pymupdf' 或 'camelot'. Defaults to 'pymupdf'.
         """
         self.pdf_path = pdf_path
         self.metadata = None
         self.total_pages = 0
         self.chapter_identifier = ChapterIdentifier()
+        self.table_extractor = table_extractor
         
         if pdf_path:
             self.metadata = self.get_metadata()
@@ -50,7 +53,13 @@ class PdfExtractor:
         if not self.pdf_path:
             raise ValueError("PDF文件路径不能为空")
         
-        return extract_tables_impl(self.pdf_path, pages)
+        # 根据table_extractor选择使用哪种表格提取方法
+        if self.table_extractor == 'camelot':
+            logger.info("使用Camelot提取表格")
+            return extract_tables_by_camelot(self.pdf_path, pages)
+        else:
+            logger.info("使用PyMuPDF提取表格")
+            return extract_tables_by_pymupdf(self.pdf_path, pages)
     
     def get_metadata(self):
         """提取PDF的元数据信息
@@ -186,14 +195,8 @@ class PdfExtractor:
                 mark_non_body=mark_non_body
             )
             
-            # 关联文本块、表格和图像到章节
+            # 关联表格和图像到章节（文本块已在_process_page中按页关联）
             if self.chapter_identifier.has_chapters():
-                # 关联文本块
-                all_text_blocks = []
-                for page in extraction_result.pages:
-                    all_text_blocks.extend(page.text_blocks)
-                self.chapter_identifier.associate_text_blocks(all_text_blocks)
-                
                 # 关联表格
                 if extraction_result.tables:
                     self.chapter_identifier.associate_tables(extraction_result.tables)
@@ -435,6 +438,9 @@ class PdfExtractor:
             text_block_objects.values(),
             key=lambda block: block.block_bbox[1]  # 按y0（顶部位置）排序
         )
+        
+        if self.chapter_identifier.has_chapters():
+            self.chapter_identifier.associate_text_blocks(sorted_text_blocks)
         
         # 创建PdfPage对象
         pdf_page = PdfPage(
