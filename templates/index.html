@@ -75,12 +75,19 @@
             </div>
             
             <div class="form-group">
-                <label for="doc_type">文档类型</label>
-                <input type="text" id="doc_type" name="doc_type" value="{{ default_doc_type }}" placeholder="请输入文档类型">
+                <label for="doc_type">文档类型（专业领域）</label>
+                <input type="text" id="doc_type" name="doc_type" value="{{ default_doc_type }}" placeholder="请输入文档类型（专业领域）">
             </div>
             
             <div class="form-group">
-                <label for="glossary">术语表（格式：术语: 翻译，每行一个）</label>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
+                    <label for="glossary">术语表（格式：术语: 翻译，每行一个）</label>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" id="load-glossary-btn" class="btn btn-secondary">加载术语文件</button>
+                        <button type="button" id="save-glossary-btn" class="btn btn-secondary">保存术语到文件</button>
+                    </div>
+                </div>
+                <input type="file" id="glossary-file-input" style="display: none;" accept=".txt,.csv">
                 <textarea id="glossary" name="glossary" rows="6" placeholder="请输入术语表">AI agents: AI智能体
 Large Language Model (LLM): 大语言模型（LLM）
 Agent: 智能体
@@ -101,7 +108,7 @@ autonomous problem-solving: 自主问题解决</textarea>
                             </div>
                         </div>
                     </div>
-                    <div class="form-hint" style="margin-top: 5px;">从上传的PDF中自动提取术语表</div>
+                    <div class="form-hint" style="margin-top: 5px;">使用当前选择的页码范围，从上传的PDF中提取术语表</div>
                 </div>
             </div>
             
@@ -116,6 +123,14 @@ autonomous problem-solving: 自主问题解决</textarea>
                 </select>
             </div>
             
+            <div class="form-group" id="chapter-split-option">
+                <label class="checkbox-option">
+                    <input type="checkbox" id="chapter_split" name="chapter_split" checked>
+                    按章节翻译Markdown
+                </label>
+                <div class="form-hint">启用后按章节拆分翻译并生成多个Markdown文件</div>
+            </div>
+            
             <div class="form-group">
                 <label class="checkbox-option">
                     <input type="checkbox" id="semantic_merge" name="semantic_merge" checked>
@@ -126,14 +141,14 @@ autonomous problem-solving: 自主问题解决</textarea>
             
             <div class="form-group" id="llm-merging-option" style="margin-top: 10px;">
                 <label class="checkbox-option">
-                    <input type="checkbox" id="use_llm_merging" name="use_llm_merging">
+                    <input type="checkbox" id="use_llm_merging" name="use_llm_merging" checked>
                     使用大语言模型进行语义判断
                 </label>
                 <div class="form-hint">启用后会使用大语言模型分析语义关系，提高合并准确性（可能会增加翻译时间及费用）</div>
             </div>
             
             <div class="form-group">
-                <button type="submit" class="btn btn-primary">开始翻译</button>
+                <button type="submit" id="start-translation-btn" class="btn btn-primary">开始翻译</button>
             </div>
         </form>
         
@@ -143,6 +158,7 @@ autonomous problem-solving: 自主问题解决</textarea>
             </div>
             <div class="progress-text-container">
                 <div id="progress-text" class="progress-text">准备开始...</div>
+                <div id="progress-time" class="progress-time" style="margin-left: 20px;">耗时: 00:00</div>
                 <button id="cancel-btn" class="btn btn-cancel" style="margin-left: 10px;">取消翻译</button>
             </div>
             <div id="progress-warnings-container" class="warnings-container" style="display: none;">
@@ -158,6 +174,7 @@ autonomous problem-solving: 自主问题解决</textarea>
                 <div id="warnings-list" class="warnings-list"></div>
             </div>
             <p id="result-message">您的文件已翻译完成，点击下方链接下载：</p>
+            <div id="result-time" class="result-time" style="margin: 10px 0; font-weight: bold;">翻译总耗时：00:00</div>
             <div id="download-links" class="download-links">
                 <a id="download-link" href="#" class="btn btn-success">下载翻译后的文件</a>
             </div>

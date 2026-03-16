@@ -5,7 +5,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const progressContainer = document.getElementById('progress-container');
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
+    const progressTime = document.getElementById('progress-time');
     const resultContainer = document.getElementById('result-container');
+    const resultTime = document.getElementById('result-time');
     const downloadLink = document.getElementById('download-link');
     const cancelBtn = document.getElementById('cancel-btn');
     
@@ -19,19 +21,29 @@ document.addEventListener('DOMContentLoaded', function() {
     let translationTaskId = null;
     let currentTotalPages = 0;
     
+    // 开始翻译按钮
+    const startTranslationBtn = document.getElementById('start-translation-btn');
+    
     // 表单提交事件处理
     form.addEventListener('submit', function(e) {
         // 阻止表单默认提交行为
         e.preventDefault();
         
+        // 禁用开始翻译按钮
+        startTranslationBtn.disabled = true;
+        
         // 显示进度容器，隐藏结果容器
         progressContainer.style.display = 'block';
         resultContainer.style.display = 'none';
+        
+        // 显示取消翻译按钮
+        cancelBtn.style.display = 'inline-block';
         
         // 初始化进度
         progressBar.style.width = '0%';
         progressBar.textContent = '0%';
         progressText.textContent = '准备开始...';
+        progressTime.textContent = '耗时: 00:00';
         
         // 准备表单数据
         const formData = new FormData(form);
@@ -39,6 +51,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // 如果全选，则不传递page_range参数或传递空值
         if (selectAllPagesCheckbox.checked) {
             formData.delete('page_range');
+        }
+        
+        // 如果按章节拆分选项被隐藏，则不传递chapter_split参数
+        if (chapterSplitOption.style.display === 'none') {
+            formData.delete('chapter_split');
         }
         
         // 异步提交表单
@@ -108,7 +125,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (xhr.status === 200) {
                 try {
                     const progressData = JSON.parse(xhr.responseText);
-                    updateProgress(progressData.progress, progressData.status, progressData.message);
+                    updateProgress(progressData.progress, progressData.status, progressData.message, progressData.total_time);
                     
                     // 检查并显示警告
                     if (progressData.warnings && progressData.warnings.length > 0) {
@@ -123,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         // 隐藏进度区域的警告，因为会在结果区域显示
                         hideProgressWarnings();
                         // 显示下载链接
-                        showDownloadLink(progressData.result_file, progressData.attachments || [], progressData.warnings || []);
+                        showDownloadLink(progressData.result_file, progressData.attachments || [], progressData.warnings || [], progressData.total_time);
                     } else if (progressData.status === 'error') {
                         clearInterval(progressInterval);
                     }
@@ -199,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 更新进度显示
-    function updateProgress(percentage, status, message) {
+    function updateProgress(percentage, status, message, totalTime) {
         // 确保百分比在0-100之间
         const safePercentage = Math.max(0, Math.min(100, percentage));
         
@@ -226,9 +243,18 @@ document.addEventListener('DOMContentLoaded', function() {
         
         progressText.textContent = statusText;
         
+        // 更新耗时显示
+        if (totalTime !== undefined) {
+            progressTime.textContent = `耗时: ${formatTime(totalTime)}`;
+        }
+        
         // 根据状态更新样式
         if (status === 'error') {
             progressBar.className = 'progress-bar error';
+            // 重新启用开始翻译按钮
+            startTranslationBtn.disabled = false;
+            // 隐藏取消翻译按钮
+            cancelBtn.style.display = 'none';
         } else if (status === 'completed') {
             progressBar.className = 'progress-bar completed';
         } else {
@@ -237,9 +263,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 显示下载链接
-    function showDownloadLink(fileName, attachments, warnings) {
+    function showDownloadLink(fileName, attachments, warnings, totalTime) {
         const downloadLinksContainer = document.getElementById('download-links');
         const resultMessage = document.getElementById('result-message');
+        const resultTime = document.getElementById('result-time');
         const warningsContainer = document.getElementById('warnings-container');
         const warningsList = document.getElementById('warnings-list');
         
@@ -291,6 +318,11 @@ document.addEventListener('DOMContentLoaded', function() {
             warningsContainer.style.display = 'none';
         }
         
+        // 更新耗时显示
+        if (totalTime !== undefined) {
+            resultTime.textContent = `翻译总耗时：${formatTime(totalTime)}`;
+        }
+        
         // 添加主要文件下载链接
         const mainLink = document.createElement('a');
         mainLink.href = `/download_file/${fileName}`;
@@ -334,6 +366,12 @@ document.addEventListener('DOMContentLoaded', function() {
             resultMessage.textContent = '您的文件已翻译完成，点击下方链接下载：';
         }
         
+        // 重新启用开始翻译按钮
+        startTranslationBtn.disabled = false;
+        
+        // 隐藏取消翻译按钮
+        cancelBtn.style.display = 'none';
+        
         // 显示结果容器
         resultContainer.style.display = 'block';
     }
@@ -373,6 +411,13 @@ document.addEventListener('DOMContentLoaded', function() {
         xhr.send();
     }
     
+    // 格式化时间（秒）为分:秒格式
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
     // 清理任务资源
     function cleanupTask() {
         // 清除进度轮询
@@ -383,6 +428,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 重置任务ID
         translationTaskId = null;
+        
+        // 重新启用开始翻译按钮
+        startTranslationBtn.disabled = false;
     }
     
     // 重置表单和进度
@@ -507,6 +555,33 @@ document.addEventListener('DOMContentLoaded', function() {
         updateLlmMergingOptionVisibility();
     });
     
+    // 输出格式相关元素
+    const outputFormatSelect = document.getElementById('output_format');
+    const chapterSplitOption = document.getElementById('chapter-split-option'); // 按章节翻译Markdown选项的父容器
+    
+    // 更新按章节翻译选项的可见性
+    function updateChapterSplitOptionVisibility() {
+        const selectedFormat = outputFormatSelect.value;
+        // 检查输出格式是否包含Markdown
+        const includesMarkdown = selectedFormat === 'md' || selectedFormat === 'all';
+        
+        if (includesMarkdown) {
+            chapterSplitOption.style.display = 'block';
+        } else {
+            chapterSplitOption.style.display = 'none';
+            // 当选项被隐藏时，取消勾选复选框
+            document.getElementById('chapter_split').checked = false;
+        }
+    }
+    
+    // 初始调用，设置正确的显示状态
+    updateChapterSplitOptionVisibility();
+    
+    // 输出格式变化事件处理
+    outputFormatSelect.addEventListener('change', function(e) {
+        updateChapterSplitOptionVisibility();
+    });
+    
     // 取消按钮事件处理
     cancelBtn.addEventListener('click', function() {
         if (confirm('确定要取消翻译吗？')) {
@@ -547,6 +622,12 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('source_lang', sourceLangSelect.value);
         formData.append('target_lang', targetLangSelect.value);
         formData.append('translator', translatorSelect.value);
+        formData.append('doc_type', document.getElementById('doc_type').value);
+        
+        // 添加页码范围
+        if (!selectAllPagesCheckbox.checked && pageRangeInput.value) {
+            formData.append('page_range', pageRangeInput.value);
+        }
         
         // 异步提取术语
         extractGlossary(formData);
@@ -744,5 +825,63 @@ document.addEventListener('DOMContentLoaded', function() {
         if (confirm('确定要取消术语提取吗？')) {
             cancelGlossaryExtraction();
         }
+    });
+    
+    // 加载术语文件按钮事件处理
+    const loadGlossaryBtn = document.getElementById('load-glossary-btn');
+    const glossaryFileInput = document.getElementById('glossary-file-input');
+    
+    loadGlossaryBtn.addEventListener('click', function() {
+        glossaryFileInput.click();
+    });
+    
+    glossaryFileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    glossaryTextarea.value = content;
+                    alert('术语表加载成功！');
+                } catch (error) {
+                    alert('加载文件失败：' + error.message);
+                }
+            };
+            reader.onerror = function() {
+                alert('读取文件失败，请重试');
+            };
+            reader.readAsText(file);
+        }
+        // 重置文件输入，以便可以重复选择同一个文件
+        e.target.value = '';
+    });
+    
+    // 保存术语到文件按钮事件处理
+    const saveGlossaryBtn = document.getElementById('save-glossary-btn');
+    
+    saveGlossaryBtn.addEventListener('click', function() {
+        const content = glossaryTextarea.value;
+        if (!content.trim()) {
+            alert('术语表为空，没有内容可保存');
+            return;
+        }
+        
+        // 创建Blob对象
+        const blob = new Blob([content], { type: 'text/plain' });
+        
+        // 创建下载链接
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'glossary.txt';
+        a.click();
+        
+        // 释放URL对象
+        setTimeout(function() {
+            URL.revokeObjectURL(url);
+        }, 100);
+        
+        alert('术语表保存成功！');
     });
 });

@@ -25,7 +25,8 @@ from .text_analyzer import (
 )
 
 from .table_processor import (
-    extract_tables,
+    extract_tables_by_camelot,
+    extract_tables_by_pymupdf,
     get_table_bboxes_by_page,
     process_table_data
 )
@@ -65,7 +66,8 @@ __all__ = [
     'mark_non_body_text',
     
     # table_processor
-    'extract_tables',
+    'extract_tables_by_camelot',
+    'extract_tables_by_pymupdf',
     'get_table_bboxes_by_page',
     'process_table_data',
     

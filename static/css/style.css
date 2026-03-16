@@ -124,15 +124,39 @@ input[type="text"]:focus {
 /* 按钮样式 */
 .btn {
     display: inline-block;
-    padding: 12px 24px;
+    padding: 8px 16px;
     border: none;
     border-radius: 4px;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
     text-align: center;
     text-decoration: none;
     cursor: pointer;
     transition: all 0.3s;
+}
+
+/* 禁用按钮样式 */
+.btn:disabled {
+    background-color: #ccc;
+    color: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-primary:disabled {
+    background-color: #ccc;
+    color: #666;
+}
+
+.btn-success:disabled {
+    background-color: #ccc;
+    color: #666;
+}
+
+.btn-cancel:disabled {
+    background-color: #ccc;
+    color: #666;
 }
 
 .btn-primary {
@@ -266,8 +290,8 @@ input[type="text"]:focus {
 .btn-cancel {
     background-color: #e74c3c;
     color: #fff;
-    padding: 8px 16px;
-    font-size: 14px;
+    padding: 6px 12px;
+    font-size: 12px;
 }
 
 /* 下载链接容器样式 */

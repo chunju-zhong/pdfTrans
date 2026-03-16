@@ -297,13 +297,17 @@ def identify_page_numbers(pages, page_sizes=None):
     
     return page_number_set
 
-def mark_non_body_text(pages, page_sizes=None):
+def mark_non_body_text(pages, page_sizes=None, enable=True):
     """标记非正文文本块
     
     Args:
         pages (list): 所有页面的文本块列表
         page_sizes (dict): 页面尺寸字典，键为页码，值为页面尺寸 (width, height)
+        enable (bool): 是否启用标记，默认为True
     """
+    if not enable:
+        logger.info("非正文文本块标记已禁用")
+        return
     logger.info(f"开始标记非正文文本块，处理{len(pages)}个页面")
     
     # 识别页眉页脚

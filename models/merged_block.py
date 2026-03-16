@@ -1,4 +1,7 @@
-class MergedBlock:
+from models.copyable import CopyableMixin
+
+
+class MergedBlock(CopyableMixin):
     """合并块模型
     
     封装合并后的语义块的所有属性，包括文本内容、原始块引用和样式信息
@@ -28,6 +31,7 @@ class MergedBlock:
             self.bold = first_block.bold
             self.italic = first_block.italic
             self.page_num = first_block.page_num
+            
         else:
             # 默认值
             self.font = ""

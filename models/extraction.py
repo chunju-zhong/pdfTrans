@@ -3,10 +3,11 @@
 PDF提取结果模型
 """
 
+from models.copyable import CopyableMixin
 from models.text_block import TextBlock
 
 
-class PdfPage:
+class PdfPage(CopyableMixin):
     """单页提取结果模型
     
     表示PDF单页的提取结果，包含页码和文本块列表
@@ -34,7 +35,7 @@ class PdfPage:
         }
 
 
-class PdfCell:
+class PdfCell(CopyableMixin):
     """表格单元格模型
     
     表示PDF表格中的单个单元格，包含文本、边界框和大小信息
@@ -73,7 +74,7 @@ class PdfCell:
         }
 
 
-class PdfTable:
+class PdfTable(CopyableMixin):
     """单表提取结果模型
     
     表示PDF单表的提取结果，包含页码、表格索引、单元格信息和边界框信息
@@ -96,6 +97,11 @@ class PdfTable:
         self.bbox = bbox
         self.row_heights = row_heights or []
         self.col_widths = col_widths or []
+        # 章节信息
+        self.chapter_id = None  # 章节ID
+        self.chapter_title = None  # 章节标题
+        self.chapter_level = 0  # 章节层级
+        self.chapter_number = None  # 章节编号
     
     def to_dict(self):
         """转换为字典格式
@@ -117,11 +123,15 @@ class PdfTable:
             'cells': cells_dict,
             'bbox': self.bbox,
             'row_heights': self.row_heights,
-            'col_widths': self.col_widths
+            'col_widths': self.col_widths,
+            'chapter_id': self.chapter_id,
+            'chapter_title': self.chapter_title,
+            'chapter_level': self.chapter_level,
+            'chapter_number': self.chapter_number
         }
 
 
-class PdfImage:
+class PdfImage(CopyableMixin):
     """单图提取结果模型
     
     表示PDF单图的提取结果，包含页码、图像索引、图像路径和位置信息
@@ -140,6 +150,11 @@ class PdfImage:
         self.image_idx = image_idx
         self.image_path = image_path
         self.bbox = bbox
+        # 章节信息
+        self.chapter_id = None  # 章节ID
+        self.chapter_title = None  # 章节标题
+        self.chapter_level = 0  # 章节层级
+        self.chapter_number = None  # 章节编号
     
     def to_dict(self):
         """转换为字典格式
@@ -151,11 +166,15 @@ class PdfImage:
             'page_num': self.page_num,
             'image_idx': self.image_idx,
             'image_path': self.image_path,
-            'bbox': self.bbox
+            'bbox': self.bbox,
+            'chapter_id': self.chapter_id,
+            'chapter_title': self.chapter_title,
+            'chapter_level': self.chapter_level,
+            'chapter_number': self.chapter_number
         }
 
 
-class PdfExtraction:
+class PdfExtraction(CopyableMixin):
     """整体提取结果模型
     
     表示PDF整体的提取结果，包含总页数、每页结果列表、表格列表和图像列表

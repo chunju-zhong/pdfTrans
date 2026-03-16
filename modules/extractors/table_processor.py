@@ -15,7 +15,7 @@ from .page_utils import process_page_numbers, create_pages_param
 
 logger = logging.getLogger(__name__)
 
-def extract_tables(pdf_path, pages=None):
+def extract_tables_by_camelot(pdf_path, pages=None):
     """提取PDF中的表格内容，可以指定页面
     
     Args:
@@ -173,6 +173,146 @@ def extract_tables(pdf_path, pages=None):
                     page_tables[page_num] = []
                 if bbox:
                     page_tables[page_num].append(bbox)
+        
+        logger.info(f"表格提取完成: 总表格={len(pdf_tables)}")
+        return pdf_tables, page_tables
+        
+    except FileNotFoundError:
+        # 直接重新抛出FileNotFoundError
+        raise
+    except Exception as e:
+        logger.error(f"提取PDF表格时出错: {str(e)}", exc_info=True)
+        raise Exception(f"提取PDF表格时出错: {str(e)}")
+
+def extract_tables_by_pymupdf(pdf_path, pages=None):
+    """提取PDF中的表格内容，可以指定页面
+    
+    Args:
+        pdf_path (str): PDF文件路径
+        pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
+        
+    Returns:
+        tuple[list[PdfTable], dict]: 包含提取的表格列表和按页码组织的表格边界框字典
+            - list[PdfTable]: 提取的表格列表
+            - dict: 按页码组织的表格边界框字典，键为页码，值为边界框列表
+    """
+    if not pdf_path:
+        raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
+    
+    pdf_tables = []
+    page_tables = {}
+    
+    try:
+        logger.info(f"开始使用PyMuPDF提取PDF表格: {pdf_path}")
+        
+        # 检查文件是否存在
+        if not os.path.exists(pdf_path):
+            raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
+        
+        # 使用PyMuPDF打开PDF文件
+        with fitz.open(pdf_path) as doc:
+            total_pages = len(doc)
+            logger.info(f"PDF总页数: {total_pages}")
+            
+            # 处理页码参数
+            one_based_pages, _ = process_page_numbers(pages, total_pages)
+            
+            # 遍历指定的页面
+            for page_num in one_based_pages:
+                page_idx = page_num - 1  # 转换为0-based索引
+                page = doc[page_idx]
+                page_height = page.rect.height
+                
+                logger.info(f"处理页面: {page_num}")
+                
+                # 使用PyMuPDF的find_tables()方法提取表格
+                try:
+                    tables = page.find_tables()
+                    logger.info(f"页面{page_num}成功提取{len(tables.tables)}个表格")
+                    
+                    # 处理提取的表格
+                    for table_idx, table in enumerate(tables.tables):
+                        # 获取表格边界框
+                        bbox = table.bbox
+                        logger.info(f"表格{table_idx}边界框: {bbox}")
+                        
+                        bbox_tuple = bbox
+                        
+                        # 获取表格内容
+                        data = table.extract()
+                        logger.info(f"表格{table_idx}内容: {data}")
+                        
+                        # 构建单元格信息
+                        cell_info_list = []
+                        for row_idx, row in enumerate(data):
+                            for col_idx, text in enumerate(row):
+                                # 估算单元格边界框
+                                if bbox:
+                                    cell_bbox = calculate_cell_bbox(
+                                        bbox_tuple, row_idx, col_idx, len(data), len(row)
+                                    )
+                                else:
+                                    cell_bbox = (0, 0, 100, 30)  # 默认值
+                                
+                                cell_info = create_cell_info(text, cell_bbox, row_idx, col_idx)
+                                cell_info_list.append(cell_info)
+                                logger.debug(f"创建单元格信息: 行={row_idx}, 列={col_idx}, 文本='{text}', 边界框={cell_bbox}")
+                        
+                        # 构建单元格二维列表
+                        # 首先确定表格的行数和列数
+                        if cell_info_list:
+                            max_row = max(cell['top'] for cell in cell_info_list)
+                            max_col = max(cell['left'] for cell in cell_info_list)
+                            logger.info(f"表格结构: {max_row + 1}行 {max_col + 1}列")
+                        else:
+                            max_row = 0
+                            max_col = 0
+                            logger.info("表格无内容")
+                        
+                        # 创建空的单元格二维列表
+                        cell_matrix = [[None for _ in range(max_col + 1)] for _ in range(max_row + 1)]
+                        
+                        # 填充单元格信息
+                        for cell_info in cell_info_list:
+                            row_idx = cell_info['top']
+                            col_idx = cell_info['left']
+                            
+                            # 创建PdfCell对象
+                            pdf_cell = create_pdf_cell(cell_info)
+                            if pdf_cell:
+                                cell_matrix[row_idx][col_idx] = pdf_cell
+                                logger.debug(f"填充单元格: 行={row_idx}, 列={col_idx}, 文本='{cell_info['text']}', 边界框={cell_info['bbox']}")
+                        
+                        # 过滤掉空表格
+                        has_content = any(cell and cell.text.strip() for row in cell_matrix for cell in row)
+                        if has_content:
+                            # 计算行高和列宽
+                            row_heights_list = calculate_row_heights(cell_matrix)
+                            col_widths_list = calculate_col_widths(cell_matrix, bbox_tuple)
+                            
+                            logger.info(f"计算的行高: {row_heights_list}")
+                            logger.info(f"计算的列宽: {col_widths_list}")
+                            
+                            # 创建PdfTable对象并添加到pdf_tables列表
+                            pdf_table = PdfTable(
+                                page_num=page_num,
+                                table_idx=table_idx,
+                                cells=cell_matrix,
+                                bbox=bbox_tuple,
+                                row_heights=row_heights_list,
+                                col_widths=col_widths_list
+                            )
+                            pdf_tables.append(pdf_table)
+                            logger.info(f"表格: 第{page_num}页-表格{table_idx}, 包含{len(cell_matrix)}行{len(cell_matrix[0]) if cell_matrix else 0}列, 边界框: {bbox_tuple}")
+                            
+                            # 按页码组织表格数据
+                            if page_num not in page_tables:
+                                page_tables[page_num] = []
+                            if bbox_tuple:
+                                page_tables[page_num].append(bbox_tuple)
+                except Exception as e:
+                    logger.warning(f"页面{page_num}提取表格失败: {e}")
+                    continue
         
         logger.info(f"表格提取完成: 总表格={len(pdf_tables)}")
         return pdf_tables, page_tables

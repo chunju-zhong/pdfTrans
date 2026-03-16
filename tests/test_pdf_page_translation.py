@@ -230,7 +230,7 @@ class TestPdfPageTranslationIntegration:
                 )
                 
                 # 验证任务进度被更新为100%
-                mock_task.update_progress.assert_any_call(100, '没有找到需要翻译的文本块')
+                mock_task.update_phase_progress.assert_any_call('extraction', 100, '没有找到需要翻译的文本块')
         
         finally:
             # 清理临时文件

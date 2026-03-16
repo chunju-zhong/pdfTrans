@@ -1,4 +1,7 @@
-class TextBlock:
+from models.copyable import CopyableMixin
+
+
+class TextBlock(CopyableMixin):
     """文本块模型
     
     封装PDF文本块的所有属性，包括内容和样式信息
@@ -20,6 +23,11 @@ class TextBlock:
         self.block_type = block_type
         self.page_num = page_num  # 添加页面号属性
         self.is_body_text = True  # 添加是否为正文的属性，默认为True
+        # 章节信息
+        self.chapter_id = None  # 章节ID
+        self.chapter_title = None  # 章节标题
+        self.chapter_level = 0  # 章节层级
+        self.chapter_number = None  # 章节编号（如1, 1.1, 1.1.1等）
         # 样式信息
         self.font = ""
         self.font_size = 0.0
@@ -62,6 +70,10 @@ class TextBlock:
             'block_type': self.block_type,
             'page_num': self.page_num,  # 包含页面号属性
             'is_body_text': self.is_body_text,  # 包含是否为正文的属性
+            'chapter_id': self.chapter_id,
+            'chapter_title': self.chapter_title,
+            'chapter_level': self.chapter_level,
+            'chapter_number': self.chapter_number,
             'font': self.font,
             'font_size': self.font_size,
             'color': self.color,

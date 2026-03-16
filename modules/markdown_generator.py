@@ -2,8 +2,10 @@ import os
 import logging
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 from models.result_types import MarkdownResult, TruncationInfo
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -70,25 +72,22 @@ class MarkdownGenerator:
 
 请根据你的内部推理，生成符合以下所有规范的 Markdown 文本：
 
-1.  **主标题 (H1)**：
-    * 使用 `# 标题` 格式，采用你在步骤 A.3 中选定的最佳标题。
-2.  **内容结构**：
-    * 保持内容不变情况下，不改变文章的结构和组织。
-    * 原文一致，不丢失原文内容，不出现原文没有的内容
+1.  **内容结构**：
     * 适当拆分长分段，保持逻辑清晰
-3.  **突出重点 (句子优先)**：
-    * 内容跟原文一致，不丢失原文内容，不出现原文没有的内容，
+    * 内容跟原文一致，不丢失原文内容，不出现原文没有的内容
+2.  **突出重点 (句子优先)**：
+    * 内容要与原文意思一致，不丢失原文内容，不出现原文没有的内容，
     * **有选择性地**使用粗体 (`**`) 来突出你在步骤 A.1 确定的**核心论点**、**关键结论**、**重要定义**或**金句**。
     * **优先加粗**：优先考虑加粗**能够概括要点的完整句子**或**关键短语**。
     * **避免**：避免只加粗零散的单个关键词，并**切勿过度使用粗体**，保持文档的专业性和易读性。
-4.  **【!!!】重要格式规范**：
+3.  **【!!!】重要格式规范**：
     * 在设置粗体时，**绝对不要**将任何标点符号（如 `。`、`，`、`：`、`"`、`（`、`）` 等）包含在 `**` 标记内部。
     * ✅ **正确示例**(标点在 `**` 之外)：这是"**一个核心观点**"。
     * ❌ **错误示例**：这是**"一个核心观点"**。
-5.  **【!!!】禁止使用代码块标记**：
+4.  **【!!!】禁止使用代码块标记**：
     * **绝对不要**在输出的开头或结尾添加 ```markdown ``` 或任何其他代码块标记。
     * 直接返回纯 Markdown 文本内容，不需要任何包装或标记。
-6.  **【!!!】保留图像元素**：
+5.  **【!!!】保留图像元素**：
     * **绝对不要**删除或修改任何图像URL元素，保持所有图像URL的完整性。
     * 图像URL格式为 `![image](path/to/image.png)`，请确保完全保留这些元素。
         """
@@ -229,6 +228,1031 @@ class MarkdownGenerator:
             finish_reason=finish_reason,
             truncation_info=truncation_info
         )
+    
+    def _convert_table_to_markdown(self, table):
+        """将表格转换为Markdown格式
+        
+        Args:
+            table: 表格对象
+            
+        Returns:
+            str: Markdown格式的表格
+        """
+        cells = table.cells
+        if not cells:
+            return ""
+        
+        # 获取表格尺寸
+        num_rows = len(cells)
+        num_cols = len(cells[0]) if num_rows > 0 else 0
+        
+        if num_rows == 0 or num_cols == 0:
+            return ""
+        
+        # 构建Markdown表格
+        markdown_table = []
+        
+        # 添加表头行
+        header_row = cells[0]
+        row_cells = []
+        for cell in header_row:
+            cell_text = cell.text if hasattr(cell, 'text') else str(cell)
+            row_cells.append(cell_text)
+        markdown_table.append("|" + "|".join(row_cells) + "| ")
+        
+        # 添加表头分隔线
+        header_separator = ["---"] * num_cols
+        markdown_table.append(" |" + "|".join(header_separator) + "| ")
+        
+        # 添加表格内容（跳过表头行）
+        for i, row in enumerate(cells[1:]):
+            row_cells = []
+            for cell in row:
+                cell_text = cell.text if hasattr(cell, 'text') else str(cell)
+                row_cells.append(cell_text)
+            if i == len(cells[1:]) - 1:
+                # 最后一行 - 无尾部空格
+                markdown_table.append(" |" + "|".join(row_cells) + "|")
+            else:
+                # 非最后一行 - 保持一致的格式
+                markdown_table.append(" |" + "|".join(row_cells) + "| ")
+        
+        return "\n".join(markdown_table) + "\n"
+    
+    def _copy_images_to_output(self, images, output_dir, doc_id):
+        """复制图像到输出目录
+        
+        Args:
+            images (list): 图像对象列表
+            output_dir (str): 输出目录
+            doc_id (str): 文档唯一标识符
+            
+        Returns:
+            list: 更新后的图像对象列表，包含相对路径
+        """
+        updated_images = []
+        # 为每个文档创建独立的图像目录
+        images_dir = os.path.join(output_dir, f'images_{doc_id}')
+        os.makedirs(images_dir, exist_ok=True)
+        
+        for image in images:
+            image_path = image.image_path
+            if os.path.exists(image_path):
+                # 生成新的图像文件名
+                image_filename = os.path.basename(image_path)
+                dest_path = os.path.join(images_dir, image_filename)
+                
+                # 复制图像
+                try:
+                    shutil.copy(image_path, dest_path)
+                    # 更新图像路径为相对路径
+                    relative_path = os.path.join(f'images_{doc_id}', image_filename)
+                    # 复制原始图像的所有属性，包括chapter_id
+                    updated_image = type('obj', (object,), {
+                        'page_num': image.page_num,
+                        'image_idx': image.image_idx,
+                        'image_path': relative_path,
+                        'bbox': image.bbox,
+                        'chapter_id': getattr(image, 'chapter_id', None),
+                        'chapter_title': getattr(image, 'chapter_title', None),
+                        'chapter_level': getattr(image, 'chapter_level', None),
+                        'chapter_number': getattr(image, 'chapter_number', None)
+                    })
+                    updated_images.append(updated_image)
+                    logger.info(f"复制图像成功: {image_path} -> {dest_path}")
+                except Exception as e:
+                    logger.error(f"复制图像失败: {e}")
+                    # 保持原始图像路径
+                    updated_images.append(image)
+            else:
+                # 图像路径不存在，保持原始图像路径
+                updated_images.append(image)
+        
+        return updated_images
+    
+    def _process_pages(self, translated_content, updated_images, original_blocks_by_page):
+        """处理所有页面的内容，按页码组织并处理元素
+        
+        Args:
+            translated_content (dict): 翻译后的内容
+            updated_images (list): 更新后的图像列表
+            original_blocks_by_page: 按页码组织的原始文本块
+            
+        Returns:
+            str: 处理后的完整文本
+        """
+        # 按页码组织合并后的翻译结果
+        merged_by_page = {}
+        for item in translated_content.get('merged_translations', []):
+            page_num = item.page_num
+            if page_num not in merged_by_page:
+                merged_by_page[page_num] = []
+            merged_by_page[page_num].append(item)
+        
+        # 按页码组织图像
+        images_by_page = {}
+        for image in updated_images:
+            page_num = image.page_num
+            if page_num not in images_by_page:
+                images_by_page[page_num] = []
+            images_by_page[page_num].append(image)
+        
+        # 按页码组织表格
+        tables_by_page = {}
+        if 'tables' in translated_content:
+            for table in translated_content['tables']:
+                page_num = table.page_num
+                if page_num not in tables_by_page:
+                    tables_by_page[page_num] = []
+                tables_by_page[page_num].append(table)
+        
+        # 获取所有页码的列表并排序
+        all_pages = set(merged_by_page.keys())
+        all_pages.update(images_by_page.keys())
+        all_pages.update(tables_by_page.keys())
+        sorted_pages = sorted(all_pages)
+        
+        # 构建完整文本
+        full_text = []
+        
+        for page_num in sorted_pages:
+            # 构建页面内容字典
+            page_content = {
+                'text_blocks': merged_by_page.get(page_num, []),
+                'images': images_by_page.get(page_num, []),
+                'tables': tables_by_page.get(page_num, [])
+            }
+            
+            # 组织页面元素
+            page_elements = self._organize_page_elements(page_content)
+            
+            # 处理元素，按顺序添加到Markdown文档
+            self._process_page_elements(page_elements, original_blocks_by_page, page_num, full_text)
+        
+        # 合并文本
+        return "\n".join(full_text)
+    
+    def _organize_page_elements(self, page_content):
+        """组织页面元素
+        
+        Args:
+            page_content (dict): 页面内容，包含text_blocks, images, tables
+            
+        Returns:
+            list: 页面元素列表
+        """
+        page_elements = []
+        
+        # 添加文本块元素
+        text_blocks = page_content.get('text_blocks', [])
+        for block_idx, block in enumerate(text_blocks):
+            page_elements.append({
+                'type': 'text',
+                'content': block,
+                'block_idx': block_idx
+            })
+        
+        # 添加图像元素
+        page_images = page_content.get('images', [])
+        for image_idx, image in enumerate(page_images):
+            page_elements.append({
+                'type': 'image',
+                'content': image
+            })
+        
+        # 添加表格元素
+        page_tables = page_content.get('tables', [])
+        for table_idx, table in enumerate(page_tables):
+            page_elements.append({
+                'type': 'table',
+                'content': table
+            })
+        
+        return page_elements
+    
+    def _separate_elements(self, page_elements):
+        """分离文本块和图表元素
+        
+        Args:
+            page_elements (list): 页面元素列表
+            
+        Returns:
+            tuple: (text_elements, chart_elements)
+        """
+        text_elements = []
+        chart_elements = []
+        
+        for element in page_elements:
+            if element['type'] == 'text':
+                text_elements.append(element)
+            else:
+                chart_elements.append(element)
+        
+        return text_elements, chart_elements
+    
+    def _process_chart_positions(self, chart_elements, original_blocks, text_elements):
+        """处理图表元素位置
+        
+        Args:
+            chart_elements (list): 图表元素列表
+            original_blocks (list): 原始文本块列表
+            text_elements (list): 文本元素列表
+            
+        Returns:
+            list: 图表插入信息列表，每项为 (merged_block, position, chart, insertion_ratio)
+        """
+        chart_insertions = []
+        for chart in chart_elements:
+            if chart['type'] == 'image' or chart['type'] == 'table':
+                # 记录表格处理信息
+                if chart['type'] == 'table':
+                    table = chart['content']
+                    logger.info(f"处理表格: 页码={table.page_num}, 表格索引={table.table_idx}, bbox={table.bbox}")
+                
+                # 查找图表/表格在原始文本块中的位置
+                before_block, after_block = None, None
+                chart_y = None
+                if hasattr(chart['content'], 'bbox'):
+                    chart_y = chart['content'].bbox[1]
+                    # 如果有bbox属性，使用与图像相同的位置查找逻辑
+                    logger.info(f"处理{chart['type']}的位置计算: bbox={chart['content'].bbox if hasattr(chart['content'], 'bbox') else 'N/A'}")
+                    before_block, after_block = self._find_chart_position(chart['content'], original_blocks)
+                
+                # 查找包含图表/表格前后原始块的合并块
+                merged_blocks = [e['content'] for e in text_elements]
+                logger.info(f"查找合并块: before_block={before_block.block_no if before_block else None}, after_block={after_block.block_no if after_block else None}")
+                merged_block, position, is_within, insertion_ratio = self._find_merged_block(before_block, after_block, merged_blocks, chart_y)
+                
+                if merged_block:
+                    logger.info(f"找到合并块: 内容='{merged_block.block_text[:50]}...', 位置={position}, 是否在合并块内部={is_within}")
+                    chart_insertions.append((merged_block, position, chart, insertion_ratio))
+                else:
+                    # 如果没有找到合适的合并块，直接添加图表/表格
+                    logger.info(f"未找到合并块，将{chart['type']}添加到文档末尾")
+                    chart_insertions.append((None, 'end', chart, None))
+        return chart_insertions
+    
+    def _process_page_elements(self, page_elements, original_blocks_by_page, page_num, full_text):
+        """处理页面元素，按顺序添加到Markdown文档
+        
+        Args:
+            page_elements (list): 页面元素列表
+            original_blocks_by_page: 按页码组织的原始文本块
+            page_num: 当前页码
+            full_text: 完整文本列表，用于存储生成的Markdown内容
+        """
+        logger.info(f"开始处理页面元素，元素数量: {len(page_elements)}")
+        
+        # 跟踪已处理的文本块索引
+        processed_blocks = set()
+        
+        # 获取当前页面的原始文本块（已排序）
+        original_blocks = original_blocks_by_page.get(page_num, [])
+        
+        # 分离文本块和图表元素
+        text_elements, chart_elements = self._separate_elements(page_elements)
+        
+        # 处理图表元素，确定它们的插入位置
+        chart_insertions = self._process_chart_positions(chart_elements, original_blocks, text_elements)
+        
+        # 处理文本块和图表
+        for element in text_elements:
+            block = element['content']
+            block_idx = element['block_idx']
+            
+            if block_idx not in processed_blocks:
+                # 检查是否有图表需要插入到当前块之前
+                for merged_block, position, chart, insertion_ratio in chart_insertions:
+                    if merged_block == block and position == 'before':
+                        # 插入图表到当前块之前
+                        if chart['type'] == 'image':
+                            logger.info(f"  在文本块之前插入图像: {chart['content'].image_path}")
+                            self._add_image_to_markdown(chart['content'], full_text)
+                        elif chart['type'] == 'table':
+                            table = chart['content']
+                            logger.info(f"  在文本块之前插入表格: 页码={table.page_num}, 表格索引={table.table_idx}")
+                            logger.info(f"  插入位置: 文本块内容='{block.block_text[:50]}...'")
+                            self._add_table_to_markdown(table, full_text)
+                
+                # 检查是否有图表需要插入到当前块内部
+                for merged_block, position, chart, insertion_ratio in chart_insertions:
+                    if merged_block == block and position == 'within':
+                        # 在合并块内部插入图表，拆分文本
+                        ratio_str = f"{insertion_ratio:.2f}" if insertion_ratio is not None else "0.5"
+                        logger.info(f"  在合并块内部插入图表，插入点比例: {ratio_str}")
+                        self._insert_element_in_merged_block(block, chart, insertion_ratio, full_text)
+                        processed_blocks.add(block_idx)
+                        logger.info(f"  合并块内部插入完成")
+                        break
+                
+                # 如果没有在块内部插入，则正常添加文本块
+                if block_idx not in processed_blocks:
+                    # 添加文本块
+                    logger.info(f"  添加文本块 {block_idx+1}: 内容='{block.block_text[:50]}...'")
+
+                    full_text.append(block.block_text)
+                    full_text.append("")
+                    processed_blocks.add(block_idx)
+                    logger.info(f"  文本块 {block_idx+1} 处理完成")
+                    
+                    # 检查是否有图表需要插入到当前块之后
+                    for merged_block, position, chart, insertion_ratio in chart_insertions:
+                        if merged_block == block and position == 'after':
+                            # 插入图表到当前块之后
+                            if chart['type'] == 'image':
+                                logger.info(f"  在文本块之后插入图像: {chart['content'].image_path}")
+                                self._add_image_to_markdown(chart['content'], full_text)
+                            elif chart['type'] == 'table':
+                                table = chart['content']
+                                logger.info(f"  在文本块之后插入表格: 页码={table.page_num}, 表格索引={table.table_idx}")
+                                logger.info(f"  插入位置: 文本块内容='{block.block_text[:50]}...'")
+                                self._add_table_to_markdown(table, full_text)
+        
+        # 处理需要添加到文档末尾的图表
+        for merged_block, position, chart, insertion_ratio in chart_insertions:
+            if position == 'end':
+                if chart['type'] == 'image':
+                    logger.info(f"  在文档末尾插入图像: {chart['content'].image_path}")
+                    self._add_image_to_markdown(chart['content'], full_text)
+                elif chart['type'] == 'table':
+                    table = chart['content']
+                    logger.info(f"  在文档末尾插入表格: 页码={table.page_num}, 表格索引={table.table_idx}, bbox={table.bbox}")
+                    self._add_table_to_markdown(table, full_text)
+        
+        logger.info(f"页面元素处理完成，已处理 {len(processed_blocks)} 个文本块")
+    
+    def _add_image_to_markdown(self, image, full_text):
+        """添加图像到Markdown文档
+        
+        Args:
+            image: 图像对象
+            full_text: 完整文本列表
+        """
+        image_path = image.image_path
+        # 使用Markdown图像语法
+        image_md = f"![]({image_path})"
+        full_text.append("")
+        full_text.append(image_md)
+        full_text.append("")
+    
+    def _add_table_to_markdown(self, table, full_text):
+        """添加表格到Markdown文档
+        
+        Args:
+            table: 表格对象
+            full_text: 完整文本列表
+        """
+        table_md = self._convert_table_to_markdown(table)
+        if table_md:
+            full_text.append("")
+            full_text.append(table_md)
+            full_text.append("")
+    
+    def _insert_element_in_merged_block(self, merged_block, element, insertion_point, full_text):
+        """在合并块内部插入元素，拆分文本
+        
+        Args:
+            merged_block: 合并块对象
+            element: 要插入的元素
+            insertion_point: 插入点比例（0-1）
+            full_text: 完整文本列表
+        """
+        logger.info(f"拆分合并块，插入点: {insertion_point:.2f}, 合并块内容: '{merged_block.block_text[:50]}...'")
+        
+        text = merged_block.block_text
+        text_length = len(text)
+        
+        # 计算插入位置
+        split_index = int(text_length * insertion_point)
+        
+        # 尝试在单词边界拆分
+        if split_index > 0 and split_index < text_length:
+            while split_index > 0 and text[split_index-1].isalnum():
+                split_index -= 1
+        
+        # 拆分为前后两段
+        text_before = text[:split_index].rstrip()
+        text_after = text[split_index:].lstrip()
+        
+        logger.info(f"拆分结果: 前半部分='{text_before[:30]}...', 后半部分='{text_after[:30]}...'")
+        
+        # 添加前段文本
+        if text_before:
+            full_text.append(text_before)
+            full_text.append("")
+        
+        # 添加元素
+        if element['type'] == 'image':
+            self._add_image_to_markdown(element['content'], full_text)
+            logger.info("添加图像完成")
+        elif element['type'] == 'table':
+            self._add_table_to_markdown(element['content'], full_text)
+            logger.info("添加表格完成")
+        
+        # 添加后段文本
+        if text_after:
+            full_text.append(text_after)
+            full_text.append("")
+    
+    def _find_chart_position(self, image, original_blocks):
+        """查找图表在原始文本块中的位置
+        
+        Args:
+            image: 图像对象
+            original_blocks: 原始文本块列表（已排序）
+            
+        Returns:
+            tuple: (before_block, after_block) - 图表前后的原始块
+        """
+        chart_y = image.bbox[1]
+        
+        # 在已排序的原始文本块中查找图表前后的块
+        # 由于原始文本块已经按垂直位置排序，可以使用线性查找
+        before_block = None
+        after_block = None
+        
+        for i, block in enumerate(original_blocks):
+            block_y = block.block_bbox[1]
+            if block_y <= chart_y:
+                before_block = block
+            else:
+                after_block = block
+                break
+        
+        logger.info(f"图表位置查找完成: before_block={before_block.block_no if before_block else None}, after_block={after_block.block_no if after_block else None}")
+        return before_block, after_block
+    
+    def _find_merged_block(self, before_block, after_block, merged_blocks, chart_y=None):
+        """查找包含图表前后原始块的合并块
+        
+        Args:
+            before_block: 图表前的原始块
+            after_block: 图表后的原始块
+            merged_blocks: 合并块列表或原始文本块列表
+            chart_y: 图表的y坐标（可选），用于计算在合并块内的插入点
+            
+        Returns:
+            tuple: (merged_block, position, is_within_merged_block, insertion_ratio)
+                - merged_block: 包含图表的合并块
+                - position: 位置关系 ('before', 'after', 'within')
+                - is_within_merged_block: 图表是否位于合并块内部
+                - insertion_ratio: 图表在合并块中的相对位置比例（0-1）
+        """
+        for block in merged_blocks:
+            # 检查是合并块还是原始文本块
+            if hasattr(block, 'original_blocks'):
+                # 合并块
+                original_blocks = block.original_blocks
+                original_block_nos = [b.block_no for b in original_blocks]
+                
+                # 检查before_block和after_block是否都在同一个合并块中
+                before_in_block = before_block and before_block.block_no in original_block_nos
+                after_in_block = after_block and after_block.block_no in original_block_nos
+                
+                if before_in_block and after_in_block:
+                    # 图表位于合并块内部
+                    logger.info(f"图表位于合并块内部: {block.block_text[:50]}...")
+                    
+                    if chart_y is not None:
+                        # 计算插入点比例
+                        merged_start_y = min(b.block_bbox[1] for b in original_blocks)
+                        merged_end_y = max(b.block_bbox[3] for b in original_blocks)
+                        merged_height = merged_end_y - merged_start_y
+                        
+                        if merged_height > 0:
+                            insertion_ratio = (chart_y - merged_start_y) / merged_height
+                            insertion_ratio = max(0.1, min(0.9, insertion_ratio))
+                            logger.info(f"计算合并块内插入点比例: {insertion_ratio:.2f}, 合并块范围: y0={merged_start_y}, y1={merged_end_y}")
+                            return block, 'within', True, insertion_ratio
+                    
+                    return block, 'within', True, 0.5
+                
+                # 检查before_block是否在当前合并块中（使用块编号）
+                if before_block and before_block.block_no in original_block_nos:
+                    logger.info(f"找到包含before_block的合并块: {block.block_text[:50]}...")
+                    return block, 'after', False, None
+                
+                # 检查after_block是否在当前合并块中（使用块编号）
+                if after_block and after_block.block_no in original_block_nos:
+                    logger.info(f"找到包含after_block的合并块: {block.block_text[:50]}...")
+                    return block, 'before', False, None
+            else:
+                # 原始文本块
+                if before_block and before_block.block_no == block.block_no:
+                    logger.info(f"找到包含before_block的原始文本块: {block.block_text[:50]}...")
+                    return block, 'after', False, None
+                
+                if after_block and after_block.block_no == block.block_no:
+                    logger.info(f"找到包含after_block的原始文本块: {block.block_text[:50]}...")
+                    return block, 'before', False, None
+        
+        logger.info("未找到包含图表前后原始块的块")
+        return None, None, False, None
+    
+    def _organize_original_blocks(self, translated_content):
+        """按页码组织原始文本块
+        
+        Args:
+            translated_content (dict): 翻译后的内容
+            
+        Returns:
+            dict: 按页码组织的原始文本块
+        """
+        original_blocks_by_page = {}
+        if 'blocks' in translated_content:
+            for page in translated_content['blocks']:
+                page_num = page.page_num
+                if page_num not in original_blocks_by_page:
+                    original_blocks_by_page[page_num] = []
+                # 原始文本块已经按垂直位置排序
+                original_blocks_by_page[page_num] = page.text_blocks
+        return original_blocks_by_page
+    
+    def generate_markdown(self, translated_content, images, output_md_path, target_lang="zh", doc_id=None, chapters=None):
+        """生成翻译后的Markdown文档
+
+        Args:
+            translated_content (dict): 翻译后的内容
+                - blocks (list): 每页的完整文本块列表 (翻译后的文本块)
+                    - page_num (int): 页码
+                    - text_blocks (list): TextBlock对象列表
+                        - block_text (str): 完整文本块内容 (已翻译)
+                        - block_bbox (tuple): 文本块位置 (x0, y0, x1, y1)
+                        - block_no (int): 块编号
+                        - block_type (int): 块类型
+                        - chapter_id (str): 章节ID
+                        - chapter_title (str): 章节标题
+                        - chapter_level (int): 章节层级
+                        - chapter_number (str): 章节编号
+                - merged_translations (list): 合并后的翻译结果
+                    - text (str): 合并后的翻译文本
+                    - page_num (int): 页码
+                    - font (str): 字体名称
+                    - font_size (float): 字体大小
+                    - color (int): 颜色值
+                    - bold (bool): 是否粗体
+                    - italic (bool): 是否斜体
+                    - bbox (tuple): 文本块边界框 (x0, y0, x1, y1)
+                - tables (list): 翻译后的表格列表
+            images (list): 图像信息列表
+                - page_num (int): 页码
+                - image_idx (int): 图像索引
+                - image_path (str): 图像路径
+                - bbox (tuple): 图像位置
+            output_md_path (str): 输出Markdown文件路径
+            target_lang (str): 目标语言代码
+            doc_id (str): 文档唯一标识符，用于创建独立的图像目录
+            chapters (list, optional): 章节列表. Defaults to None.
+            
+        Returns:
+            MarkdownGenerationResult: 包含生成结果和警告信息的结果对象
+        """
+        from models.result_types import MarkdownGenerationResult
+        
+        logger.info(f"开始生成Markdown文档，输出文件: {output_md_path}, 目标语言: {target_lang}")
+        
+        try:
+            # 确保输出目录存在
+            output_dir = os.path.dirname(output_md_path)
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # 如果没有提供doc_id，使用文件名的一部分作为doc_id
+            if not doc_id:
+                doc_id = os.path.splitext(os.path.basename(output_md_path))[0]
+            
+            # 复制图像到输出目录并更新路径为相对路径
+            updated_images = self._copy_images_to_output(images, output_dir, doc_id)
+            
+            # 检查是否有章节信息
+            if chapters and len(chapters) > 0:
+                logger.info(f"检测到 {len(chapters)} 个章节，开始按章节生成Markdown文件")
+                return self._generate_chapter_markdowns(translated_content, updated_images, output_dir, target_lang, doc_id, chapters)
+            else:
+                logger.info("没有检测到章节信息，生成单个Markdown文件")
+                # 按页码组织原始文本块
+                original_blocks_by_page = self._organize_original_blocks(translated_content)
+                
+                # 处理所有页面内容
+                combined_text = self._process_pages(translated_content, updated_images, original_blocks_by_page)
+                
+                # 使用布局模型格式化文本为Markdown
+                markdown_result = self._format_with_layout_model(combined_text)
+                
+                # 保存Markdown文件
+                with open(output_md_path, 'w', encoding='utf-8') as f:
+                    f.write(markdown_result.content)
+                
+                logger.info(f"Markdown文档生成完成，输出文件: {output_md_path}")
+                
+                # 创建结果对象
+                result = MarkdownGenerationResult(
+                    content=markdown_result.content,
+                    truncation_info=markdown_result.truncation_info
+                )
+                
+                # 检查是否被截断
+                if markdown_result.truncation_info.truncated:
+                    logger.warning(f"布局模型响应被截断: {markdown_result.truncation_info}")
+                    # 添加截断警告
+                    result.add_warning("Markdown生成被截断", {
+                        'truncation_info': {
+                            'token_usage': markdown_result.token_usage,
+                            'finish_reason': markdown_result.finish_reason
+                        }
+                    })
+                
+                # 返回生成的Markdown结果对象
+                return result
+            
+        except Exception as e:
+            error_message = str(e)
+            logger.error(f"生成Markdown文档时出错: {error_message}", exc_info=True)
+            # 创建结果对象
+            result = MarkdownGenerationResult()
+            # 添加错误警告
+            result.add_warning("Markdown生成失败", {
+                'error_message': error_message
+            })
+            # 返回结果对象
+            return result
+    
+    def _process_chapter_pages(self, chapter_pages):
+        """处理章节中的所有页面内容
+        
+        Args:
+            chapter_pages (dict): 章节按页码组织的内容
+            
+        Returns:
+            str: 处理后的完整文本
+        """
+        # 构建完整文本
+        full_text = []
+        
+        try:
+            # 按页码顺序处理内容
+            sorted_pages = sorted(chapter_pages.keys())
+            logger.info(f"处理章节页面，页码数量: {len(sorted_pages)}")
+            for page_num in sorted_pages:
+                page_content = chapter_pages[page_num]
+                logger.info(f"  处理页码: {page_num}, 文本块数量: {len(page_content['text_blocks'])}, 图像数量: {len(page_content['images'])}, 表格数量: {len(page_content['tables'])}")
+                
+                # 构建页面内容字典
+                page_content = {
+                    'text_blocks': page_content['text_blocks'],
+                    'images': page_content['images'],
+                    'tables': page_content['tables']
+                }
+                
+                # 组织页面元素
+                page_elements = self._organize_page_elements(page_content)
+                
+                # 提取原始块列表用于图表定位
+                original_blocks = []
+                for block in page_content['text_blocks']:
+                    original_blocks.extend(block.original_blocks)
+                
+                # 按垂直位置排序原始块
+                original_blocks.sort(key=lambda b: b.block_bbox[1])
+                
+                # 处理元素，按顺序添加到Markdown文档
+                self._process_page_elements(page_elements, {page_num: original_blocks}, page_num, full_text)
+            
+            # 合并文本
+            result = "\n".join(full_text)
+            logger.info(f"章节内容处理完成，总长度: {len(result)}")
+            return result
+        except Exception as e:
+            logger.error(f"处理章节页面时出错: {str(e)}", exc_info=True)
+            # 返回空字符串，避免整个章节生成失败
+            return ""
+    
+    def _collect_all_chapters(self, chapters):
+        """递归收集所有章节，包括子章节
+        
+        Args:
+            chapters (list): 章节列表
+            
+        Returns:
+            list: 所有章节的扁平列表
+        """
+        all_chapters = []
+        for chapter in chapters:
+            all_chapters.append(chapter)
+            if chapter.children:
+                all_chapters.extend(self._collect_all_chapters(chapter.children))
+        return all_chapters
+    
+    def _generate_chapter_file(self, chapter_id, content, output_dir):
+        """生成单个章节的Markdown文件
+        
+        Args:
+            chapter_id (str): 章节ID
+            content (dict): 章节内容
+            output_dir (str): 输出目录
+            
+        Returns:
+            tuple: (file_path, success, error_message, markdown_result)
+                file_path: 生成的文件路径，如果失败则返回None
+                success: 是否生成成功
+                error_message: 错误信息，如果成功则返回None
+                markdown_result: MarkdownResult实例，如果失败则返回None
+        """
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                # 生成文件名
+                filename = f"{content['number']} {content['title']}.md"
+                # 清理文件名中的非法字符
+                filename = self._sanitize_filename(filename)
+                file_path = os.path.join(output_dir, filename)
+                logger.info(f"生成章节文件 (尝试 {attempt+1}/{max_retries}): {file_path}")
+                
+                # 构建章节内容
+                full_text = []
+                
+                # 处理章节中的所有页面内容
+                chapter_text = self._process_chapter_pages(content['pages'])
+                full_text.append(chapter_text)
+                
+                # 合并文本
+                combined_text = "\n".join(full_text)
+                
+                # 使用布局模型格式化文本为Markdown
+                markdown_result = self._format_with_layout_model(combined_text)
+                
+                # 保存Markdown文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(markdown_result.content)
+                
+                logger.info(f"章节Markdown文件生成完成: {file_path}")
+                return file_path, True, None, markdown_result
+            except Exception as e:
+                error_message = str(e)
+                logger.error(f"生成章节 {content['number']} - {content['title']} 的Markdown文件时出错 (尝试 {attempt+1}/{max_retries}): {error_message}", exc_info=True)
+                if attempt < max_retries - 1:
+                    logger.info(f"将在 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"章节 {content['number']} - {content['title']} 生成失败，已达到最大重试次数")
+                    return None, False, error_message, None
+    
+    def _generate_chapter_markdowns(self, translated_content, images, output_dir, target_lang, doc_id, chapters):
+        """按章节生成Markdown文件
+        
+        Args:
+            translated_content (dict): 翻译后的内容
+            images (list): 图像信息列表
+            output_dir (str): 输出目录
+            target_lang (str): 目标语言代码
+            doc_id (str): 文档唯一标识符
+            chapters (list): 章节列表
+            
+        Returns:
+            MarkdownGenerationResult: 包含生成结果和警告信息的结果对象
+        """
+        from models.result_types import MarkdownGenerationResult
+        
+        # 按章节组织内容
+        chapter_content = {}
+        
+        # 递归收集所有章节，包括子章节
+        all_chapters = self._collect_all_chapters(chapters)
+        logger.info(f"开始按章节组织内容，章节列表长度: {len(all_chapters)}")
+        
+        # 首先为所有章节创建条目，确保即使章节没有内容也能生成文件
+        for chapter in all_chapters:
+            chapter_content[chapter.id] = {
+                'title': chapter.title,
+                'level': chapter.level,
+                'number': chapter.number,
+                'pages': {}  # 按页码组织内容
+            }
+        
+        # 组织合并块、图像和表格，按章节和页码分组
+        if 'merged_translations' in translated_content:
+            logger.info(f"处理合并块，数量: {len(translated_content['merged_translations'])}")
+            for merged_block in translated_content['merged_translations']:
+                # 从合并块的原始块中获取章节信息
+                chapter_id = None
+                if merged_block.original_blocks:
+                    first_block = merged_block.original_blocks[0]
+                    chapter_id = getattr(first_block, 'chapter_id', None)
+                
+                if chapter_id and chapter_id in chapter_content:
+                    # 获取页码信息（从第一个原始块中获取）
+                    page_num = getattr(merged_block, 'page_num', None)
+                    if not page_num and merged_block.original_blocks:
+                        page_num = getattr(merged_block.original_blocks[0], 'page_num', 1)
+                    
+                    if page_num not in chapter_content[chapter_id]['pages']:
+                        chapter_content[chapter_id]['pages'][page_num] = {
+                            'text_blocks': [],
+                            'images': [],
+                            'tables': []
+                        }
+                    # 添加合并块到文本块列表
+                    chapter_content[chapter_id]['pages'][page_num]['text_blocks'].append(merged_block)
+                    logger.info(f"  合并块添加到章节: 章节ID={chapter_id}, 页码: {page_num}")
+                else:
+                    # 获取合并块的内容预览
+                    content_preview = ''
+                    if hasattr(merged_block, 'block_text'):
+                        content_preview = merged_block.block_text[:50] + '...' if len(merged_block.block_text) > 50 else merged_block.block_text
+                    
+                    # 获取页码信息
+                    page_num = getattr(merged_block, 'page_num', None)
+                    if not page_num and merged_block.original_blocks:
+                        page_num = getattr(merged_block.original_blocks[0], 'page_num', None)
+                    
+                    # 获取原始块数量
+                    original_blocks_count = len(merged_block.original_blocks) if merged_block.original_blocks else 0
+                    
+                    logger.warning(f"  合并块未找到对应章节: chapter_id={chapter_id}, chapter_content中存在: {chapter_id in chapter_content}, 内容预览: '{content_preview}', 页码: {page_num}, 原始块数量: {original_blocks_count}")
+        
+        # 组织图像
+        for image in images:
+            if image.chapter_id and image.chapter_id in chapter_content:
+                if image.page_num not in chapter_content[image.chapter_id]['pages']:
+                    chapter_content[image.chapter_id]['pages'][image.page_num] = {
+                        'text_blocks': [],
+                        'images': [],
+                        'tables': []
+                    }
+                chapter_content[image.chapter_id]['pages'][image.page_num]['images'].append(image)
+                logger.debug(f"图像添加到章节: {image.chapter_number} - {image.chapter_title}, 页码: {image.page_num}")
+        
+        # 组织表格
+        if 'tables' in translated_content:
+            logger.info(f"处理表格，数量: {len(translated_content['tables'])}")
+            for table in translated_content['tables']:
+                table_chapter_id = getattr(table, 'chapter_id', None)
+                logger.info(f"  表格: 页码={table.page_num}, chapter_id={table_chapter_id}, chapter_title={getattr(table, 'chapter_title', None)}")
+                
+                if table_chapter_id and table_chapter_id in chapter_content:
+                    if table.page_num not in chapter_content[table_chapter_id]['pages']:
+                        chapter_content[table_chapter_id]['pages'][table.page_num] = {
+                            'text_blocks': [],
+                            'images': [],
+                            'tables': []
+                        }
+                    chapter_content[table_chapter_id]['pages'][table.page_num]['tables'].append(table)
+                    logger.info(f"  表格添加到章节: chapter_id={table_chapter_id}, 页码={table.page_num}")
+                else:
+                    logger.warning(f"  表格未找到对应章节: table_chapter_id={table_chapter_id}, chapter_content中存在: {table_chapter_id in chapter_content if table_chapter_id else 'N/A'}")
+        
+        # 清理没有内容的章节
+        chapter_content = {k: v for k, v in chapter_content.items() if v['pages']}
+        logger.info(f"章节内容组织完成，章节数量: {len(chapter_content)}")
+        if chapter_content:
+            logger.info(f"章节ID列表: {list(chapter_content.keys())}")
+            for chapter_id, content in chapter_content.items():
+                page_count = len(content['pages'])
+                total_blocks = sum(len(page['text_blocks']) for page in content['pages'].values())
+                total_images = sum(len(page['images']) for page in content['pages'].values())
+                total_tables = sum(len(page['tables']) for page in content['pages'].values())
+                logger.info(f"章节 {content['number']} - {content['title']}: {page_count}页, {total_blocks}文本块, {total_images}图像, {total_tables}表格")
+        
+        # 生成章节Markdown文件
+        chapter_files = []
+        
+        # 创建结果对象
+        result = MarkdownGenerationResult()
+        
+        # 使用线程池并行生成章节文件
+        with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+            # 提交所有章节生成任务
+            future_to_chapter = {executor.submit(self._generate_chapter_file, chapter_id, content, output_dir): (chapter_id, content)
+                               for chapter_id, content in chapter_content.items()}
+            
+            # 收集所有结果
+            for future in as_completed(future_to_chapter):
+                chapter_id, content = future_to_chapter[future]
+                try:
+                    file_path, success, error_message, markdown_result = future.result()
+                    if success:
+                        chapter_files.append(file_path)
+                        logger.info(f"章节 {content['number']} - {content['title']} 生成成功")
+                        # 添加章节结果
+                        result.add_chapter_result(content['number'], content['title'], True)
+                        # 检查是否有截断警告
+                        if markdown_result and markdown_result.truncated:
+                            warning_message = f"章节 {content['number']} - {content['title']} 的Markdown生成被截断"
+                            result.add_warning(warning_message, {
+                                'chapter_number': content['number'],
+                                'chapter_title': content['title'],
+                                'truncation_info': {
+                                    'token_usage': markdown_result.token_usage,
+                                    'finish_reason': markdown_result.finish_reason
+                                }
+                            })
+                    else:
+                        logger.error(f"章节 {content['number']} - {content['title']} 生成失败: {error_message}")
+                        # 添加章节结果
+                        result.add_chapter_result(content['number'], content['title'], False, error_message)
+                        # 添加警告
+                        warning_message = f"章节 {content['number']} - {content['title']} 生成失败"
+                        result.add_warning(warning_message, {
+                            'chapter_number': content['number'],
+                            'chapter_title': content['title'],
+                            'error_message': error_message
+                        })
+                except Exception as e:
+                    error_message = str(e)
+                    logger.error(f"处理章节 {content['number']} - {content['title']} 时出错: {error_message}", exc_info=True)
+                    # 添加章节结果
+                    result.add_chapter_result(content['number'], content['title'], False, error_message)
+                    # 添加警告
+                    warning_message = f"处理章节 {content['number']} - {content['title']} 时出错"
+                    result.add_warning(warning_message, {
+                        'chapter_number': content['number'],
+                        'chapter_title': content['title'],
+                        'error_message': error_message
+                    })
+        
+        # 生成章节索引文件
+        index_path = os.path.join(output_dir, "章节索引.md")
+        self._generate_chapter_index(chapters, chapter_files, index_path)
+        
+        # 记录失败的章节
+        failed_chapters = [cr for cr in result.chapter_results if not cr['success']]
+        if failed_chapters:
+            # 构建失败章节的字符串列表
+            failed_chapter_strings = []
+            for cr in failed_chapters:
+                failed_chapter_strings.append(f"{cr['chapter_number']} - {cr['chapter_title']}")
+            # 记录失败的章节
+            logger.warning(f"以下章节生成失败: {', '.join(failed_chapter_strings)}")
+        
+        # 返回结果对象
+        return result
+    
+    def _sanitize_filename(self, filename):
+        """清理文件名中的非法字符
+        
+        Args:
+            filename (str): 原始文件名
+            
+        Returns:
+            str: 清理后的文件名
+        """
+        import re
+        # 移除或替换非法字符
+        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        # 限制文件名长度
+        if len(filename) > 255:
+            filename = filename[:255]
+        return filename
+    
+    def _generate_chapter_index(self, chapters, chapter_files, index_path):
+        """生成章节索引文件
+        
+        Args:
+            chapters (list): 章节列表
+            chapter_files (list): 章节文件路径列表
+            index_path (str): 索引文件路径
+        """
+        index_content = []
+        index_content.append("# 章节索引")
+        index_content.append("")
+        
+        # 构建章节映射
+        chapter_map = {}
+        for chapter in chapters:
+            chapter_map[chapter.id] = chapter
+        
+        # 使用类方法构建章节索引内容
+        index_content.extend(self._build_chapter_index_content(chapters))
+        
+        # 保存索引文件
+        with open(index_path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(index_content))
+        
+        logger.info(f"章节索引文件生成完成: {index_path}")
+    
+    def _build_chapter_index_content(self, chapters, level=0):
+        """递归构建章节索引内容
+        
+        Args:
+            chapters (list): 章节列表
+            level (int): 当前层级
+            
+        Returns:
+            list: 索引内容行列表
+        """
+        index_lines = []
+        for chapter in chapters:
+            indent = "  " * level
+            filename = f"{chapter.number} {chapter.title}.md"
+            filename = self._sanitize_filename(filename)
+            link = f"[{chapter.title}]({filename})"
+            index_lines.append(f"{indent}- {link}")
+            
+            if chapter.children:
+                index_lines.extend(self._build_chapter_index_content(chapter.children, level + 1))
+        
+        return index_lines
 
 
 class AipingMarkdownGenerator(MarkdownGenerator):
@@ -333,471 +1357,6 @@ class AipingMarkdownGenerator(MarkdownGenerator):
             finish_reason=finish_reason,
             truncation_info=truncation_info
         )
-    
-    def _convert_table_to_markdown(self, table):
-        """将表格转换为Markdown格式
-        
-        Args:
-            table: 表格对象
-            
-        Returns:
-            str: Markdown格式的表格
-        """
-        cells = table.cells
-        if not cells:
-            return ""
-        
-        # 获取表格尺寸
-        num_rows = len(cells)
-        num_cols = len(cells[0]) if num_rows > 0 else 0
-        
-        if num_rows == 0 or num_cols == 0:
-            return ""
-        
-        # 构建Markdown表格
-        markdown_table = []
-        
-        # 添加表头行
-        header_row = cells[0]
-        row_cells = []
-        for cell in header_row:
-            cell_text = cell.text if hasattr(cell, 'text') else str(cell)
-            row_cells.append(cell_text)
-        markdown_table.append("|" + "|".join(row_cells) + "| ")
-        
-        # 添加表头分隔线
-        header_separator = ["---"] * num_cols
-        markdown_table.append(" |" + "|".join(header_separator) + "| ")
-        
-        # 添加表格内容（跳过表头行）
-        for i, row in enumerate(cells[1:]):
-            row_cells = []
-            for cell in row:
-                cell_text = cell.text if hasattr(cell, 'text') else str(cell)
-                row_cells.append(cell_text)
-            if i == len(cells[1:]) - 1:
-                # 最后一行 - 无尾部空格
-                markdown_table.append(" |" + "|".join(row_cells) + "|")
-            else:
-                # 非最后一行 - 保持一致的格式
-                markdown_table.append(" |" + "|".join(row_cells) + "| ")
-        
-        return "\n".join(markdown_table) + "\n"
-    
-    def _copy_images_to_output(self, images, output_dir, doc_id):
-        """复制图像到输出目录
-        
-        Args:
-            images (list): 图像对象列表
-            output_dir (str): 输出目录
-            doc_id (str): 文档唯一标识符
-            
-        Returns:
-            list: 更新后的图像对象列表，包含相对路径
-        """
-        updated_images = []
-        # 为每个文档创建独立的图像目录
-        images_dir = os.path.join(output_dir, f'images_{doc_id}')
-        os.makedirs(images_dir, exist_ok=True)
-        
-        for image in images:
-            image_path = image.image_path
-            if os.path.exists(image_path):
-                # 生成新的图像文件名
-                image_filename = os.path.basename(image_path)
-                dest_path = os.path.join(images_dir, image_filename)
-                
-                # 复制图像
-                try:
-                    shutil.copy(image_path, dest_path)
-                    # 更新图像路径为相对路径
-                    relative_path = os.path.join(f'images_{doc_id}', image_filename)
-                    updated_image = type('obj', (object,), {
-                        'page_num': image.page_num,
-                        'image_idx': image.image_idx,
-                        'image_path': relative_path,
-                        'bbox': image.bbox
-                    })
-                    updated_images.append(updated_image)
-                    logger.info(f"复制图像成功: {image_path} -> {dest_path}")
-                except Exception as e:
-                    logger.error(f"复制图像失败: {e}")
-                    # 保持原始图像路径
-                    updated_images.append(image)
-            else:
-                # 图像路径不存在，保持原始图像路径
-                updated_images.append(image)
-        
-        return updated_images
-    
-    def _process_page_elements(self, page_elements, original_blocks_by_page, page_num, full_text):
-        """处理页面元素，按顺序添加到Markdown文档
-        
-        Args:
-            page_elements (list): 页面元素列表
-            original_blocks_by_page: 按页码组织的原始文本块
-            page_num: 当前页码
-            full_text: 完整文本列表，用于存储生成的Markdown内容
-        """
-        logger.info(f"开始处理页面元素，元素数量: {len(page_elements)}")
-        
-        # 跟踪已处理的文本块索引
-        processed_blocks = set()
-        
-        # 获取当前页面的原始文本块（已排序）
-        original_blocks = original_blocks_by_page.get(page_num, [])
-        
-        # 分离文本块和图表元素
-        text_elements = []
-        chart_elements = []
-        
-        for element in page_elements:
-            if element['type'] == 'text':
-                text_elements.append(element)
-            else:
-                chart_elements.append(element)
-        
-        # 处理图表元素，确定它们的插入位置
-        chart_insertions = []
-        for chart in chart_elements:
-            if chart['type'] == 'image' or chart['type'] == 'table':
-                # 记录表格处理信息
-                if chart['type'] == 'table':
-                    table = chart['content']
-                    logger.info(f"处理表格: 页码={table.page_num}, 表格索引={table.table_idx}, bbox={table.bbox}")
-                
-                # 查找图表/表格在原始文本块中的位置
-                before_block, after_block = None, None
-                if hasattr(chart['content'], 'bbox'):
-                    # 如果有bbox属性，使用与图像相同的位置查找逻辑
-                    logger.info(f"处理{chart['type']}的位置计算: bbox={chart['content'].bbox if hasattr(chart['content'], 'bbox') else 'N/A'}")
-                    before_block, after_block = self._find_chart_position(chart['content'], original_blocks)
-                
-                # 查找包含图表/表格前后原始块的合并块
-                merged_blocks = [e['content'] for e in text_elements]
-                logger.info(f"查找合并块: before_block={before_block.block_no if before_block else None}, after_block={after_block.block_no if after_block else None}")
-                merged_block, position = self._find_merged_block(before_block, after_block, merged_blocks)
-                
-                if merged_block:
-                    logger.info(f"找到合并块: 内容='{merged_block.block_text[:50]}...', 位置={position}")
-                    chart_insertions.append((merged_block, position, chart))
-                else:
-                    # 如果没有找到合适的合并块，直接添加图表/表格
-                    logger.info(f"未找到合并块，将{chart['type']}添加到文档末尾")
-                    chart_insertions.append((None, 'end', chart))
-        
-        # 处理文本块和图表
-        for element in text_elements:
-            block = element['content']
-            block_idx = element['block_idx']
-            
-            if block_idx not in processed_blocks:
-                # 检查是否有图表需要插入到当前块之前
-                for merged_block, position, chart in chart_insertions:
-                    if merged_block == block and position == 'before':
-                        # 插入图表到当前块之前
-                        if chart['type'] == 'image':
-                            logger.info(f"  在文本块之前插入图像: {chart['content'].image_path}")
-                            self._add_image_to_markdown(chart['content'], full_text)
-                        elif chart['type'] == 'table':
-                            table = chart['content']
-                            logger.info(f"  在文本块之前插入表格: 页码={table.page_num}, 表格索引={table.table_idx}")
-                            logger.info(f"  插入位置: 文本块内容='{block.block_text[:50]}...'")
-                            self._add_table_to_markdown(table, full_text)
-                
-                # 添加文本块
-                logger.info(f"  添加文本块 {block_idx+1}: 内容='{block.block_text[:50]}...'")
-                # 检查是否包含目标文本
-                if "表1：认证流程中不同参与方类别的非完整示例" in block.block_text:
-                    logger.info(f"  发现目标文本: '表1：认证流程中不同参与方类别的非完整示例'")
-                full_text.append(block.block_text)
-                full_text.append("")
-                processed_blocks.add(block_idx)
-                logger.info(f"  文本块 {block_idx+1} 处理完成")
-                
-                # 检查是否有图表需要插入到当前块之后
-                for merged_block, position, chart in chart_insertions:
-                    if merged_block == block and position == 'after':
-                        # 插入图表到当前块之后
-                        if chart['type'] == 'image':
-                            logger.info(f"  在文本块之后插入图像: {chart['content'].image_path}")
-                            self._add_image_to_markdown(chart['content'], full_text)
-                        elif chart['type'] == 'table':
-                            table = chart['content']
-                            logger.info(f"  在文本块之后插入表格: 页码={table.page_num}, 表格索引={table.table_idx}")
-                            logger.info(f"  插入位置: 文本块内容='{block.block_text[:50]}...'")
-                            self._add_table_to_markdown(table, full_text)
-        
-        # 处理需要添加到文档末尾的图表
-        for merged_block, position, chart in chart_insertions:
-            if position == 'end':
-                if chart['type'] == 'image':
-                    logger.info(f"  在文档末尾插入图像: {chart['content'].image_path}")
-                    self._add_image_to_markdown(chart['content'], full_text)
-                elif chart['type'] == 'table':
-                    table = chart['content']
-                    logger.info(f"  在文档末尾插入表格: 页码={table.page_num}, 表格索引={table.table_idx}, bbox={table.bbox}")
-                    self._add_table_to_markdown(table, full_text)
-        
-        logger.info(f"页面元素处理完成，已处理 {len(processed_blocks)} 个文本块")
-    
-    def _add_image_to_markdown(self, image, full_text):
-        """添加图像到Markdown文档
-        
-        Args:
-            image: 图像对象
-            full_text: 完整文本列表
-        """
-        image_path = image.image_path
-        # 使用Markdown图像语法
-        image_md = f"![]({image_path})"
-        full_text.append("")
-        full_text.append(image_md)
-        full_text.append("")
-    
-    def _add_table_to_markdown(self, table, full_text):
-        """添加表格到Markdown文档
-        
-        Args:
-            table: 表格对象
-            full_text: 完整文本列表
-        """
-        table_md = self._convert_table_to_markdown(table)
-        if table_md:
-            full_text.append("")
-            full_text.append(table_md)
-            full_text.append("")
-    
-    def _find_chart_position(self, image, original_blocks):
-        """查找图表在原始文本块中的位置
-        
-        Args:
-            image: 图像对象
-            original_blocks: 原始文本块列表（已排序）
-            
-        Returns:
-            tuple: (before_block, after_block) - 图表前后的原始块
-        """
-        chart_y = image.bbox[1]
-        
-        # 在已排序的原始文本块中查找图表前后的块
-        # 由于原始文本块已经按垂直位置排序，可以使用线性查找
-        before_block = None
-        after_block = None
-        
-        for i, block in enumerate(original_blocks):
-            block_y = block.block_bbox[1]
-            if block_y <= chart_y:
-                before_block = block
-            else:
-                after_block = block
-                break
-        
-        logger.info(f"图表位置查找完成: before_block={before_block.block_no if before_block else None}, after_block={after_block.block_no if after_block else None}")
-        return before_block, after_block
-    
-    def _find_merged_block(self, before_block, after_block, merged_blocks):
-        """查找包含图表前后原始块的合并块
-        
-        Args:
-            before_block: 图表前的原始块
-            after_block: 图表后的原始块
-            merged_blocks: 合并块列表
-            
-        Returns:
-            tuple: (merged_block, position) - 包含图表的合并块和位置关系
-        """
-        for block in merged_blocks:
-            original_blocks = block.original_blocks
-            original_block_nos = [b.block_no for b in original_blocks]
-            
-            # 检查是否包含目标文本
-            if "表1：认证流程中不同参与方类别的非完整示例" in block.block_text:
-                logger.info(f"发现包含目标文本的合并块: '{block.block_text[:50]}...'")
-                logger.info(f"  合并块包含原始块编号: {original_block_nos}")
-                logger.info(f"  与before_block({before_block.block_no if before_block else None})和after_block({after_block.block_no if after_block else None})的关系")
-            
-            # 检查before_block是否在当前合并块中（使用块编号）
-            if before_block and before_block.block_no in original_block_nos:
-                logger.info(f"找到包含before_block的合并块: {block.block_text[:50]}...")
-                return block, 'after'  # 图表在before_block之后
-            
-            # 检查after_block是否在当前合并块中（使用块编号）
-            if after_block and after_block.block_no in original_block_nos:
-                logger.info(f"找到包含after_block的合并块: {block.block_text[:50]}...")
-                return block, 'before'  # 图表在after_block之前
-        
-        logger.info("未找到包含图表前后原始块的合并块")
-        return None, None
-    
-    def generate_markdown(self, translated_content, images, output_md_path, target_lang="zh", doc_id=None):
-        """生成翻译后的Markdown文档
-        
-        Args:
-            translated_content (dict): 翻译后的内容
-                - blocks (list): 每页的完整文本块列表 (翻译后的文本块)
-                    - page_num (int): 页码
-                    - text_blocks (list): TextBlock对象列表
-                        - block_text (str): 完整文本块内容 (已翻译)
-                        - block_bbox (tuple): 文本块位置 (x0, y0, x1, y1)
-                        - block_no (int): 块编号
-                        - block_type (int): 块类型
-                - merged_translations (list): 合并后的翻译结果
-                    - text (str): 合并后的翻译文本
-                    - page_num (int): 页码
-                    - font (str): 字体名称
-                    - font_size (float): 字体大小
-                    - color (int): 颜色值
-                    - bold (bool): 是否粗体
-                    - italic (bool): 是否斜体
-                    - bbox (tuple): 文本块边界框 (x0, y0, x1, y1)
-                - tables (list): 翻译后的表格列表
-            images (list): 图像信息列表
-                - page_num (int): 页码
-                - image_idx (int): 图像索引
-                - image_path (str): 图像路径
-                - bbox (tuple): 图像位置
-            output_md_path (str): 输出Markdown文件路径
-            target_lang (str): 目标语言代码
-            doc_id (str): 文档唯一标识符，用于创建独立的图像目录
-            
-        Returns:
-            MarkdownResult: 包含生成的Markdown文本和截断信息的结果对象
-        """
-        logger.info(f"开始生成Markdown文档，输出文件: {output_md_path}, 目标语言: {target_lang}")
-        
-        try:
-            # 确保输出目录存在
-            output_dir = os.path.dirname(output_md_path)
-            os.makedirs(output_dir, exist_ok=True)
-            
-            # 如果没有提供doc_id，使用文件名的一部分作为doc_id
-            if not doc_id:
-                doc_id = os.path.splitext(os.path.basename(output_md_path))[0]
-            
-            # 复制图像到输出目录并更新路径为相对路径
-            updated_images = self._copy_images_to_output(images, output_dir, doc_id)
-            
-            # 按页码组织合并后的翻译结果
-            merged_by_page = {}
-            for item in translated_content.get('merged_translations', []):
-                page_num = item.page_num
-                if page_num not in merged_by_page:
-                    merged_by_page[page_num] = []
-                merged_by_page[page_num].append(item)
-            
-            # 按页码组织图像
-            images_by_page = {}
-            for image in updated_images:
-                page_num = image.page_num
-                if page_num not in images_by_page:
-                    images_by_page[page_num] = []
-                images_by_page[page_num].append(image)
-            
-            # 按页码组织表格
-            tables_by_page = {}
-            if 'tables' in translated_content:
-                for table in translated_content['tables']:
-                    page_num = table.page_num
-                    if page_num not in tables_by_page:
-                        tables_by_page[page_num] = []
-                    tables_by_page[page_num].append(table)
-            
-            # 按页码组织原始文本块
-            original_blocks_by_page = {}
-            if 'blocks' in translated_content:
-                for page in translated_content['blocks']:
-                    page_num = page.page_num
-                    if page_num not in original_blocks_by_page:
-                        original_blocks_by_page[page_num] = []
-                    # 原始文本块已经按垂直位置排序
-                    original_blocks_by_page[page_num] = page.text_blocks
-            
-            # 获取所有页码的列表并排序
-            all_pages = set(merged_by_page.keys())
-            all_pages.update(images_by_page.keys())
-            all_pages.update(tables_by_page.keys())
-            sorted_pages = sorted(all_pages)
-            
-            # 构建完整文本
-            full_text = []
-            
-            for page_num in sorted_pages:
-                # 收集当前页的所有元素
-                page_elements = []
-                
-                # 添加文本块元素
-                text_blocks = merged_by_page.get(page_num, [])
-                for block_idx, block in enumerate(text_blocks):
-                    page_elements.append({
-                        'type': 'text',
-                        'content': block,
-                        'block_idx': block_idx
-                    })
-                
-                # 添加图像元素
-                page_images = images_by_page.get(page_num, [])
-                for image_idx, image in enumerate(page_images):
-                    page_elements.append({
-                        'type': 'image',
-                        'content': image
-                    })
-                
-                # 添加表格元素
-                page_tables = tables_by_page.get(page_num, [])
-                for table_idx, table in enumerate(page_tables):
-                    page_elements.append({
-                        'type': 'table',
-                        'content': table
-                    })
-                
-                # 处理元素，按顺序添加到Markdown文档
-                self._process_page_elements(page_elements, original_blocks_by_page, page_num, full_text)
-            
-            # 合并文本
-            combined_text = "\n".join(full_text)
-            
-            # 记录处理前的文本内容，特别是图像URL
-            logger.info(f"布局模型处理前的文本包含图像URL: {'![](images_' in combined_text}")
-            # 记录前1000个字符，包含图像URL的部分
-            if '![](images_' in combined_text:
-                start_idx = combined_text.find('![](images_')
-                logger.info(f"处理前的图像URL示例: {combined_text[start_idx:start_idx+100]}")
-            
-            # 使用布局模型格式化文本为Markdown
-            markdown_result = self._format_with_layout_model(combined_text)
-            
-            # 检查是否被截断
-            if markdown_result.truncation_info.truncated:
-                logger.warning(f"布局模型响应被截断: {markdown_result.truncation_info}")
-            
-            # 记录处理后的文本内容，特别是图像URL
-            logger.info(f"布局模型处理后的文本包含图像URL: {'![](images_' in markdown_result.content}")
-            # 记录前1000个字符，检查图像URL是否保留
-            if '![](images_' in markdown_result.content:
-                start_idx = markdown_result.content.find('![](images_')
-                logger.info(f"处理后的图像URL示例: {markdown_result.content[start_idx:start_idx+100]}")
-            else:
-                logger.warning("布局模型处理后丢失了图像URL元素")
-            
-            # 保存Markdown文件
-            with open(output_md_path, 'w', encoding='utf-8') as f:
-                f.write(markdown_result.content)
-            
-            logger.info(f"Markdown文档生成完成，输出文件: {output_md_path}")
-            
-            # 返回生成的Markdown结果对象
-            return markdown_result
-            
-        except Exception as e:
-            logger.error(f"生成Markdown文档时出错: {str(e)}", exc_info=True)
-            # 返回默认值
-            return MarkdownResult(
-                content="",
-                token_usage={},
-                finish_reason="",
-                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
-            )
             
 
 

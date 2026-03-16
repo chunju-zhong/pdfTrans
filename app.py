@@ -57,8 +57,21 @@ def translate():
             glossary = request.form.get('glossary', '')
             page_range = request.form.get('page_range', '')
             output_format = request.form.get('output_format', 'pdf')
-            semantic_merge = request.form.get('semantic_merge', 'on') == 'on'
+            semantic_merge = request.form.get('semantic_merge', '') == 'on'
             use_llm_merging = request.form.get('use_llm_merging', '') == 'on'
+            chapter_split = request.form.get('chapter_split', '') == 'on'
+            
+            # 打印所有参数值
+            logger.info(f"前端传递的参数值:")
+            logger.info(f"  source_lang: {source_lang}")
+            logger.info(f"  target_lang: {target_lang}")
+            logger.info(f"  translator_type: {translator_type}")
+            logger.info(f"  doc_type: {doc_type}")
+            logger.info(f"  page_range: {page_range}")
+            logger.info(f"  output_format: {output_format}")
+            logger.info(f"  semantic_merge: {semantic_merge}")
+            logger.info(f"  use_llm_merging: {use_llm_merging}")
+            logger.info(f"  chapter_split: {chapter_split}")
             
             # 保存文件（在主线程中完成）
             filename = secure_filename(file.filename)
@@ -71,11 +84,11 @@ def translate():
             
             # 创建任务对象
             task = task_service.create_task(task_id, file.filename)
-            task.update_progress(10, '文件保存完成...')
+            task.update_phase_progress('init', 100, '文件保存完成...')
             
             # 启动异步翻译任务，传递文件路径、unique_id和filename
             threading.Thread(target=translation_service.process_translation, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge, use_llm_merging)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge, use_llm_merging, chapter_split)).start()
             
             # 返回任务ID
             return jsonify({
@@ -96,6 +109,9 @@ def get_progress(task_id):
     if not task:
         return jsonify({'success': False, 'message': '任务不存在'}), 404
     
+    # 获取总耗时
+    total_time = getattr(task, 'get_total_time', lambda: 0)()
+    
     return jsonify({
         'success': True,
         'task_id': task_id,
@@ -106,7 +122,8 @@ def get_progress(task_id):
         'attachments': getattr(task, 'attachments', []),
         'error': task.error,
         'canceled': task.canceled,
-        'warnings': getattr(task, 'warnings', [])
+        'warnings': getattr(task, 'warnings', []),
+        'total_time': total_time
     })
 
 @app.route('/cancel/<task_id>', methods=['POST'])
@@ -186,6 +203,29 @@ def extract_glossary():
             source_lang = request.form.get('source_lang', config.DEFAULT_SOURCE_LANGUAGE)
             target_lang = request.form.get('target_lang', config.DEFAULT_TARGET_LANGUAGE)
             translator_type = request.form.get('translator', 'aiping')
+            page_range = request.form.get('page_range', '')
+            doc_type = request.form.get('doc_type', config.DEFAULT_DOC_TYPE)
+            
+            # 解析页码范围
+            pages = None
+            if page_range:
+                try:
+                    # 解析页码范围，支持如"1-3,5,7-9"格式
+                    page_list = []
+                    ranges = page_range.split(',')
+                    for r in ranges:
+                        r = r.strip()
+                        if '-' in r:
+                            start, end = r.split('-')
+                            page_list.extend(range(int(start), int(end) + 1))
+                        else:
+                            page_list.append(int(r))
+                    # 去重并排序
+                    pages = sorted(list(set(page_list)))
+                    logger.info(f"解析页码范围: {page_range} -> {pages}")
+                except Exception as e:
+                    logger.warning(f"解析页码范围失败: {str(e)}")
+                    pages = None
             
             # 保存文件
             filename = secure_filename(file.filename)
@@ -198,11 +238,11 @@ def extract_glossary():
             
             # 创建任务对象
             task = task_service.create_task(task_id, file.filename)
-            task.update_progress(10, '文件保存完成...')
+            task.update_phase_progress('init', 100, '文件保存完成...')
             
             # 启动异步术语提取任务
             threading.Thread(target=process_glossary_extraction, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, pages, doc_type)).start()
             
             # 返回任务ID
             return jsonify({
@@ -244,29 +284,21 @@ def cancel_glossary_task(task_id):
         'message': '术语提取任务已取消'
     })
 
-def process_glossary_extraction(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename):
+def process_glossary_extraction(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, pages=None, doc_type=None):
     """异步术语提取任务处理函数"""
     try:
         logger.info(f"开始处理术语提取任务 {task.task_id}，文件: {filename}")
-        # 更新任务状态为处理中
+        task.set_task_type('glossary')
         task.set_status('processing')
         
-        # 提取术语表
-        task.update_progress(30, '正在提取PDF文本...')
+        task.update_phase_progress('pdf_extraction', 0, '正在提取PDF文本...')
         
-        # 调用术语提取服务
+        # 调用术语提取服务，传递task对象用于进度更新
         glossary = glossary_service.extract_glossary_from_pdf(
-            input_filepath, source_lang, target_lang, translator_type
+            input_filepath, source_lang, target_lang, translator_type, pages, doc_type, task
         )
         
-        task.update_progress(80, '术语提取完成...')
-        
-        # 清理临时文件
-        if os.path.exists(input_filepath):
-            os.remove(input_filepath)
-        logger.info(f"任务 {task.task_id} 已清理临时文件")
-        
-        task.update_progress(100, '术语提取完成！')
+        task.update_phase_progress('term_extraction', 100, '术语提取完成！')
         # 设置任务结果
         task.set_status('completed')
         task.glossary = glossary
