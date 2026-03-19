@@ -64,8 +64,17 @@ jobs:
             fi
           done
           
+          # 同步所有分支，将 Gitee 分支内容覆盖到本地分支
+          echo "同步所有分支..."
+          git branch -r | grep gitee/ | grep -v HEAD | while read branch; do
+            local_branch=$(echo "$branch" | sed 's/gitee\///')
+            echo "同步分支: $local_branch"
+            git checkout -q "$local_branch" || git checkout -q -b "$local_branch"
+            git reset --hard "gitee/$local_branch"
+          done
+
           for i in {1..3}; do
-            echo "第 $i 次拉取 Gitee 代码tags..."
+            echo "第 $i 次拉取 Gitee 代码 tags..."
             timeout 60 git fetch gitee --tags && break
             sleep 5
             if [ $i -eq 3 ]; then
