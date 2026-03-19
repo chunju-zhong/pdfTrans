@@ -1,0 +1,9 @@
+- [x] README.md已重命名为README.zh.md
+- [x] docs/CHANGELOG.md已重命名为docs/CHANGELOG.zh.md
+- [x] docs/TODO.md已重命名为docs/TODO.zh.md
+- [x] README.md英文版已创建
+- [x] docs/CHANGELOG.md英文版已创建
+- [x] docs/TODO.md英文版已创建
+- [x] prompt/update_doc.md已更新，包含中英双语文档生成指南
+- [x] 所有文件路径正确，无遗漏
+- [x] 英文版本内容翻译准确，与中文版一致

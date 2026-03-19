@@ -1,259 +1,258 @@
-# PDF翻译工具
+# PDF Translation Tool
 
-## 项目简介
+## Project Overview
 
-PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，能够准确提取PDF内容，使用多种翻译服务进行翻译，并生成格式良好的翻译后PDF/Word文档。
+PDF Translation Tool is a PDF document translation tool that supports multiple translation APIs. It can accurately extract PDF content, translate using various translation services, and generate well-formatted translated PDF/Word documents.
 
-如果你在使用过程中有任何问题或建议，欢迎在公众号【智践行】留言，也可以通过Gitee仓库提交Issue或Pull Request，期待与大家一起，把PDF翻译工具打磨得更贴合实际需求！
+If you have any questions or suggestions during use, welcome to leave a message on the WeChat public account 【智践行】, or submit Issues or Pull Requests on the Gitee repository. We look forward to working with everyone to refine the PDF translation tool to better meet practical needs!
 
-## 功能特点
+## Features
 
-### 核心功能
+### Core Features
 
-- **PDF文本提取**：支持提取普通文本和表格内容，保留位置信息
-- **多翻译API支持**：
-  - aiping 模型调用API
-  - 硅基流动 模型调用API
-- **文档生成**：
-  - PDF生成：基于原始PDF生成翻译后的PDF，保留原始布局和格式
-  - Word生成：基于合并后的翻译结果生成Word文档，保留原始字体和样式
-  - Markdown生成：基于布局模型生成Markdown文档，支持表格和图像的正确位置插入
-- **Web界面**：提供简洁易用的Web界面，支持文件上传、翻译服务选择和结果下载
-- **指定页码翻译**：支持翻译指定页码或页码范围，提高翻译效率
-- **输出格式选择**：支持选择输出为PDF、Word、Markdown或任意组合
-- **自动术语提取**：从上传的PDF中自动提取术语表，支持aiping和硅基流动两个平台
+- **PDF Text Extraction**: Supports extracting plain text and table content while preserving position information
+- **Multiple Translation API Support**:
+  - aiping Model API
+  - Silicon Flow Model API
+- **Document Generation**:
+  - PDF Generation: Generates translated PDF based on the original PDF, preserving original layout and formatting
+  - Word Generation: Generates Word documents based on merged translation results, preserving original fonts and styles
+  - Markdown Generation: Generates Markdown documents based on layout model, supporting correct table and image positioning
+- **Web Interface**: Provides a clean and easy-to-use web interface for file upload, translation service selection, and result download
+- **Page-specific Translation**: Supports translating specific page numbers or page ranges to improve translation efficiency
+- **Output Format Selection**: Supports selecting output as PDF, Word, Markdown, or any combination
+- **Automatic Glossary Extraction**: Automatically extracts glossaries from uploaded PDFs, supporting both aiping and Silicon Flow platforms
 
-### 技术特点
+### Technical Features
 
-- **虚拟环境管理**：支持conda虚拟环境
-- **模块化设计**：清晰的代码结构，便于维护和扩展
-- **API密钥安全**：使用环境变量管理API密钥，避免硬编码
-- **错误处理**：友好的错误提示和处理机制
+- **Virtual Environment Management**: Supports conda virtual environments
+- **Modular Design**: Clear code structure for easy maintenance and extension
+- **API Key Security**: Uses environment variables to manage API keys, avoiding hardcoding
+- **Error Handling**: Friendly error prompts and handling mechanisms
 
-## 技术栈
+## Tech Stack
 
-- **开发语言**：Python 3.9+
-- **虚拟环境**：conda
-- **Web框架**：Flask 3.0+
-- **PDF处理**：
-  - PyMuPDF (fitz) 1.23+：用于PDF文本提取和生成
-  - camelot-py\[cv]：用于表格提取
-  - opencv-python：camelot-py\[cv]的依赖
-- **文档处理**：
-  - python-docx：用于Word文档生成
-- **翻译API**：aiping翻译API、硅基流动翻译API
-- **API客户端**：openai：用于调用翻译API
-- **测试框架**：pytest
-- **版本控制**：Git + Gitee
+- **Programming Language**: Python 3.9+
+- **Virtual Environment**: conda
+- **Web Framework**: Flask 3.0+
+- **PDF Processing**:
+  - PyMuPDF (fitz) 1.23+: Used for PDF text extraction and generation
+  - camelot-py\[cv]: Used for table extraction
+  - opencv-python: Dependency for camelot-py\[cv]
+- **Document Processing**:
+  - python-docx: Used for Word document generation
+- **Translation APIs**: aiping Translation API, Silicon Flow Translation API
+- **API Client**: openai: Used for calling translation APIs
+- **Testing Framework**: pytest
+- **Version Control**: Git + Gitee
 
-## 安装步骤
+## Installation
 
-### 1. 克隆仓库
+### 1. Clone Repository
 
 ```bash
 git clone https://gitee.com/chunju/pdfTrans.git
 cd pdfTrans
 ```
 
-### 2. 创建并激活conda环境
+### 2. Create and Activate Conda Environment
 
 ```bash
 conda env create -f environment.yml
 conda activate pdfTrans
 ```
 
-### 3. 配置环境变量
+### 3. Configure Environment Variables
 
-- 复制`.env.example`文件为`.env`
-- 在`.env`文件中配置各翻译或模型调用API的密钥
+- Copy `.env.example` file to `.env`
+- Configure API keys for translation or model calling in the `.env` file
 
 ```bash
 cp .env.example .env
-# 编辑.env文件，添加API密钥
+# Edit .env file to add API keys
 ```
 
-### 4. 安装依赖
+### 4. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 使用方法
+## Usage
 
-### 启动Web服务
+### Start Web Service
 
 ```bash
 python app.py
 ```
 
-### 访问Web界面
+### Access Web Interface
 
-- 打开浏览器，访问 `http://localhost:5000`
-- 上传PDF文件
-- 系统自动检测并显示PDF总页数
-- 选择翻译页码范围（可选，默认全选所有页）
-  - 支持单个页码（如：1,3,5）
-  - 支持页码范围（如：1-5,7-10）
-  - 可以混合使用（如：1-3,5,7-9）
-- 选择翻译服务和目标语言
-- 选择输出格式（PDF、Word、Markdown或任意组合）
-- 点击"翻译"按钮
-- 等待翻译完成，下载翻译后的PDF和/或Word文件
+- Open browser and visit `http://localhost:5000`
+- Upload PDF file
+- System automatically detects and displays total PDF pages
+- Select translation page range (optional, default selects all pages)
+  - Supports single page numbers (e.g., 1,3,5)
+  - Supports page ranges (e.g., 1-5,7-10)
+  - Can mix both (e.g., 1-3,5,7-9)
+- Select translation service and target language
+- Select output format (PDF, Word, Markdown, or any combination)
+- Click "Translate" button
+- Wait for translation to complete, download translated PDF and/or Word files
 
-### 命令行使用（可选）
+### Command Line Usage (Optional)
 
-目前暂不支持命令行直接使用，后续将添加该功能。
+Command line direct usage is not currently supported but will be added in future updates.
 
-## 项目结构
+## Project Structure
 
 ```
 pdfTrans/
 ├── .trae/
-│   ├── documents/           # 文档目录
-│   │   └── ai_dev_progress.md # 开发进度记录文件
+│   ├── documents/           # Documentation directory
+│   │   └── ai_dev_progress.md # AI development progress record file
 │   ├── rules/
-│   │   └── project_rules.md # 项目规则文件
-│   └── tmp/                 # AI辅助开发生成的代码/数据分析脚本和相关数据
-├── .git/                    # Git仓库目录
-├── .gitignore               # Git忽略文件
-├── app.py                   # Flask应用入口，仅包含Flask应用初始化和路由
-├── requirements.txt         # 依赖库列表
-├── environment.yml          # conda环境配置
-├── config.py                # 配置文件
-├── .env.example             # 环境变量示例文件
-├── README.md                # 项目说明文档
-├── pytest.ini               # pytest配置文件
-├── docs/                    # 项目文档目录
-├── models/                  # 数据模型
-│   ├── task.py              # 任务数据模型
-│   ├── text_block.py        # 文本块模型
-│   ├── merged_block.py      # 合并块模型
-│   └── extraction.py        # 提取模型
-├── services/                # 业务逻辑服务
-│   ├── task_service.py      # 任务管理服务
-│   └── translation_service.py # 翻译业务服务
-├── utils/                   # 辅助工具
-│   ├── text_processing.py   # 文本处理工具
-│   ├── logging_config.py    # 日志配置
-│   └── file_utils.py        # 文件处理工具
-├── modules/                 # 核心功能模块
-│   ├── extractors/          # 提取器模块
+│   │   └── project_rules.md # Project rules file
+│   └── tmp/                 # Code/data analysis scripts and related data generated during AI-assisted development
+├── .git/                    # Git repository directory
+├── .gitignore               # Git ignore file
+├── app.py                   # Flask application entry, only contains Flask app initialization and routing
+├── requirements.txt         # Dependencies list
+├── environment.yml          # Conda environment configuration
+├── config.py                # Configuration file
+├── .env.example            # Environment variables example file
+├── README.md               # Project documentation
+├── pytest.ini              # Pytest configuration file
+├── docs/                   # Project documentation directory
+├── models/                 # Data models
+│   ├── task.py             # Task data model
+│   ├── text_block.py       # Text block model
+│   ├── merged_block.py     # Merged block model
+│   └── extraction.py       # Extraction model
+├── services/               # Business logic services
+│   ├── task_service.py     # Task management service
+│   └── translation_service.py # Translation business service
+├── utils/                  # Utility tools
+│   ├── text_processing.py  # Text processing utilities
+│   ├── logging_config.py   # Logging configuration
+│   └── file_utils.py       # File processing utilities
+├── modules/                # Core functional modules
+│   ├── extractors/         # Extractor modules
 │   │   ├── __init__.py
 │   │   ├── coordinate_utils.py
 │   │   ├── page_utils.py
 │   │   ├── style_analyzer.py
 │   │   ├── table_processor.py
 │   │   └── text_analyzer.py
-│   ├── pdf_extractor.py     # PDF提取模块
-│   ├── pdf_generator.py     # PDF生成模块
-│   ├── docx_generator.py    # Word生成模块
-│   ├── markdown_generator.py # Markdown生成模块
-│   ├── translator.py        # 翻译基类
-│   ├── aiping_translator.py # aiping翻译模块
-│   └── silicon_flow_translator.py # 硅基流动翻译模块
-├── prompt/                  # 提示词目录
-├── temp_images/             # 临时图片目录
-├── tests/                   # 测试脚本目录
-│   ├── test_*.py            # 测试脚本
-├── static/                  # 静态资源
-│   ├── css/                 # CSS样式文件
+│   ├── pdf_extractor.py    # PDF extraction module
+│   ├── pdf_generator.py    # PDF generation module
+│   ├── docx_generator.py   # Word generation module
+│   ├── markdown_generator.py # Markdown generation module
+│   ├── translator.py       # Translation base class
+│   ├── aiping_translator.py # aiping translation module
+│   └── silicon_flow_translator.py # Silicon Flow translation module
+├── prompt/                 # Prompt directory
+├── temp_images/            # Temporary images directory
+├── tests/                  # Test scripts directory
+│   ├── test_*.py           # Test scripts
+├── static/                 # Static resources
+│   ├── css/                # CSS style files
 │   │   └── style.css
-│   └── js/                  # JavaScript文件
+│   └── js/                # JavaScript files
 │       └── main.js
-├── templates/               # 模板文件
-│   ├── index.html           # 主页面模板
-│   └── download.html        # 下载页面模板
-├── uploads/                 # 上传文件目录
-└── outputs/                 # 输出文件目录
+├── templates/              # Template files
+│   ├── index.html          # Main page template
+│   └── download.html       # Download page template
+├── uploads/                # Uploaded files directory
+└── outputs/                # Output files directory
 ```
 
-## 开发流程
+## Development Workflow
 
-### 分支管理
+### Branch Management
 
-- **main**：主分支，仅用于发布稳定版本
-- **develop**：开发分支，整合各功能分支
-- **feature/xxx**：功能分支，用于开发新功能
-- **bugfix/xxx**：bug修复分支
-- **release/xxx**：发布分支，用于准备发布
+- **main**: Main branch, only for releasing stable versions
+- **develop**: Development branch, integrates feature branches
+- **feature/xxx**: Feature branch, for developing new features
+- **bugfix/xxx**: Bug fix branch
+- **release/xxx**: Release branch, for preparing releases
 
-### 代码提交规范
+### Commit Message Format
 
-- 提交信息格式：`[类型] 简短描述`
-- 类型包括：feat（新功能）、fix（bug修复）、docs（文档）、style（代码风格）、refactor（重构）、test（测试）、chore（构建/工具）
-- 示例：`feat: 添加百度翻译API封装`
+- Format: `[Type] Short description`
+- Types include: feat (new feature), fix (bug fix), docs (documentation), style (code style), refactor (refactoring), test (testing), chore (build/tools)
+- Example: `feat: Add Baidu translation API wrapper`
 
-### 测试规范
+### Testing Standards
 
-- 所有测试脚本必须放在`tests/`目录下，命名格式为`test_*.py`
-- 使用pytest框架进行测试
-- 单元测试覆盖率不低于80%
+- All test scripts must be placed in `tests/` directory with naming format `test_*.py`
+- Use pytest framework for testing
+- Unit test coverage should be at least 80%
 
-### 运行测试
+### Running Tests
 
-#### 安装依赖
+#### Install Dependencies
 
-pytest已包含在requirements.txt中，执行安装依赖命令即可：
+pytest is included in requirements.txt, just run the dependency installation command:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-#### 运行测试命令
+#### Test Commands
 
-- 运行所有测试：
+- Run all tests:
   ```bash
   pytest
   ```
-- 运行特定模块测试：
+- Run specific module tests:
   ```bash
   pytest tests/test_pdf_extractor.py
   ```
-- 运行测试并生成覆盖率报告：
+- Run tests and generate coverage report:
   ```bash
   pytest --cov=modules/ tests/
   ```
 
-#### 测试文件列表
+#### Test File List
 
-- `test_pdf_extractor.py`：PDF提取模块测试
-- `test_translator.py`：翻译基类测试
-- `test_aiping_translator.py`：aiping翻译测试
-- `test_silicon_flow_translator.py`：硅基流动翻译测试
-- `test_pdf_generator.py`：PDF生成模块测试
-- `test_markdown_download.py`：Markdown下载测试
-- `test_markdown_chart_position.py`：Markdown图表位置测试
-- `test_markdown_table.py`：Markdown表格测试
-- `conftest.py`：测试配置文件
+- `test_pdf_extractor.py`: PDF extraction module tests
+- `test_translator.py`: Translation base class tests
+- `test_aiping_translator.py`: aiping translation tests
+- `test_silicon_flow_translator.py`: Silicon Flow translation tests
+- `test_pdf_generator.py`: PDF generation module tests
+- `test_markdown_download.py`: Markdown download tests
+- `test_markdown_chart_position.py`: Markdown chart position tests
+- `test_markdown_table.py`: Markdown table tests
+- `conftest.py`: Test configuration file
 
-## 贡献指南
+## Contributing
 
-1. Fork仓库
-2. 创建功能分支：`git checkout -b feature/xxx`
-3. 提交代码：`git commit -m "feat: 添加xxx功能"`
-4. 推送分支：`git push origin feature/xxx`
-5. 提交Pull Request
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/xxx`
+3. Commit code: `git commit -m "feat: Add xxx feature"`
+4. Push branch: `git push origin feature/xxx`
+5. Submit Pull Request
 
-## 许可证
+## License
 
 MIT License
 
-## 联系方式
+## Contact
 
-如果你在使用过程中有任何问题或建议，欢迎在公众号【智践行】留言，也可以通过Gitee仓库提交Issue或Pull Request，我们期待与大家一起，把PDF翻译工具打磨得更贴合实际需求！
+If you have any questions or suggestions during use, welcome to leave a message on the WeChat public account 【智践行】, or submit Issues or Pull Requests on the Gitee repository. We look forward to working with everyone to refine the PDF translation tool to better meet practical needs!
 
-## 更新日志
+## Changelog
 
-项目更新日志已移动到单独的 [docs/CHANGELOG.md](docs/CHANGELOG.md) 文件中。
+The project changelog has been moved to a separate [docs/CHANGELOG.md](docs/CHANGELOG.md) file.
 
-## 任务列表
+## Task List
 
-项目任务列表请查看 [docs/TODO.md](docs/TODO.md) 文件。
+The project task list is available in [docs/TODO.md](docs/TODO.md).
 
-## 注意事项
+## Notes
 
-1. 本工具仅支持非扫描版PDF文档，不支持OCR功能
-2. 翻译质量取决于所选翻译API的质量
-3. 处理大型PDF文档可能需要较长时间，可使用指定翻译页功能分次翻译
-4. 请确保正确配置API密钥，否则翻译功能将无法使用
-
+1. This tool only supports non-scanned PDFs, OCR is not supported
+2. Translation quality depends on the selected translation API
+3. Processing large PDF documents may take a long time, you can use the page-specific translation feature to translate in batches
+4. Please ensure API keys are correctly configured, otherwise translation functionality will not work
