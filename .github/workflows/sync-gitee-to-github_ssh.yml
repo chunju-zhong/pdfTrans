@@ -67,6 +67,18 @@ jobs:
             fi
           done
           
+          # 同步所有分支，将 Gitee 分支内容覆盖到本地分支
+          echo "同步所有分支..."
+          git branch -r | grep gitee/ | grep -v HEAD | while read branch; do
+            local_branch=$(echo "$branch" | sed 's/gitee\///')
+            echo "同步分支: $local_branch"
+            git checkout -q "$local_branch" || git checkout -q -b "$local_branch"
+            git reset --hard "gitee/$local_branch"
+          done
+          
+          # 切换回 main 分支
+          git checkout -q main
+          
           # 推送到 GitHub（强制覆盖，确保同步一致）
           git push --force --tags origin  # 同步标签
           git push --force -u origin --all  # 同步所有分支（可选，如需同步多分支）
