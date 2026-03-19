@@ -1,0 +1,74 @@
+name: Sync Gitee to GitHub（共用 SSH 密钥）
+on:
+  schedule:
+    - cron: '0 11 * * *' # 每天 UTC 11 点（北京时间 19 点）
+  workflow_dispatch:
+
+jobs:
+  sync-repo:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GITEE_USERNAME: ${{ secrets.GITEE_USERNAME }}
+      GITEE_REPO_NAME: "pdfTrans"
+    steps:
+      # 解码 SSH 密钥并配置环境
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H -t rsa,ed25519 github.com gitee.com >> ~/.ssh/known_hosts
+
+      # 配置 Git SSH 使用指定密钥
+      - name: Configure Git SSH
+        run: |
+          git config --global core.sshCommand "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
+
+      # 配置 Git 用户
+      - name: Configure Git user
+        run: |
+          git config --global user.name "GitHub Actions Sync"
+          git config --global user.email "actions-sync@github.com"
+
+      # 克隆 GitHub 仓库（使用 SSH 密钥）
+      - name: Checkout GitHub repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 同步 Gitee 到 GitHub
+      - name: Sync Gitee to GitHub
+        run: |
+          # 将 origin 改为 SSH URL，以便使用密钥推送
+          git remote set-url origin git@github.com:${{ github.repository }}.git
+
+          git remote remove gitee || true
+          git remote add gitee git@gitee.com:${GITEE_USERNAME}/${GITEE_REPO_NAME}.git
+
+          # 拉取 Gitee 所有分支和标签（强制覆盖本地）
+          for i in {1..3}; do
+            echo "第 $i 次拉取 Gitee 代码分支..."
+            timeout 60 git fetch --all && break
+            sleep 5
+            if [ $i -eq 3 ]; then
+              echo "❌ 拉取失败"
+              exit 1
+            fi
+          done
+          
+          for i in {1..3}; do
+            echo "第 $i 次拉取 Gitee 代码tags..."
+            timeout 60 git fetch gitee --tags && break
+            sleep 5
+            if [ $i -eq 3 ]; then
+              echo "❌ 拉取失败"
+              exit 1
+            fi
+          done
+          
+          # 推送到 GitHub（强制覆盖，确保同步一致）
+          git push --force --tags origin  # 同步标签
+          git push --force -u origin --all  # 同步所有分支（可选，如需同步多分支）
+
+          echo "✅ 同步完成！"

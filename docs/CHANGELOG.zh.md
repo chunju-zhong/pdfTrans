@@ -1,5 +1,17 @@
 # 更新日志
 
+## 2026-03-19
+
+- 添加GitHub Actions同步工作流：
+  - 创建 `.github/workflows/sync-gitee-to-github_ssh.yml` 文件，实现使用SSH密钥从Gitee同步到GitHub
+  - 配置每天UTC 11点（北京时间19点）自动同步
+  - 支持手动触发同步
+  - 实现SSH密钥配置、Git用户设置、仓库克隆和同步逻辑
+  - 添加重试机制，确保同步过程稳定可靠
+  - 强制推送所有分支和标签，确保Gitee和GitHub仓库完全一致
+- 相关文件：
+  - `.github/workflows/sync-gitee-to-github_ssh.yml`
+
 ## 2026-03-16
 
 - 实现翻译进度系统重构：

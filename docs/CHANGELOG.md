@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-03-19
+
+- Added GitHub Actions sync workflow:
+  - Created `.github/workflows/sync-gitee-to-github_ssh.yml` file to implement syncing from Gitee to GitHub using SSH keys
+  - Configured daily auto-sync at UTC 11:00 (Beijing time 19:00)
+  - Supported manual trigger for syncing
+  - Implemented SSH key configuration, Git user setup, repository cloning and syncing logic
+  - Added retry mechanism to ensure stable and reliable sync process
+  - Force pushed all branches and tags to ensure complete consistency between Gitee and GitHub repositories
+- Related files:
+  - `.github/workflows/sync-gitee-to-github_ssh.yml`
+
 ## 2026-03-16
 
 - Implemented translation progress system refactoring:

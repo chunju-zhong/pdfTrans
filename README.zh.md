@@ -244,7 +244,7 @@ MIT License
 
 ## 更新日志
 
-项目更新日志已移动到单独的 [docs/CHANGELOG.md](docs/CHANGELOG.md) 文件中。
+项目更新日志已移动到单独的 [docs/CHANGELOG.zh.md](docs/CHANGELOG.zh.md) 文件中。
 
 ## 任务列表
 
