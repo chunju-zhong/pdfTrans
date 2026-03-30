@@ -131,12 +131,133 @@ class GlossaryService:
             logger.error(f"从PDF中提取术语表失败: {str(e)}")
             return ""
     
-    def _extract_text_from_pdf(self, pdf_path, pages=None):
+    def extract_glossary_sync(self, pdf_path, source_lang, target_lang, extractor_type='aiping', pages=None, doc_type=None, task=None, progress_callback=None, tmp_dir=None):
+        """同步从PDF文件中提取术语表
+        
+        Args:
+            pdf_path (str): PDF文件路径
+            source_lang (str): 源语言
+            target_lang (str): 目标语言
+            extractor_type (str): 提取器类型 (aiping/silicon_flow)
+            pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
+            doc_type (str): 文档类型
+            task (object, optional): 任务对象，用于更新进度. Defaults to None.
+            progress_callback (callable, optional): 进度回调函数，接收(progress, message)参数
+            tmp_dir (str, optional): 临时文件目录，用于存放提取的图像等
+            
+        Returns:
+            str: 提取的术语表，格式为"术语: 翻译"每行一个
+        """
+        try:
+            logger.info(f"开始同步从PDF中提取术语表: {pdf_path}")
+            
+            if progress_callback:
+                progress_callback(0, '开始提取PDF文本...')
+            
+            # 1. 创建术语提取器
+            glossary_extractor = create_glossary_extractor(extractor_type)
+            
+            # 2. 预先提取所有页面的文本
+            logger.info("开始预提取所有页面的文本")
+            if task:
+                task.update_phase_progress('init', 100, '开始提取PDF文本...')
+            page_texts = self._extract_text_from_pdf(pdf_path, pages, tmp_dir=tmp_dir)
+            if task:
+                task.update_phase_progress('pdf_extraction', 100, 'PDF文本提取完成，开始提取术语...')
+            
+            if progress_callback:
+                progress_callback(20, 'PDF文本提取完成')
+            
+            # 3. 获取提取到的页码列表
+            page_nums = list(page_texts.keys())
+            if not page_nums:
+                logger.warning("PDF中未提取到文本")
+                return ""
+            
+            logger.info(f"PDF总页数: {len(page_nums)}")
+            
+            # 4. 使用线程池并发执行术语提取
+            glossary_results = []
+            max_workers = min(self.max_workers or os.cpu_count() or 4, 8)
+            total_pages = len(page_nums)
+            processed_pages = 0
+            
+            def process_page(page_num):
+                """处理单个页面：提取术语"""
+                page_text = page_texts.get(page_num, "")
+                if page_text.strip():
+                    return glossary_extractor.extract_glossary(page_text, source_lang, target_lang, doc_type)
+                return None
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_page = {executor.submit(process_page, page_num): page_num for page_num in page_nums}
+                
+                for future in concurrent.futures.as_completed(future_to_page):
+                    page_num = future_to_page[future]
+                    processed_pages += 1
+                    
+                    # 更新进度
+                    phase_percent = int((processed_pages / total_pages) * 100)
+                    if task:
+                        task.update_phase_progress('term_extraction', phase_percent, f'正在处理第{page_num}页，共{total_pages}页...')
+                    if progress_callback:
+                        progress_percent = 20 + int((processed_pages / total_pages) * 70)
+                        progress_callback(progress_percent, f'正在提取术语: {processed_pages}/{total_pages}页')
+                    
+                    try:
+                        result = future.result()
+                        if result:
+                            glossary_results.append(result)
+                    except Exception as e:
+                        logger.error(f"处理页面 {page_num} 时出错: {str(e)}")
+            
+            # 5. 合并所有页面的术语结果
+            if not glossary_results:
+                logger.info("未提取到术语")
+                return ""
+            
+            # 合并所有结果，去重并排序
+            term_dict = {}
+            for result in glossary_results:
+                for line in result.strip().split('\n'):
+                    if line.strip() and ':' in line:
+                        parts = line.split(':', 1)
+                        if len(parts) == 2:
+                            term = parts[0].strip()
+                            translation = parts[1].strip()
+                            if term:
+                                term_dict[term] = translation
+            
+            # 对术语进行排序
+            sorted_terms = sorted(term_dict.items(), key=lambda x: x[0])
+            
+            # 构建最终术语表
+            final_glossary = "\n".join([f"{term}: {translation}" for term, translation in sorted_terms])
+            
+            line_count = len(sorted_terms)
+            logger.info(f"术语提取完成，提取到 {line_count} 个术语")
+            
+            # 确保任务状态更新为100%
+            if task:
+                task.update_phase_progress('term_extraction', 100, '术语提取完成！')
+            if progress_callback:
+                progress_callback(100, '术语提取完成！')
+            
+            return final_glossary
+            
+        except Exception as e:
+            logger.error(f"从PDF中提取术语表失败: {str(e)}")
+            if progress_callback:
+                progress_callback(0, f'术语提取失败: {str(e)}')
+            return ""
+    
+    def _extract_text_from_pdf(self, pdf_path, pages=None, tmp_dir=None):
         """从PDF中提取文本
         
         Args:
             pdf_path (str): PDF文件路径
             pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
+            tmp_dir (str, optional): 临时文件目录，用于存放提取的图像
             
         Returns:
             dict: 提取的文本，键为页码，值为该页面的文本
@@ -146,7 +267,7 @@ class GlossaryService:
             
             # 使用PdfExtractor提取文本，传递页码范围，禁用非正文文本块标记
             pdf_extractor = PdfExtractor(pdf_path)
-            extraction_result = pdf_extractor.extract(pages, mark_non_body=False)
+            extraction_result = pdf_extractor.extract(pages, mark_non_body=False, temp_images_dir=tmp_dir)
             
             # 收集所有文本，包括标题、正文等，以确保捕获所有可能的术语
             page_texts = {}

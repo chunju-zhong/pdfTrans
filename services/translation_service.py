@@ -127,7 +127,7 @@ class TranslationService:
         else:
             raise ValueError("无效的语义分析器类型")
 
-    def handle_same_language(self, task, input_filepath, unique_id, filename, page_range):
+    def handle_same_language(self, task, input_filepath, unique_id, filename, page_range, output_path=None):
         """处理源语言和目标语言相同的情况，直接拷贝原始PDF页面
 
         Args:
@@ -136,6 +136,7 @@ class TranslationService:
             unique_id: 唯一ID
             filename: 原始文件名
             page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
 
         Returns:
             str: 输出文件名
@@ -145,7 +146,7 @@ class TranslationService:
         
         # 生成输出文件路径
         output_filename = f"translated_{unique_id}_{filename}"
-        output_filepath = os.path.join(config.OUTPUT_FOLDER, output_filename)
+        output_filepath = os.path.join(output_path if output_path else config.OUTPUT_FOLDER, output_filename)
         
         # 使用 PdfExtractor 的 total_pages 属性获取总页数
         with fitz.open(input_filepath) as doc:
@@ -200,7 +201,7 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 完成，输出文件: {output_filename}")
         return output_filename
 
-    def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True):
+    def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True, output_path=None, tmp_dir=None):
         """提取PDF内容
         
         Args:
@@ -208,6 +209,8 @@ class TranslationService:
             input_filepath: 输入文件路径
             page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
             extract_chapter: 是否提取章节信息 (默认: True)
+            output_path: 输出文件路径，用于确定临时图像目录位置
+            tmp_dir: 临时文件目录，优先使用
 
         Returns:
             tuple: (text_blocks, tables, extracted_images, chapters)
@@ -232,9 +235,19 @@ class TranslationService:
         sorted_target_pages = sorted(target_pages)
         logger.info(f"任务 {task.task_id} 需要翻译的页码: {sorted_target_pages}")
         
-        # 1.3 根据页码范围提取PDF文本
+        # 1.3 确定临时图像目录
+        # 优先使用 tmp_dir，其次是 output_path 所在目录
+        temp_images_dir = tmp_dir
+        if not temp_images_dir and output_path:
+            temp_images_dir = os.path.dirname(output_path)
+            if not temp_images_dir:
+                temp_images_dir = os.getcwd()
+        if temp_images_dir:
+            logger.info(f"使用临时图像目录: {temp_images_dir}")
+        
+        # 1.4 根据页码范围提取PDF文本
         logger.info(f"任务 {task.task_id} 开始提取PDF文本")
-        extracted_content = pdf_extractor.extract(pages=list(target_pages), extract_chapter=extract_chapter)
+        extracted_content = pdf_extractor.extract(pages=list(target_pages), extract_chapter=extract_chapter, temp_images_dir=temp_images_dir)
         logger.info(f"任务 {task.task_id} PDF文本提取完成")
         
         # 保存提取的图像信息
@@ -902,7 +915,7 @@ class TranslationService:
         
         return translated_tables
 
-    def generate_pdf_output(self, task, input_filepath, unique_id, filename, translated_content, target_lang):
+    def generate_pdf_output(self, task, input_filepath, unique_id, filename, translated_content, target_lang, output_path=None, output_filename=None):
         """生成PDF输出文件
 
         Args:
@@ -912,21 +925,27 @@ class TranslationService:
             filename: 原始文件名
             translated_content: 翻译后的内容
             target_lang: 目标语言
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
 
         Returns:
             str: 输出文件名
         """
-        output_filename = f"translated_{unique_id}_{filename}"
-        output_filepath = os.path.join(config.OUTPUT_FOLDER, output_filename)
+        # 如果用户指定了输出文件名，则使用用户指定的文件名
+        if output_filename:
+            final_output_filename = output_filename
+        else:
+            final_output_filename = f"translated_{unique_id}_{filename}"
+        output_filepath = os.path.join(output_path if output_path else config.OUTPUT_FOLDER, final_output_filename)
         
         # 创建PDF生成器实例
         pdf_generator = PdfGenerator()
         # 生成翻译后的PDF，传递目标语言参数
         pdf_generator.generate_pdf(input_filepath, translated_content, output_filepath, target_lang)
-        logger.info(f"任务 {task.task_id} PDF生成完成，输出文件: {output_filename}")
-        return output_filename
+        logger.info(f"任务 {task.task_id} PDF生成完成，输出文件: {final_output_filename}")
+        return final_output_filename
     
-    def generate_docx_output(self, task, unique_id, filename, translated_content, extracted_images, target_lang):
+    def generate_docx_output(self, task, unique_id, filename, translated_content, extracted_images, target_lang, output_path=None, output_filename=None):
         """生成Word输出文件
 
         Args:
@@ -936,13 +955,18 @@ class TranslationService:
             translated_content: 翻译后的内容
             extracted_images: 提取的图像
             target_lang: 目标语言
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
 
         Returns:
             str: 输出文件名
         """
-        # 生成Word文件名
-        docx_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.docx"
-        docx_filepath = os.path.join(config.OUTPUT_FOLDER, docx_filename)
+        # 如果用户指定了输出文件名，则使用用户指定的文件名
+        if output_filename:
+            final_output_filename = output_filename
+        else:
+            final_output_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.docx"
+        docx_filepath = os.path.join(output_path if output_path else config.OUTPUT_FOLDER, final_output_filename)
         
         # 创建Word生成器实例
         docx_generator = DocxGenerator()
@@ -954,10 +978,10 @@ class TranslationService:
         
         # 生成翻译后的Word文档
         docx_generator.generate_docx(translated_content, extracted_images, docx_filepath, target_lang)
-        logger.info(f"任务 {task.task_id} Word文档生成完成，输出文件: {docx_filename}")
-        return docx_filename
+        logger.info(f"任务 {task.task_id} Word文档生成完成，输出文件: {final_output_filename}")
+        return final_output_filename
 
-    def generate_markdown_output(self, task, unique_id, filename, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split):
+    def generate_markdown_output(self, task, unique_id, filename, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path=None, output_filename=None, tmp_dir=None):
         """生成Markdown输出文件
 
         Args:
@@ -970,13 +994,17 @@ class TranslationService:
             translator_type: 翻译器类型
             chapters: 章节信息
             chapter_split: 是否按章节拆分
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
+            tmp_dir: 临时文件目录，用于存放中间文件
 
         Returns:
             str: 输出文件名
         """
         # 生成Markdown文件名
         md_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.md"
-        md_filepath = os.path.join(config.OUTPUT_FOLDER, md_filename)
+        # 使用tmp_dir存放Markdown文件
+        md_filepath = os.path.join(tmp_dir if tmp_dir else (output_path if output_path else config.OUTPUT_FOLDER), md_filename)
         
         # 根据翻译器类型选择布局模型
         api_key, api_url, layout_model = self._get_markdown_generator_config(translator_type)
@@ -1017,12 +1045,12 @@ class TranslationService:
             
             # 构建输出文件列表
             if chapter_split and chapters and len(chapters) > 0:
-                return self._generate_chapter_zip(task, unique_id, filename, md_filename)
+                return self._generate_chapter_zip(task, unique_id, filename, md_filename, output_path, output_filename, tmp_dir)
             else:
-                return self._generate_single_zip(task, unique_id, filename, md_filepath)
+                return self._generate_single_zip(task, unique_id, filename, md_filepath, output_path, output_filename, tmp_dir)
         finally:
             # 清理临时图像目录
-            self._cleanup_temp_images(unique_id)
+            self._cleanup_temp_images(unique_id, output_path, tmp_dir)
     
     def _get_markdown_generator_config(self, translator_type):
         """获取Markdown生成器配置
@@ -1048,7 +1076,7 @@ class TranslationService:
             layout_model = config.AIPING_MODEL_LAYOUT
         return api_key, api_url, layout_model
     
-    def _generate_chapter_zip(self, task, unique_id, filename, md_filename):
+    def _generate_chapter_zip(self, task, unique_id, filename, md_filename, output_path=None, output_filename=None, tmp_dir=None):
         """生成章节Markdown压缩文件
         
         Args:
@@ -1056,23 +1084,32 @@ class TranslationService:
             unique_id: 唯一ID
             filename: 原始文件名
             md_filename: Markdown文件名
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
+            tmp_dir: 临时文件目录，用于存放中间文件
             
         Returns:
             str: 压缩文件名
         """
         import glob
-        chapter_files = glob.glob(os.path.join(config.OUTPUT_FOLDER, "*.md"))
+        # 使用tmp_dir查找章节文件
+        base_dir = tmp_dir if tmp_dir else (output_path if output_path else config.OUTPUT_FOLDER)
+        chapter_files = glob.glob(os.path.join(base_dir, "*.md"))
         logger.info(f"找到的MD文件: {[os.path.basename(f) for f in chapter_files]}")
         # 过滤出章节文件
         chapter_files = [f for f in chapter_files if os.path.basename(f) != md_filename]
         logger.info(f"过滤后的章节文件: {[os.path.basename(f) for f in chapter_files]}")
         
         # 创建包含所有Markdown文件和图像目录的zip文件
-        zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
-        zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
+        # 如果用户指定了输出文件名，则使用用户指定的文件名
+        if output_filename:
+            zip_filename = output_filename
+        else:
+            zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
+        zip_filepath = os.path.join(output_path if output_path else config.OUTPUT_FOLDER, zip_filename)
         
         # 检查是否存在当前文档的图像目录
-        images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
+        images_dir = os.path.join(base_dir, f'images_{unique_id}')
         directories_to_include = []
         if os.path.exists(images_dir):
             directories_to_include.append(images_dir)
@@ -1082,7 +1119,7 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 章节Markdown压缩文件生成完成，输出文件: {zip_filename}")
         return zip_filename
     
-    def _generate_single_zip(self, task, unique_id, filename, md_filepath):
+    def _generate_single_zip(self, task, unique_id, filename, md_filepath, output_path=None, output_filename=None, tmp_dir=None):
         """生成单个Markdown压缩文件
         
         Args:
@@ -1090,6 +1127,9 @@ class TranslationService:
             unique_id: 唯一ID
             filename: 原始文件名
             md_filepath: Markdown文件路径
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
+            tmp_dir: 临时文件目录，用于存放中间文件
             
         Returns:
             str: 压缩文件名
@@ -1097,11 +1137,16 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} Markdown文档生成完成，输出文件: {os.path.basename(md_filepath)}")
         
         # 创建包含Markdown文件和当前文档图像目录的zip文件
-        zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
-        zip_filepath = os.path.join(config.OUTPUT_FOLDER, zip_filename)
+        base_dir = output_path if output_path else config.OUTPUT_FOLDER
+        # 如果用户指定了输出文件名，则使用用户指定的文件名
+        if output_filename:
+            zip_filename = output_filename
+        else:
+            zip_filename = f"translated_{unique_id}_{os.path.splitext(filename)[0]}.zip"
+        zip_filepath = os.path.join(base_dir, zip_filename)
         
-        # 检查是否存在当前文档的图像目录
-        images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
+        # 检查是否存在当前文档的图像目录（优先使用tmp_dir）
+        images_dir = os.path.join(tmp_dir if tmp_dir else base_dir, f'images_{unique_id}')
         directories_to_include = []
         if os.path.exists(images_dir):
             directories_to_include.append(images_dir)
@@ -1111,19 +1156,22 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} Markdown压缩文件生成完成，输出文件: {zip_filename}")
         return zip_filename
     
-    def _cleanup_temp_images(self, unique_id):
+    def _cleanup_temp_images(self, unique_id, output_path=None, tmp_dir=None):
         """清理临时图像目录
         
         Args:
             unique_id: 唯一ID
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            tmp_dir: 临时文件目录，用于存放中间文件
         """
-        images_dir = os.path.join(config.OUTPUT_FOLDER, f'images_{unique_id}')
+        base_dir = tmp_dir if tmp_dir else (output_path if output_path else config.OUTPUT_FOLDER)
+        images_dir = os.path.join(base_dir, f'images_{unique_id}')
         if os.path.exists(images_dir):
             import shutil
             shutil.rmtree(images_dir)
             logger.info(f"已清理临时图像目录: {images_dir}")
     
-    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True):
+    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True, output_path=None, output_filename=None, tmp_dir=None):
         """生成输出文件
 
         Args:
@@ -1137,6 +1185,9 @@ class TranslationService:
             target_lang: 目标语言
             translator_type: 翻译器类型（aiping/silicon_flow）
             chapter_split: 是否按章节翻译Markdown (默认: True)
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
+            tmp_dir: 临时文件目录，用于存放中间文件
 
         Returns:
             list: 输出文件名列表
@@ -1153,18 +1204,19 @@ class TranslationService:
         
         # 处理PDF生成
         if output_format in ['pdf', 'pdf_docx', 'all']:
-            pdf_filename = self.generate_pdf_output(task, input_filepath, unique_id, filename, translated_content, target_lang)
+            pdf_filename = self.generate_pdf_output(task, input_filepath, unique_id, filename, translated_content, target_lang, output_path, output_filename)
             output_files.append(pdf_filename)
         
         # 处理Word生成
         if output_format in ['docx', 'pdf_docx', 'all']:
-            docx_filename = self.generate_docx_output(task, unique_id, filename, translated_content, extracted_images, target_lang)
+            docx_filename = self.generate_docx_output(task, unique_id, filename, translated_content, extracted_images, target_lang, output_path, output_filename)
             output_files.append(docx_filename)
         
         # 处理Markdown生成
-        if output_format in ['md', 'all']:
+        if output_format in ['md', 'markdown', 'all']:
+            logger.info(f"任务 {task.task_id} 开始生成Markdown输出")
             try:
-                md_filename = self.generate_markdown_output(task, unique_id, filename, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split)
+                md_filename = self.generate_markdown_output(task, unique_id, filename, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir)
                 output_files.append(md_filename)
             except Exception as e:
                 logger.error(f"任务 {task.task_id} Markdown文档生成失败: {str(e)}")
@@ -1218,12 +1270,24 @@ class TranslationService:
                 if os.path.isfile(file_path):
                     # 清理所有类型的输出文件
                     if file_path.endswith(('.pdf', '.docx', '.md', '.zip')):
-                        os.remove(file_path)
-                        logger.info(f"清理旧输出文件: {file_path}")
+                        try:
+                            if os.access(file_path, os.W_OK):
+                                os.remove(file_path)
+                                logger.info(f"清理旧输出文件: {file_path}")
+                            else:
+                                logger.warning(f"没有权限清理文件: {file_path}")
+                        except Exception as e:
+                            logger.warning(f"清理文件时出错: {file_path}, 错误: {str(e)}")
                 elif os.path.isdir(file_path) and file_name.startswith('images_'):
                     # 清理图像目录
-                    shutil.rmtree(file_path)
-                    logger.info(f"清理旧图像目录: {file_path}")
+                    try:
+                        if os.access(file_path, os.W_OK):
+                            shutil.rmtree(file_path)
+                            logger.info(f"清理旧图像目录: {file_path}")
+                        else:
+                            logger.warning(f"没有权限清理目录: {file_path}")
+                    except Exception as e:
+                        logger.warning(f"清理目录时出错: {file_path}, 错误: {str(e)}")
             logger.info("输出目录清理完成")
     
     def translate_content(self, task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary):
@@ -1364,7 +1428,7 @@ class TranslationService:
                 return
             
             # 完成任务
-            self._complete_task(task, input_filepath, output_files)
+            self._complete_task(task, input_filepath, output_files, is_cli=False)
             
         except Exception as e:
             # 记录错误信息到日志
@@ -1454,7 +1518,7 @@ class TranslationService:
         
         return translated_content
     
-    def _generate_outputs(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split):
+    def _generate_outputs(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path=None, output_filename=None, tmp_dir=None):
         """生成输出文件
         
         Args:
@@ -1469,6 +1533,9 @@ class TranslationService:
             translator_type: 翻译器类型
             chapters: 章节信息
             chapter_split: 是否按章节拆分
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
+            tmp_dir: 临时文件目录，用于存放中间文件
             
         Returns:
             list: 输出文件名列表
@@ -1481,19 +1548,20 @@ class TranslationService:
         # 生成输出文件
         logger.info(f"任务 {task.task_id} 开始调用 generate_output_files 方法")
         output_files = self.generate_output_files(
-            task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split
+            task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir
         )
         logger.info(f"任务 {task.task_id} generate_output_files 方法执行完成，返回 {len(output_files)} 个输出文件")
         
         return output_files
     
-    def _complete_task(self, task, input_filepath, output_files):
+    def _complete_task(self, task, input_filepath, output_files, is_cli=False):
         """完成任务，更新进度并设置结果
         
         Args:
             task: 任务对象
             input_filepath: 输入文件路径
             output_files: 输出文件名列表
+            is_cli: 是否为CLI模式，CLI模式下不删除源文件
         """
         logger.info(f"任务 {task.task_id} 准备更新进度到 90%")
         if not task.update_phase_progress('generation', 50, '正在生成输出文件...'):
@@ -1504,9 +1572,12 @@ class TranslationService:
             self.cleanup_on_cancel(task, input_filepath)
             return
         
-        # 清理临时文件
-        remove_file(input_filepath)
-        logger.info(f"任务 {task.task_id} 已清理临时文件")
+        # 清理临时文件（CLI模式下不删除源文件）
+        if not is_cli:
+            remove_file(input_filepath)
+            logger.info(f"任务 {task.task_id} 已清理临时文件")
+        else:
+            logger.info(f"任务 {task.task_id} 为CLI模式，保留源文件")
         
         if not task.update_phase_progress('generation', 100, '翻译完成！'):
             self.cleanup_on_cancel(task, input_filepath)
@@ -1523,6 +1594,139 @@ class TranslationService:
             logger.info(f"任务 {task.task_id} 完成，输出文件: {', '.join(output_files)}")
         else:
             logger.warning(f"任务 {task.task_id} 未生成任何输出文件")
+
+    def process_translation_sync(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False, chapter_split=True, progress_callback=None, is_cli=False, output_path=None, output_filename=None, tmp_dir=None):
+        """同步翻译任务处理函数
+
+        Args:
+            task: 任务对象
+            input_filepath: 输入文件路径
+            source_lang: 源语言
+            target_lang: 目标语言
+            translator_type: 翻译服务类型
+            unique_id: 唯一ID
+            filename: 原始文件名
+            doc_type: 文档类型 (默认: 配置的DEFAULT_DOC_TYPE)
+            glossary: 术语表
+            page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
+            output_format: 输出格式，可选值: "pdf", "docx", "markdown"
+            semantic_merge: 是否启用语义块合并 (默认: True)
+            use_llm_merging: 是否使用大模型进行语义块合并 (默认: False)
+            chapter_split: 是否按章节翻译Markdown (默认: True)
+            progress_callback: 进度回调函数，接收(progress, message)参数
+            is_cli: 是否为CLI模式，CLI模式下不删除源文件
+            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
+            output_filename: 自定义输出文件名，默认使用自动生成的文件名
+            tmp_dir: 临时文件目录，用于存放中间文件
+            
+        Returns:
+            str: 输出文件名，失败返回None
+        """
+        try:
+            logger.info(f"开始同步处理任务 {task.task_id}，文件: {filename}")
+            
+            # 更新任务状态为处理中
+            task.set_status('processing')
+            task.update_phase_progress('init', 0, '任务开始，正在初始化...')
+            if progress_callback:
+                progress_callback(0, '任务开始，正在初始化...')
+            
+            task.update_phase_progress('init', 50, '正在检查源文件...')
+            task.update_phase_progress('init', 100, '源文件检查完成，准备提取内容')
+            if progress_callback:
+                progress_callback(5, '源文件检查完成')
+            
+            # 优化：如果目标语言和源语言相同，直接拷贝原始页
+            if source_lang == target_lang:
+                return self.handle_same_language(task, input_filepath, unique_id, filename, page_range, output_path)
+            
+            # 清理输出目录中的旧文件（仅当使用默认输出目录时）
+            if not output_path:
+                self.cleanup_output_directory()
+            
+            # 提取PDF内容
+            extract_result = self.extract_pdf_content(task, input_filepath, page_range, output_path=output_path, tmp_dir=tmp_dir)
+            if not extract_result:
+                logger.error(f"任务 {task.task_id} PDF内容提取失败")
+                return None
+            
+            text_blocks, tables, extracted_images, chapters = extract_result
+            
+            if progress_callback:
+                progress_callback(10, 'PDF内容提取完成')
+            
+            # 创建翻译器和语义分析器
+            translator, semantic_analyzer = self._create_translators(task, translator_type)
+            if task.is_canceled():
+                self.cleanup_on_cancel(task, input_filepath)
+                return None
+            
+            if progress_callback:
+                progress_callback(15, '翻译器创建完成')
+            
+            # 翻译文本内容
+            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary)
+            if not translated_content:
+                logger.error(f"任务 {task.task_id} 文本翻译失败")
+                return None
+            
+            if progress_callback:
+                progress_callback(60, '文本翻译完成')
+            
+            # 翻译表格内容
+            translated_tables = self.translate_tables(
+                task, tables, translator, source_lang, target_lang, doc_type, glossary
+            )
+            if translated_tables is None:
+                logger.error(f"任务 {task.task_id} 表格翻译失败")
+                return None
+            translated_content['tables'] = translated_tables
+            
+            if progress_callback:
+                progress_callback(70, '表格翻译完成')
+            
+            if task.is_canceled():
+                self.cleanup_on_cancel(task, input_filepath)
+                return None
+            
+            if not task.update_phase_progress('generation', 0, '正在生成输出文件...'):
+                self.cleanup_on_cancel(task, input_filepath)
+                return None
+            
+            if progress_callback:
+                progress_callback(75, '正在生成输出文件...')
+            
+            # 生成输出文件
+            output_files = self._generate_outputs(task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir)
+            
+            if progress_callback:
+                progress_callback(95, '输出文件生成完成')
+            
+            if task.is_canceled():
+                self.cleanup_on_cancel(task, input_filepath)
+                return None
+            
+            # 完成任务
+            self._complete_task(task, input_filepath, output_files, is_cli=is_cli)
+            
+            if progress_callback:
+                progress_callback(100, '翻译完成！')
+            
+            # 返回第一个输出文件
+            return output_files[0] if output_files else None
+            
+        except Exception as e:
+            # 记录错误信息到日志
+            logger.error(f"任务 {task.task_id} 处理失败: {str(e)}", exc_info=True)
+            # 设置任务错误状态
+            task.set_error(f"翻译失败: {str(e)}")
+            # 清理临时文件（CLI模式下不删除源文件）
+            if 'input_filepath' in locals() and not is_cli:
+                remove_file(input_filepath)
+                logger.info(f"任务 {task.task_id} 失败，已清理临时文件")
+            elif 'input_filepath' in locals() and is_cli:
+                logger.info(f"任务 {task.task_id} 失败，CLI模式下保留源文件")
+            return None
 
 # 创建翻译服务实例
 translation_service = TranslationService()

@@ -10,6 +10,62 @@
 
 ## 开发记录
 
+### 2026-02-08
+
+* **当前状态**：已完成输出目录和图像提取权限问题修复
+
+* **已完成任务**：
+
+  * 修复输出目录问题：
+
+    * 修改 `services/translation_service.py` 中的多个方法，添加 `output_path` 参数支持
+
+    * 更新 `cli/translate_command.py`，创建 tmp 子目录并传递给翻译服务
+
+    * 确保命令行模式下使用用户指定的输出目录
+
+  * 修复图像提取权限问题：
+
+    * 修改 `modules/pdf_extractor.py`，添加 `temp_images_dir` 参数
+
+    * 更新 `services/translation_service.py`，传递临时目录参数
+
+    * 修改 `services/glossary_service.py`，添加 `tmp_dir` 参数支持
+
+  * 更新 Markdown 处理：
+
+    * 修改 `services/translation_service.py` 中的 `generate_markdown_output` 方法
+
+    * 将 Markdown 文件放在临时目录中，然后再打包
+
+* **技术实现**：
+
+  * 为 PDF 提取器添加临时图像目录参数，允许指定图像提取位置
+
+  * 为翻译服务和术语服务添加临时目录参数，确保在沙箱模式下也能正常工作
+
+  * 优化 Markdown 生成和打包流程，使用临时目录存放中间文件
+
+* **影响**：
+
+  * 解决命令行模式下输出目录指定问题
+
+  * 解决沙箱模式下图像提取权限错误
+
+  * 改善 Markdown 生成和打包过程
+
+* **遇到的问题**：
+
+  * 无重大问题，开发过程顺利
+
+* **后续计划**：
+
+  * 更新项目文档，记录最近的变更
+
+  * 运行回归测试，确保所有功能正常工作
+
+  * 进一步优化代码结构和性能
+
 ### 2026-03-19
 
 * **当前状态**：已完成GitHub Actions同步工作流的添加，实现了从Gitee到GitHub的自动同步

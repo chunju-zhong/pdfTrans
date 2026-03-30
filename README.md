@@ -100,9 +100,100 @@ python app.py
 - Click "Translate" button
 - Wait for translation to complete, download translated PDF and/or Word files
 
-### Command Line Usage (Optional)
+### Command Line Usage
 
-Command line direct usage is not currently supported but will be added in future updates.
+The tool now supports command line interface (CLI) for batch processing and automation workflows.
+
+#### Installation
+
+```bash
+# Install the CLI tool
+pip install -e .
+
+# Or use directly without installation
+python cli.py --help
+```
+
+#### Basic Commands
+
+```bash
+# Translate a PDF file
+pdftrans translate document.pdf -o translated.pdf
+
+# Specify source and target languages
+pdftrans translate document.pdf -s en -t zh -o output.pdf
+
+# Use specific translation service
+pdftrans translate document.pdf -T silicon_flow -o output.pdf
+
+# Translate specific pages
+pdftrans translate document.pdf --pages "1-10,15,20-25" -o output.pdf
+
+# Generate Word document
+pdftrans translate document.pdf -f docx -o output.docx
+
+# Generate Markdown with chapter split
+pdftrans translate document.pdf -f markdown --chapter-split -o output/
+
+# Use glossary file
+pdftrans translate document.pdf -g glossary.txt -o output.pdf
+
+# Enable semantic merge
+pdftrans translate document.pdf --semantic-merge -o output.pdf
+
+# Extract glossary
+pdftrans glossary document.pdf -o glossary.txt
+
+# List supported languages
+pdftrans list-languages
+```
+
+#### Output Directory and Temporary Files
+
+- **Output Directory**: When using the `-o` parameter, the tool will generate output files directly in the specified directory. If no output directory is specified, the default `outputs/` directory will be used.
+
+- **Temporary Files**: The tool automatically creates a temporary subdirectory in the output directory to store intermediate files such as extracted images and Markdown files. This ensures that image extraction works correctly even in sandbox mode with restricted permissions.
+
+- **Markdown Processing**: For Markdown output, the tool first generates Markdown files in the temporary directory and then packages them into a zip file if chapter split is enabled.
+
+#### CLI Options
+
+**Global Options:**
+- `-v, --verbose` - Show detailed output
+- `--version` - Show version information
+- `-h, --help` - Show help message
+
+**Translate Command Options:**
+- `-o, --output` - Output file path (auto-generated if not specified)
+- `-s, --source` - Source language code (default: en)
+- `-t, --target` - Target language code (default: zh)
+- `-T, --translator` - Translation service (aiping/silicon_flow, default: aiping)
+- `-p, --pages` - Page range (e.g., "1-5,7,9-10")
+- `-f, --format` - Output format (pdf/docx/markdown, default: pdf)
+- `-g, --glossary` - Glossary file path
+- `-d, --doc-type` - Document type or domain description (default: AI技术)
+- `-m, --semantic-merge` - Enable semantic merge
+- `-l, --llm-merge` - Use LLM for merging
+- `-c, --chapter-split` - Split output by chapter (Markdown only)
+
+**Glossary Command Options:**
+- `-o, --output` - Output file path
+- `-s, --source` - Source language code
+- `-t, --target` - Target language code
+- `-T, --translator` - Translation service
+- `-p, --pages` - Page range
+- `-d, --doc-type` - Document type
+
+#### Supported Languages
+
+- `zh` - Chinese
+- `en` - English
+- `ja` - Japanese
+- `ko` - Korean
+- `fr` - French
+- `de` - German
+- `es` - Spanish
+- `ru` - Russian
 
 ## Project Structure
 

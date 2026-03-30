@@ -109,13 +109,14 @@ class PdfExtractor:
         """
         return self.chapter_identifier.has_chapters()
     
-    def extract(self, pages=None, mark_non_body=True, extract_chapter=True):
+    def extract(self, pages=None, mark_non_body=True, extract_chapter=True, temp_images_dir=None):
         """提取PDF中的文本内容，可以指定页面
 
         Args:
             pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
             mark_non_body (bool): 是否标记非正文文本块（页眉、页脚、页码），默认为True
             extract_chapter (bool): 是否提取章节信息，默认为True  
+            temp_images_dir (str | None): 临时图像目录路径，None表示使用默认路径
             
         Returns:
             PdfExtraction: 包含提取的文本内容和元数据的对象
@@ -137,7 +138,8 @@ class PdfExtractor:
         page_sizes = {}
         
         # 创建临时图像目录
-        temp_images_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp_images')
+        if temp_images_dir is None:
+            temp_images_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp_images')
         os.makedirs(temp_images_dir, exist_ok=True)
         
         # 直接创建PdfExtraction所需的对象列表

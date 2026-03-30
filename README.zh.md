@@ -100,9 +100,100 @@ python app.py
 - 点击"翻译"按钮
 - 等待翻译完成，下载翻译后的PDF和/或Word文件
 
-### 命令行使用（可选）
+### 命令行使用
 
-目前暂不支持命令行直接使用，后续将添加该功能。
+该工具现已支持命令行界面（CLI），可用于批量处理和自动化工作流。
+
+#### 安装
+
+```bash
+# 安装CLI工具
+pip install -e .
+
+# 或直接运行，无需安装
+python cli.py --help
+```
+
+#### 基本命令
+
+```bash
+# 翻译PDF文件
+pdftrans translate document.pdf -o translated.pdf
+
+# 指定源语言和目标语言
+pdftrans translate document.pdf -s en -t zh -o output.pdf
+
+# 使用指定的翻译服务
+pdftrans translate document.pdf -T silicon_flow -o output.pdf
+
+# 翻译指定页码
+pdftrans translate document.pdf --pages "1-10,15,20-25" -o output.pdf
+
+# 生成Word文档
+pdftrans translate document.pdf -f docx -o output.docx
+
+# 生成Markdown并拆分章节
+pdftrans translate document.pdf -f markdown --chapter-split -o output/
+
+# 使用术语表
+pdftrans translate document.pdf -g glossary.txt -o output.pdf
+
+# 启用语义合并
+pdftrans translate document.pdf --semantic-merge -o output.pdf
+
+# 提取术语表
+pdftrans glossary document.pdf -o glossary.txt
+
+# 列出支持的语言
+pdftrans list-languages
+```
+
+#### 输出目录和临时文件
+
+- **输出目录**：使用 `-o` 参数时，工具会直接在指定的目录中生成输出文件。如果未指定输出目录，将使用默认的 `outputs/` 目录。
+
+- **临时文件**：工具会在输出目录中自动创建一个临时子目录，用于存储提取的图像和Markdown文件等中间文件。这确保了即使在权限受限的沙箱模式下，图像提取也能正常工作。
+
+- **Markdown处理**：对于Markdown输出，工具首先在临时目录中生成Markdown文件，然后在启用章节拆分时将它们打包成zip文件。
+
+#### CLI选项
+
+**全局选项：**
+- `-v, --verbose` - 显示详细输出
+- `--version` - 显示版本信息
+- `-h, --help` - 显示帮助信息
+
+**translate命令选项：**
+- `-o, --output` - 输出文件路径（未指定则自动生成）
+- `-s, --source` - 源语言代码（默认：en）
+- `-t, --target` - 目标语言代码（默认：zh）
+- `-T, --translator` - 翻译服务（aiping/silicon_flow，默认：aiping）
+- `-p, --pages` - 页码范围（例如："1-5,7,9-10"）
+- `-f, --format` - 输出格式（pdf/docx/markdown，默认：pdf）
+- `-g, --glossary` - 术语表文件路径
+- `-d, --doc-type` - 文档类型或领域说明（默认：AI技术）
+- `-m, --semantic-merge` - 启用语义合并
+- `-l, --llm-merge` - 使用LLM合并
+- `-c, --chapter-split` - 按章节拆分输出（仅Markdown格式）
+
+**glossary命令选项：**
+- `-o, --output` - 输出文件路径
+- `-s, --source` - 源语言代码
+- `-t, --target` - 目标语言代码
+- `-T, --translator` - 翻译服务
+- `-p, --pages` - 页码范围
+- `-d, --doc-type` - 文档类型
+
+#### 支持的语言
+
+- `zh` - 中文
+- `en` - 英语
+- `ja` - 日语
+- `ko` - 韩语
+- `fr` - 法语
+- `de` - 德语
+- `es` - 西班牙语
+- `ru` - 俄语
 
 ## 项目结构
 
