@@ -1,5 +1,40 @@
 # 更新日志
 
+## 2026-03-30
+
+- 添加命令行支持：
+  - 添加 `cli.py` 命令行入口文件
+  - 添加 `cli/` 目录，包含命令处理模块
+  - 添加 `setup.py` 安装配置
+  - 添加 `tests/test_cli.py` 命令行测试
+  - 添加 `tests/test_output_filename.py` 输出文件名测试
+  - 添加 `SKILL.md` 技能文档
+  - 添加 `.trae/skills/` 技能目录
+  - 添加 `.trae/specs/` 规范目录
+  - 添加 `.trae/documents/` 相关文档
+- 修复输出目录和图像提取权限问题：
+  - 修改 `modules/pdf_extractor.py`，添加 `temp_images_dir` 参数
+  - 修改 `services/translation_service.py`，添加 `output_path` 和 `tmp_dir` 参数支持
+  - 修改 `services/glossary_service.py`，添加 `tmp_dir` 参数支持
+  - 更新 `README.md` 和 `README.zh.md`，添加输出目录和临时文件说明
+  - 更新 `.trae/documents/ai_dev_progress.md`，记录开发进度
+- 添加技能相关文档：
+  - 在 `README.md` 和 `README.zh.md` 中添加技能集成部分
+  - 添加API密钥配置说明
+  - 记录智能默认值、优化输出、智能后缀处理和错误处理功能
+- 相关文件：
+  - `cli.py`
+  - `cli/` 目录
+  - `setup.py`
+  - `tests/test_cli.py`
+  - `tests/test_output_filename.py`
+  - `SKILL.md`
+  - `modules/pdf_extractor.py`
+  - `services/translation_service.py`
+  - `services/glossary_service.py`
+  - `README.md`
+  - `README.zh.md`
+
 ## 2026-03-19
 
 - 添加GitHub Actions同步工作流：

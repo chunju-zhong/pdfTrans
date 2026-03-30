@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-03-30
+
+- Added command line support:
+  - Added `cli.py` command line entry file
+  - Added `cli/` directory with command processing modules
+  - Added `setup.py` installation configuration
+  - Added `tests/test_cli.py` command line tests
+  - Added `tests/test_output_filename.py` output filename tests
+  - Added `SKILL.md` skill documentation
+  - Added `.trae/skills/` skill directory
+  - Added `.trae/specs/` specification directory
+  - Added `.trae/documents/` related documents
+- Fixed output directory and image extraction permission issues:
+  - Modified `modules/pdf_extractor.py` to add `temp_images_dir` parameter
+  - Modified `services/translation_service.py` to add `output_path` and `tmp_dir` parameter support
+  - Modified `services/glossary_service.py` to add `tmp_dir` parameter support
+  - Updated `README.md` and `README.zh.md` to add output directory and temporary file instructions
+  - Updated `.trae/documents/ai_dev_progress.md` to record development progress
+- Added skill-related documentation:
+  - Added skill integration section in `README.md` and `README.zh.md`
+  - Added API key configuration instructions
+  - Documented smart defaults, optimized output, intelligent suffix handling, and error handling features
+- Related files:
+  - `cli.py`
+  - `cli/` directory
+  - `setup.py`
+  - `tests/test_cli.py`
+  - `tests/test_output_filename.py`
+  - `SKILL.md`
+  - `modules/pdf_extractor.py`
+  - `services/translation_service.py`
+  - `services/glossary_service.py`
+  - `README.md`
+  - `README.zh.md`
+
 ## 2026-03-19
 
 - Added GitHub Actions sync workflow:
