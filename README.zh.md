@@ -161,36 +161,42 @@ PDF翻译工具包含技能集成，提供增强功能：
 
 技能可以通过以下方式使用：
 
-1. **基本翻译**：只需提供PDF文件路径，技能会自动检测源语言并翻译为中文
-   ```bash
-   pdftrans translate document.pdf
-   ```
+1. **自然语言使用**（在支持skill的AI IDE中，如Trae）：你可以使用自然语言与技能交互，例如：
+   - "将这个PDF翻译成中文"
+   - "从这个PDF中提取术语表"
+   - "列出支持的语言"
 
-2. **指定输出格式**：技能默认为Markdown格式，但你可以指定其他格式
-   ```bash
-   pdftrans translate document.pdf -f pdf
-   pdftrans translate document.pdf -f docx
-   ```
+2. **命令行使用**：直接使用命令行界面
+   - **基本翻译**：只需提供PDF文件路径，技能会自动检测源语言并翻译为中文
+     ```bash
+     pdftrans translate document.pdf
+     ```
 
-3. **使用章节拆分**：对于Markdown输出，技能会自动启用章节拆分
-   ```bash
-   pdftrans translate document.pdf -f markdown
-   ```
+   - **指定输出格式**：技能默认为Markdown格式，但你可以指定其他格式
+     ```bash
+     pdftrans translate document.pdf -f pdf
+     pdftrans translate document.pdf -f docx
+     ```
 
-4. **启用语义合并**：技能会自动启用语义合并和LLM合并，以获得更好的翻译质量
-   ```bash
-   pdftrans translate document.pdf -m -l
-   ```
+   - **使用章节拆分**：对于Markdown输出，技能会自动启用章节拆分
+     ```bash
+     pdftrans translate document.pdf -f markdown
+     ```
 
-5. **提取术语表**：技能还支持从PDF文件中提取术语表
-   ```bash
-   pdftrans glossary document.pdf
-   ```
+   - **启用语义合并**：技能会自动启用语义合并和LLM合并，以获得更好的翻译质量
+     ```bash
+     pdftrans translate document.pdf -m -l
+     ```
 
-6. **列出支持的语言**：查看支持的语言列表
-   ```bash
-   pdftrans list-languages
-   ```
+   - **提取术语表**：技能还支持从PDF文件中提取术语表
+     ```bash
+     pdftrans glossary document.pdf
+     ```
+
+   - **列出支持的语言**：查看支持的语言列表
+     ```bash
+     pdftrans list-languages
+     ```
 
 #### 输出目录和临时文件
 

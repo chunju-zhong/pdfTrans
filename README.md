@@ -161,36 +161,42 @@ The PDF translation tool includes a skill integration for enhanced functionality
 
 The skill can be used in the following ways:
 
-1. **Basic Translation**: Simply provide the PDF file path, and the skill will automatically detect the source language and translate to Chinese
-   ```bash
-   pdftrans translate document.pdf
-   ```
+1. **Natural Language Usage** (in AI IDEs like Trae): You can use natural language to interact with the skill, for example:
+   - "Translate this PDF to Chinese"
+   - "Extract glossary from this PDF"
+   - "List supported languages"
 
-2. **Specify Output Format**: The skill defaults to Markdown format, but you can specify other formats
-   ```bash
-   pdftrans translate document.pdf -f pdf
-   pdftrans translate document.pdf -f docx
-   ```
+2. **Command Line Usage**: Use the command line interface directly
+   - **Basic Translation**: Simply provide the PDF file path, and the skill will automatically detect the source language and translate to Chinese
+     ```bash
+     pdftrans translate document.pdf
+     ```
 
-3. **Use Chapter Split**: For Markdown output, the skill automatically enables chapter split
-   ```bash
-   pdftrans translate document.pdf -f markdown
-   ```
+   - **Specify Output Format**: The skill defaults to Markdown format, but you can specify other formats
+     ```bash
+     pdftrans translate document.pdf -f pdf
+     pdftrans translate document.pdf -f docx
+     ```
 
-4. **Enable Semantic Merge**: The skill automatically enables semantic merge and LLM merge for better translation quality
-   ```bash
-   pdftrans translate document.pdf -m -l
-   ```
+   - **Use Chapter Split**: For Markdown output, the skill automatically enables chapter split
+     ```bash
+     pdftrans translate document.pdf -f markdown
+     ```
 
-5. **Extract Glossary**: The skill also supports glossary extraction from PDF files
-   ```bash
-   pdftrans glossary document.pdf
-   ```
+   - **Enable Semantic Merge**: The skill automatically enables semantic merge and LLM merge for better translation quality
+     ```bash
+     pdftrans translate document.pdf -m -l
+     ```
 
-6. **List Supported Languages**: Check the list of supported languages
-   ```bash
-   pdftrans list-languages
-   ```
+   - **Extract Glossary**: The skill also supports glossary extraction from PDF files
+     ```bash
+     pdftrans glossary document.pdf
+     ```
+
+   - **List Supported Languages**: Check the list of supported languages
+     ```bash
+     pdftrans list-languages
+     ```
 
 #### Output Directory and Temporary Files
 
