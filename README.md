@@ -148,6 +148,15 @@ pdftrans glossary document.pdf -o glossary.txt
 pdftrans list-languages
 ```
 
+#### Skill Integration
+
+The PDF translation tool includes a skill integration for enhanced functionality. The skill provides the following features:
+
+- **Smart Defaults**: Automatically detects source language from the first 100 lines of the input file, defaults to Chinese as target language
+- **Optimized Output**: Defaults to Markdown format with chapter split, semantic merge, and LLM merge enabled
+- **Intelligent Suffix Handling**: Automatically adds correct file suffixes based on output format
+- **Error Handling**: Provides clear error messages for common issues like permission errors
+
 #### Output Directory and Temporary Files
 
 - **Output Directory**: When using the `-o` parameter, the tool will generate output files directly in the specified directory. If no output directory is specified, the default `outputs/` directory will be used.
@@ -155,6 +164,22 @@ pdftrans list-languages
 - **Temporary Files**: The tool automatically creates a temporary subdirectory in the output directory to store intermediate files such as extracted images and Markdown files. This ensures that image extraction works correctly even in sandbox mode with restricted permissions.
 
 - **Markdown Processing**: For Markdown output, the tool first generates Markdown files in the temporary directory and then packages them into a zip file if chapter split is enabled.
+
+#### API Key Configuration
+
+The tool requires API keys for translation services. Configure them in the `.env` file:
+
+```bash
+# .env file example
+
+# aiping API configuration
+AIPING_API_KEY=your_aiping_api_key
+
+# Silicon Flow API configuration
+SILICON_FLOW_API_KEY=your_silicon_flow_api_key
+```
+
+Only one translation service API key is required to use the tool.
 
 #### CLI Options
 

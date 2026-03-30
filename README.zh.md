@@ -148,6 +148,15 @@ pdftrans glossary document.pdf -o glossary.txt
 pdftrans list-languages
 ```
 
+#### 技能集成
+
+PDF翻译工具包含技能集成，提供增强功能：
+
+- **智能默认值**：自动从输入文件的前100行检测源语言，默认目标语言为中文
+- **优化输出**：默认为Markdown格式，启用章节拆分、语义合并和LLM合并
+- **智能后缀处理**：根据输出格式自动添加正确的文件后缀
+- **错误处理**：为常见问题（如权限错误）提供清晰的错误信息
+
 #### 输出目录和临时文件
 
 - **输出目录**：使用 `-o` 参数时，工具会直接在指定的目录中生成输出文件。如果未指定输出目录，将使用默认的 `outputs/` 目录。
@@ -155,6 +164,22 @@ pdftrans list-languages
 - **临时文件**：工具会在输出目录中自动创建一个临时子目录，用于存储提取的图像和Markdown文件等中间文件。这确保了即使在权限受限的沙箱模式下，图像提取也能正常工作。
 
 - **Markdown处理**：对于Markdown输出，工具首先在临时目录中生成Markdown文件，然后在启用章节拆分时将它们打包成zip文件。
+
+#### API密钥配置
+
+工具需要翻译服务的API密钥才能正常工作。在 `.env` 文件中配置：
+
+```bash
+# .env 文件示例
+
+# aiping API 配置
+AIPING_API_KEY=your_aiping_api_key
+
+# 硅基流动 API 配置
+SILICON_FLOW_API_KEY=your_silicon_flow_api_key
+```
+
+只需配置其中一种翻译服务的API密钥即可使用工具。
 
 #### CLI选项
 
