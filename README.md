@@ -157,6 +157,41 @@ The PDF translation tool includes a skill integration for enhanced functionality
 - **Intelligent Suffix Handling**: Automatically adds correct file suffixes based on output format
 - **Error Handling**: Provides clear error messages for common issues like permission errors
 
+#### Skill Usage
+
+The skill can be used in the following ways:
+
+1. **Basic Translation**: Simply provide the PDF file path, and the skill will automatically detect the source language and translate to Chinese
+   ```bash
+   pdftrans translate document.pdf
+   ```
+
+2. **Specify Output Format**: The skill defaults to Markdown format, but you can specify other formats
+   ```bash
+   pdftrans translate document.pdf -f pdf
+   pdftrans translate document.pdf -f docx
+   ```
+
+3. **Use Chapter Split**: For Markdown output, the skill automatically enables chapter split
+   ```bash
+   pdftrans translate document.pdf -f markdown
+   ```
+
+4. **Enable Semantic Merge**: The skill automatically enables semantic merge and LLM merge for better translation quality
+   ```bash
+   pdftrans translate document.pdf -m -l
+   ```
+
+5. **Extract Glossary**: The skill also supports glossary extraction from PDF files
+   ```bash
+   pdftrans glossary document.pdf
+   ```
+
+6. **List Supported Languages**: Check the list of supported languages
+   ```bash
+   pdftrans list-languages
+   ```
+
 #### Output Directory and Temporary Files
 
 - **Output Directory**: When using the `-o` parameter, the tool will generate output files directly in the specified directory. If no output directory is specified, the default `outputs/` directory will be used.

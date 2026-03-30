@@ -157,6 +157,41 @@ PDF翻译工具包含技能集成，提供增强功能：
 - **智能后缀处理**：根据输出格式自动添加正确的文件后缀
 - **错误处理**：为常见问题（如权限错误）提供清晰的错误信息
 
+#### 技能使用方法
+
+技能可以通过以下方式使用：
+
+1. **基本翻译**：只需提供PDF文件路径，技能会自动检测源语言并翻译为中文
+   ```bash
+   pdftrans translate document.pdf
+   ```
+
+2. **指定输出格式**：技能默认为Markdown格式，但你可以指定其他格式
+   ```bash
+   pdftrans translate document.pdf -f pdf
+   pdftrans translate document.pdf -f docx
+   ```
+
+3. **使用章节拆分**：对于Markdown输出，技能会自动启用章节拆分
+   ```bash
+   pdftrans translate document.pdf -f markdown
+   ```
+
+4. **启用语义合并**：技能会自动启用语义合并和LLM合并，以获得更好的翻译质量
+   ```bash
+   pdftrans translate document.pdf -m -l
+   ```
+
+5. **提取术语表**：技能还支持从PDF文件中提取术语表
+   ```bash
+   pdftrans glossary document.pdf
+   ```
+
+6. **列出支持的语言**：查看支持的语言列表
+   ```bash
+   pdftrans list-languages
+   ```
+
 #### 输出目录和临时文件
 
 - **输出目录**：使用 `-o` 参数时，工具会直接在指定的目录中生成输出文件。如果未指定输出目录，将使用默认的 `outputs/` 目录。
