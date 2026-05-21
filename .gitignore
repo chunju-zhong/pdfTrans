@@ -33,6 +33,15 @@ outputs/
 
 # AI generated
 trae-sandbox-
-
+.trae/skills/
+.trae/rules/
+.trae/agents/
+.trae/commands/
+.trae/.ecc-manifest
+.trae/install.sh
+.trae/README.md
+.trae/uninstall.sh
+.trae/README.zh-CN.md
+        
 # Temporary images
 temp_images/

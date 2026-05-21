@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，能够准确提取PDF内容，使用多种翻译服务进行翻译，并生成格式良好的翻译后PDF/Word文档。
+PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持Web服务/CLI命令行/SKILL方式调用，能够准确提取PDF内容，使用多种翻译服务进行翻译，并生成格式良好的翻译后PDF/Word文档。
 
 如果你在使用过程中有任何问题或建议，欢迎在公众号【智践行】留言，也可以通过Gitee仓库提交Issue或Pull Request，期待与大家一起，把PDF翻译工具打磨得更贴合实际需求！
 
@@ -115,15 +115,14 @@ python cli.py --help
 ```
 
 #### 基本命令
-
 ```bash
-# 翻译PDF文件
+# 翻译PDF文件，默认使用 aiping 大模型服务，英文翻译成中文，输出为pdf, 不启用语义合并和LLM主义判断
 pdftrans translate document.pdf -o translated.pdf
 
 # 指定源语言和目标语言
 pdftrans translate document.pdf -s en -t zh -o output.pdf
 
-# 使用指定的翻译服务
+# 使用指定的翻译服务，比如silicon_flow
 pdftrans translate document.pdf -T silicon_flow -o output.pdf
 
 # 翻译指定页码
@@ -135,11 +134,14 @@ pdftrans translate document.pdf -f docx -o output.docx
 # 生成Markdown并拆分章节
 pdftrans translate document.pdf -f markdown --chapter-split -o output/
 
-# 使用术语表
-pdftrans translate document.pdf -g glossary.txt -o output.pdf
-
 # 启用语义合并
 pdftrans translate document.pdf --semantic-merge -o output.pdf
+
+# 启用语合并及LLM语义判断
+pdftrans translate document.pdf -m -l -f docs -o output.pdf
+
+# 翻译时使用术语表
+pdftrans translate document.pdf -g glossary.txt -o output.pdf
 
 # 提取术语表
 pdftrans glossary document.pdf -o glossary.txt
@@ -150,61 +152,19 @@ pdftrans list-languages
 
 #### 技能集成
 
-PDF翻译工具包含技能集成，提供增强功能：
+PDF翻译工具包含技能集成，并提供增强功能：
 
 - **智能默认值**：自动从输入文件的前100行检测源语言，默认目标语言为中文
-- **优化输出**：默认为Markdown格式，启用章节拆分、语义合并和LLM合并
-- **智能后缀处理**：根据输出格式自动添加正确的文件后缀
+- **优化输出**：默认为Markdown格式，启用章节拆分、语义合并和LLM语义判断
 - **错误处理**：为常见问题（如权限错误）提供清晰的错误信息
 
 #### 技能使用方法
 
-技能可以通过以下方式使用：
-
-1. **自然语言使用**（在支持skill的AI IDE中，如Trae）：你可以使用自然语言与技能交互，例如：
+可以通过**自然语言使用**（在支持skill的AI IDE中，如Trae）：你可以使用自然语言与技能交互，例如：
    - "将这个PDF翻译成中文"
+   - "将这个PDF翻译成中文，输出为word文档"
    - "从这个PDF中提取术语表"
-   - "列出支持的语言"
-
-2. **命令行使用**：直接使用命令行界面
-   - **基本翻译**：只需提供PDF文件路径，技能会自动检测源语言并翻译为中文
-     ```bash
-     pdftrans translate document.pdf
-     ```
-
-   - **指定输出格式**：技能默认为Markdown格式，但你可以指定其他格式
-     ```bash
-     pdftrans translate document.pdf -f pdf
-     pdftrans translate document.pdf -f docx
-     ```
-
-   - **使用章节拆分**：对于Markdown输出，技能会自动启用章节拆分
-     ```bash
-     pdftrans translate document.pdf -f markdown
-     ```
-
-   - **启用语义合并**：技能会自动启用语义合并和LLM合并，以获得更好的翻译质量
-     ```bash
-     pdftrans translate document.pdf -m -l
-     ```
-
-   - **提取术语表**：技能还支持从PDF文件中提取术语表
-     ```bash
-     pdftrans glossary document.pdf
-     ```
-
-   - **列出支持的语言**：查看支持的语言列表
-     ```bash
-     pdftrans list-languages
-     ```
-
-#### 输出目录和临时文件
-
-- **输出目录**：使用 `-o` 参数时，工具会直接在指定的目录中生成输出文件。如果未指定输出目录，将使用默认的 `outputs/` 目录。
-
-- **临时文件**：工具会在输出目录中自动创建一个临时子目录，用于存储提取的图像和Markdown文件等中间文件。这确保了即使在权限受限的沙箱模式下，图像提取也能正常工作。
-
-- **Markdown处理**：对于Markdown输出，工具首先在临时目录中生成Markdown文件，然后在启用章节拆分时将它们打包成zip文件。
+   - "列出PDF翻译工具支持的语言"
 
 #### API密钥配置
 
@@ -220,7 +180,7 @@ AIPING_API_KEY=your_aiping_api_key
 SILICON_FLOW_API_KEY=your_silicon_flow_api_key
 ```
 
-只需配置其中一种翻译服务的API密钥即可使用工具。
+只需配置其中一种翻译服务的API密钥即可使用工具。工具默认使用 aiping 大模型服务。
 
 #### CLI选项
 
@@ -228,21 +188,6 @@ SILICON_FLOW_API_KEY=your_silicon_flow_api_key
 - `-v, --verbose` - 显示详细输出
 - `--version` - 显示版本信息
 - `-h, --help` - 显示帮助信息
-
-**translate命令选项：**
-- `-o, --output` - 输出文件路径（未指定则自动生成）
-- `-s, --source` - 源语言代码（默认：en）
-- `-t, --target` - 目标语言代码（默认：zh）
-- `-T, --translator` - 翻译服务（aiping/silicon_flow，默认：aiping）
-- `-p, --pages` - 页码范围（例如："1-5,7,9-10"）
-- `-f, --format` - 输出格式（pdf/docx/markdown，默认：pdf）
-- `-g, --glossary` - 术语表文件路径
-- `-d, --doc-type` - 文档类型或领域说明（默认：AI技术）
-- `-m, --semantic-merge` - 启用语义合并
-- `-l, --llm-merge` - 使用LLM合并
-- `-c, --chapter-split` - 按章节拆分输出（仅Markdown格式）
-
-**glossary命令选项：**
 - `-o, --output` - 输出文件路径
 - `-s, --source` - 源语言代码
 - `-t, --target` - 目标语言代码
@@ -250,150 +195,17 @@ SILICON_FLOW_API_KEY=your_silicon_flow_api_key
 - `-p, --pages` - 页码范围
 - `-d, --doc-type` - 文档类型
 
-#### 支持的语言
-
-- `zh` - 中文
-- `en` - 英语
-- `ja` - 日语
-- `ko` - 韩语
-- `fr` - 法语
-- `de` - 德语
-- `es` - 西班牙语
-- `ru` - 俄语
-
-## 项目结构
-
-```
-pdfTrans/
-├── .trae/
-│   ├── documents/           # 文档目录
-│   │   └── ai_dev_progress.md # 开发进度记录文件
-│   ├── rules/
-│   │   └── project_rules.md # 项目规则文件
-│   └── tmp/                 # AI辅助开发生成的代码/数据分析脚本和相关数据
-├── .git/                    # Git仓库目录
-├── .gitignore               # Git忽略文件
-├── app.py                   # Flask应用入口，仅包含Flask应用初始化和路由
-├── requirements.txt         # 依赖库列表
-├── environment.yml          # conda环境配置
-├── config.py                # 配置文件
-├── .env.example             # 环境变量示例文件
-├── README.md                # 项目说明文档
-├── pytest.ini               # pytest配置文件
-├── docs/                    # 项目文档目录
-├── models/                  # 数据模型
-│   ├── task.py              # 任务数据模型
-│   ├── text_block.py        # 文本块模型
-│   ├── merged_block.py      # 合并块模型
-│   └── extraction.py        # 提取模型
-├── services/                # 业务逻辑服务
-│   ├── task_service.py      # 任务管理服务
-│   └── translation_service.py # 翻译业务服务
-├── utils/                   # 辅助工具
-│   ├── text_processing.py   # 文本处理工具
-│   ├── logging_config.py    # 日志配置
-│   └── file_utils.py        # 文件处理工具
-├── modules/                 # 核心功能模块
-│   ├── extractors/          # 提取器模块
-│   │   ├── __init__.py
-│   │   ├── coordinate_utils.py
-│   │   ├── page_utils.py
-│   │   ├── style_analyzer.py
-│   │   ├── table_processor.py
-│   │   └── text_analyzer.py
-│   ├── pdf_extractor.py     # PDF提取模块
-│   ├── pdf_generator.py     # PDF生成模块
-│   ├── docx_generator.py    # Word生成模块
-│   ├── markdown_generator.py # Markdown生成模块
-│   ├── translator.py        # 翻译基类
-│   ├── aiping_translator.py # aiping翻译模块
-│   └── silicon_flow_translator.py # 硅基流动翻译模块
-├── prompt/                  # 提示词目录
-├── temp_images/             # 临时图片目录
-├── tests/                   # 测试脚本目录
-│   ├── test_*.py            # 测试脚本
-├── static/                  # 静态资源
-│   ├── css/                 # CSS样式文件
-│   │   └── style.css
-│   └── js/                  # JavaScript文件
-│       └── main.js
-├── templates/               # 模板文件
-│   ├── index.html           # 主页面模板
-│   └── download.html        # 下载页面模板
-├── uploads/                 # 上传文件目录
-└── outputs/                 # 输出文件目录
-```
-
-## 开发流程
-
-### 分支管理
-
-- **main**：主分支，仅用于发布稳定版本
-- **develop**：开发分支，整合各功能分支
-- **feature/xxx**：功能分支，用于开发新功能
-- **bugfix/xxx**：bug修复分支
-- **release/xxx**：发布分支，用于准备发布
-
-### 代码提交规范
-
-- 提交信息格式：`[类型] 简短描述`
-- 类型包括：feat（新功能）、fix（bug修复）、docs（文档）、style（代码风格）、refactor（重构）、test（测试）、chore（构建/工具）
-- 示例：`feat: 添加百度翻译API封装`
-
-### 测试规范
-
-- 所有测试脚本必须放在`tests/`目录下，命名格式为`test_*.py`
-- 使用pytest框架进行测试
-- 单元测试覆盖率不低于80%
-
-### 运行测试
-
-#### 安装依赖
-
-pytest已包含在requirements.txt中，执行安装依赖命令即可：
-
-```bash
-pip install -r requirements.txt
-```
-
-#### 运行测试命令
-
-- 运行所有测试：
-  ```bash
-  pytest
-  ```
-- 运行特定模块测试：
-  ```bash
-  pytest tests/test_pdf_extractor.py
-  ```
-- 运行测试并生成覆盖率报告：
-  ```bash
-  pytest --cov=modules/ tests/
-  ```
-
-#### 测试文件列表
-
-- `test_pdf_extractor.py`：PDF提取模块测试
-- `test_translator.py`：翻译基类测试
-- `test_aiping_translator.py`：aiping翻译测试
-- `test_silicon_flow_translator.py`：硅基流动翻译测试
-- `test_pdf_generator.py`：PDF生成模块测试
-- `test_markdown_download.py`：Markdown下载测试
-- `test_markdown_chart_position.py`：Markdown图表位置测试
-- `test_markdown_table.py`：Markdown表格测试
-- `conftest.py`：测试配置文件
-
-## 贡献指南
-
-1. Fork仓库
-2. 创建功能分支：`git checkout -b feature/xxx`
-3. 提交代码：`git commit -m "feat: 添加xxx功能"`
-4. 推送分支：`git push origin feature/xxx`
-5. 提交Pull Request
+**translate命令选项：**
+- `-o, --output` - 输出文件路径（未指定则自动生成）
+- `-f, --format` - 输出格式（pdf/docx/markdown，默认：pdf）
+- `-g, --glossary` - 术语表文件路径
+- `-m, --semantic-merge` - 启用语义合并
+- `-l, --llm-merge` - 使用LLM语义判断
+- `-c, --chapter-split` - 按章节拆分输出（仅Markdown格式）
 
 ## 许可证
 
-MIT License
+AGPL-3.0
 
 ## 联系方式
 

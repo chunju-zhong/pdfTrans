@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PDF Translation Tool is a PDF document translation tool that supports multiple translation APIs. It can accurately extract PDF content, translate using various translation services, and generate well-formatted translated PDF/Word documents.
+PDF Translation Tool is a PDF document translation tool that supports multiple translation APIs. It can be called through Web service/CLI command line/SKILL methods, accurately extract PDF content, translate using multiple translation services, and generate well-formatted translated PDF/Word documents.
 
 If you have any questions or suggestions during use, welcome to leave a message on the WeChat public account 【智践行】, or submit Issues or Pull Requests on the Gitee repository. We look forward to working with everyone to refine the PDF translation tool to better meet practical needs!
 
@@ -37,8 +37,8 @@ If you have any questions or suggestions during use, welcome to leave a message 
 - **Web Framework**: Flask 3.0+
 - **PDF Processing**:
   - PyMuPDF (fitz) 1.23+: Used for PDF text extraction and generation
-  - camelot-py\[cv]: Used for table extraction
-  - opencv-python: Dependency for camelot-py\[cv]
+  - camelot-py[cv]: Used for table extraction
+  - opencv-python: Dependency for camelot-py[cv]
 - **Document Processing**:
   - python-docx: Used for Word document generation
 - **Translation APIs**: aiping Translation API, Silicon Flow Translation API
@@ -115,15 +115,14 @@ python cli.py --help
 ```
 
 #### Basic Commands
-
 ```bash
-# Translate a PDF file
+# Translate a PDF file, default uses aiping model service, translates English to Chinese, outputs as pdf, does not enable semantic merge and LLM semantic judgment
 pdftrans translate document.pdf -o translated.pdf
 
 # Specify source and target languages
 pdftrans translate document.pdf -s en -t zh -o output.pdf
 
-# Use specific translation service
+# Use specific translation service, such as silicon_flow
 pdftrans translate document.pdf -T silicon_flow -o output.pdf
 
 # Translate specific pages
@@ -132,14 +131,17 @@ pdftrans translate document.pdf --pages "1-10,15,20-25" -o output.pdf
 # Generate Word document
 pdftrans translate document.pdf -f docx -o output.docx
 
-# Generate Markdown with chapter split
+# Generate Markdown and split chapters
 pdftrans translate document.pdf -f markdown --chapter-split -o output/
-
-# Use glossary file
-pdftrans translate document.pdf -g glossary.txt -o output.pdf
 
 # Enable semantic merge
 pdftrans translate document.pdf --semantic-merge -o output.pdf
+
+# Enable semantic merge and LLM semantic judgment
+pdftrans translate document.pdf -m -l -f docs -o output.pdf
+
+# Use glossary during translation
+pdftrans translate document.pdf -g glossary.txt -o output.pdf
 
 # Extract glossary
 pdftrans glossary document.pdf -o glossary.txt
@@ -150,61 +152,19 @@ pdftrans list-languages
 
 #### Skill Integration
 
-The PDF translation tool includes a skill integration for enhanced functionality. The skill provides the following features:
+PDF translation tool includes skill integration and provides enhanced features:
 
 - **Smart Defaults**: Automatically detects source language from the first 100 lines of the input file, defaults to Chinese as target language
-- **Optimized Output**: Defaults to Markdown format with chapter split, semantic merge, and LLM merge enabled
-- **Intelligent Suffix Handling**: Automatically adds correct file suffixes based on output format
+- **Optimized Output**: Defaults to Markdown format with chapter split, semantic merge, and LLM semantic judgment enabled
 - **Error Handling**: Provides clear error messages for common issues like permission errors
 
 #### Skill Usage
 
-The skill can be used in the following ways:
-
-1. **Natural Language Usage** (in AI IDEs like Trae): You can use natural language to interact with the skill, for example:
+You can use **Natural Language Usage** (in AI IDEs like Trae): You can use natural language to interact with the skill, for example:
    - "Translate this PDF to Chinese"
+   - "Translate this PDF to Chinese and output as Word document"
    - "Extract glossary from this PDF"
-   - "List supported languages"
-
-2. **Command Line Usage**: Use the command line interface directly
-   - **Basic Translation**: Simply provide the PDF file path, and the skill will automatically detect the source language and translate to Chinese
-     ```bash
-     pdftrans translate document.pdf
-     ```
-
-   - **Specify Output Format**: The skill defaults to Markdown format, but you can specify other formats
-     ```bash
-     pdftrans translate document.pdf -f pdf
-     pdftrans translate document.pdf -f docx
-     ```
-
-   - **Use Chapter Split**: For Markdown output, the skill automatically enables chapter split
-     ```bash
-     pdftrans translate document.pdf -f markdown
-     ```
-
-   - **Enable Semantic Merge**: The skill automatically enables semantic merge and LLM merge for better translation quality
-     ```bash
-     pdftrans translate document.pdf -m -l
-     ```
-
-   - **Extract Glossary**: The skill also supports glossary extraction from PDF files
-     ```bash
-     pdftrans glossary document.pdf
-     ```
-
-   - **List Supported Languages**: Check the list of supported languages
-     ```bash
-     pdftrans list-languages
-     ```
-
-#### Output Directory and Temporary Files
-
-- **Output Directory**: When using the `-o` parameter, the tool will generate output files directly in the specified directory. If no output directory is specified, the default `outputs/` directory will be used.
-
-- **Temporary Files**: The tool automatically creates a temporary subdirectory in the output directory to store intermediate files such as extracted images and Markdown files. This ensures that image extraction works correctly even in sandbox mode with restricted permissions.
-
-- **Markdown Processing**: For Markdown output, the tool first generates Markdown files in the temporary directory and then packages them into a zip file if chapter split is enabled.
+   - "List languages supported by PDF translation tool"
 
 #### API Key Configuration
 
@@ -220,7 +180,7 @@ AIPING_API_KEY=your_aiping_api_key
 SILICON_FLOW_API_KEY=your_silicon_flow_api_key
 ```
 
-Only one translation service API key is required to use the tool.
+Only one translation service API key is required to use the tool. The tool defaults to using aiping model service.
 
 #### CLI Options
 
@@ -228,21 +188,6 @@ Only one translation service API key is required to use the tool.
 - `-v, --verbose` - Show detailed output
 - `--version` - Show version information
 - `-h, --help` - Show help message
-
-**Translate Command Options:**
-- `-o, --output` - Output file path (auto-generated if not specified)
-- `-s, --source` - Source language code (default: en)
-- `-t, --target` - Target language code (default: zh)
-- `-T, --translator` - Translation service (aiping/silicon_flow, default: aiping)
-- `-p, --pages` - Page range (e.g., "1-5,7,9-10")
-- `-f, --format` - Output format (pdf/docx/markdown, default: pdf)
-- `-g, --glossary` - Glossary file path
-- `-d, --doc-type` - Document type or domain description (default: AI技术)
-- `-m, --semantic-merge` - Enable semantic merge
-- `-l, --llm-merge` - Use LLM for merging
-- `-c, --chapter-split` - Split output by chapter (Markdown only)
-
-**Glossary Command Options:**
 - `-o, --output` - Output file path
 - `-s, --source` - Source language code
 - `-t, --target` - Target language code
@@ -250,150 +195,17 @@ Only one translation service API key is required to use the tool.
 - `-p, --pages` - Page range
 - `-d, --doc-type` - Document type
 
-#### Supported Languages
-
-- `zh` - Chinese
-- `en` - English
-- `ja` - Japanese
-- `ko` - Korean
-- `fr` - French
-- `de` - German
-- `es` - Spanish
-- `ru` - Russian
-
-## Project Structure
-
-```
-pdfTrans/
-├── .trae/
-│   ├── documents/           # Documentation directory
-│   │   └── ai_dev_progress.md # AI development progress record file
-│   ├── rules/
-│   │   └── project_rules.md # Project rules file
-│   └── tmp/                 # Code/data analysis scripts and related data generated during AI-assisted development
-├── .git/                    # Git repository directory
-├── .gitignore               # Git ignore file
-├── app.py                   # Flask application entry, only contains Flask app initialization and routing
-├── requirements.txt         # Dependencies list
-├── environment.yml          # Conda environment configuration
-├── config.py                # Configuration file
-├── .env.example            # Environment variables example file
-├── README.md               # Project documentation
-├── pytest.ini              # Pytest configuration file
-├── docs/                   # Project documentation directory
-├── models/                 # Data models
-│   ├── task.py             # Task data model
-│   ├── text_block.py       # Text block model
-│   ├── merged_block.py     # Merged block model
-│   └── extraction.py       # Extraction model
-├── services/               # Business logic services
-│   ├── task_service.py     # Task management service
-│   └── translation_service.py # Translation business service
-├── utils/                  # Utility tools
-│   ├── text_processing.py  # Text processing utilities
-│   ├── logging_config.py   # Logging configuration
-│   └── file_utils.py       # File processing utilities
-├── modules/                # Core functional modules
-│   ├── extractors/         # Extractor modules
-│   │   ├── __init__.py
-│   │   ├── coordinate_utils.py
-│   │   ├── page_utils.py
-│   │   ├── style_analyzer.py
-│   │   ├── table_processor.py
-│   │   └── text_analyzer.py
-│   ├── pdf_extractor.py    # PDF extraction module
-│   ├── pdf_generator.py    # PDF generation module
-│   ├── docx_generator.py   # Word generation module
-│   ├── markdown_generator.py # Markdown generation module
-│   ├── translator.py       # Translation base class
-│   ├── aiping_translator.py # aiping translation module
-│   └── silicon_flow_translator.py # Silicon Flow translation module
-├── prompt/                 # Prompt directory
-├── temp_images/            # Temporary images directory
-├── tests/                  # Test scripts directory
-│   ├── test_*.py           # Test scripts
-├── static/                 # Static resources
-│   ├── css/                # CSS style files
-│   │   └── style.css
-│   └── js/                # JavaScript files
-│       └── main.js
-├── templates/              # Template files
-│   ├── index.html          # Main page template
-│   └── download.html       # Download page template
-├── uploads/                # Uploaded files directory
-└── outputs/                # Output files directory
-```
-
-## Development Workflow
-
-### Branch Management
-
-- **main**: Main branch, only for releasing stable versions
-- **develop**: Development branch, integrates feature branches
-- **feature/xxx**: Feature branch, for developing new features
-- **bugfix/xxx**: Bug fix branch
-- **release/xxx**: Release branch, for preparing releases
-
-### Commit Message Format
-
-- Format: `[Type] Short description`
-- Types include: feat (new feature), fix (bug fix), docs (documentation), style (code style), refactor (refactoring), test (testing), chore (build/tools)
-- Example: `feat: Add Baidu translation API wrapper`
-
-### Testing Standards
-
-- All test scripts must be placed in `tests/` directory with naming format `test_*.py`
-- Use pytest framework for testing
-- Unit test coverage should be at least 80%
-
-### Running Tests
-
-#### Install Dependencies
-
-pytest is included in requirements.txt, just run the dependency installation command:
-
-```bash
-pip install -r requirements.txt
-```
-
-#### Test Commands
-
-- Run all tests:
-  ```bash
-  pytest
-  ```
-- Run specific module tests:
-  ```bash
-  pytest tests/test_pdf_extractor.py
-  ```
-- Run tests and generate coverage report:
-  ```bash
-  pytest --cov=modules/ tests/
-  ```
-
-#### Test File List
-
-- `test_pdf_extractor.py`: PDF extraction module tests
-- `test_translator.py`: Translation base class tests
-- `test_aiping_translator.py`: aiping translation tests
-- `test_silicon_flow_translator.py`: Silicon Flow translation tests
-- `test_pdf_generator.py`: PDF generation module tests
-- `test_markdown_download.py`: Markdown download tests
-- `test_markdown_chart_position.py`: Markdown chart position tests
-- `test_markdown_table.py`: Markdown table tests
-- `conftest.py`: Test configuration file
-
-## Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/xxx`
-3. Commit code: `git commit -m "feat: Add xxx feature"`
-4. Push branch: `git push origin feature/xxx`
-5. Submit Pull Request
+**Translate Command Options:**
+- `-o, --output` - Output file path (auto-generated if not specified)
+- `-f, --format` - Output format (pdf/docx/markdown, default: pdf)
+- `-g, --glossary` - Glossary file path
+- `-m, --semantic-merge` - Enable semantic merge
+- `-l, --llm-merge` - Use LLM semantic judgment
+- `-c, --chapter-split` - Split output by chapter (Markdown only)
 
 ## License
 
-MIT License
+AGPL-3.0
 
 ## Contact
 
@@ -405,7 +217,7 @@ The project changelog has been moved to a separate [docs/CHANGELOG.md](docs/CHAN
 
 ## Task List
 
-The project task list is available in [docs/TODO.md](docs/TODO.md).
+The project task list is available in [docs/TODO.md](docs/TODO.md) file.
 
 ## Notes
 

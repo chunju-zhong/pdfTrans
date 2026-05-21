@@ -176,7 +176,7 @@ def create_parser():
     translate_parser.add_argument(
         '-l', '--llm-merge',
         action='store_true',
-        help='使用LLM合并'
+        help='使用LLM语义判断'
     )
     translate_parser.add_argument(
         '-c', '--chapter-split',
