@@ -57,9 +57,41 @@ class TextBlock(CopyableMixin):
         self.underline = bool(flags & 4)
         self.strikethrough = bool(flags & 8)
     
+    @classmethod
+    def from_dict(cls, data):
+        """从字典创建TextBlock对象
+
+        Args:
+            data (dict): 包含属性的字典
+
+        Returns:
+            TextBlock: 文本块对象
+        """
+        obj = cls(
+            block_no=data['block_no'],
+            text=data['block_text'],
+            bbox=tuple(data['block_bbox']),
+            block_type=data.get('block_type', 0),
+            page_num=data.get('page_num', 0),
+        )
+        obj.is_body_text = data.get('is_body_text', True)
+        obj.chapter_id = data.get('chapter_id')
+        obj.chapter_title = data.get('chapter_title')
+        obj.chapter_level = data.get('chapter_level', 0)
+        obj.chapter_number = data.get('chapter_number')
+        obj.font = data.get('font', '')
+        obj.font_size = data.get('font_size', 0.0)
+        obj.color = data.get('color', 0)
+        obj.flags = data.get('flags', 0)
+        obj.bold = data.get('bold', False)
+        obj.italic = data.get('italic', False)
+        obj.underline = data.get('underline', False)
+        obj.strikethrough = data.get('strikethrough', False)
+        return obj
+
     def to_dict(self):
         """转换为字典格式
-        
+
         Returns:
             dict: 包含所有属性的字典
         """

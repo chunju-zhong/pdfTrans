@@ -147,6 +147,14 @@ autonomous problem-solving: 自主问题解决</textarea>
                 <div class="form-hint">启用后会使用大语言模型分析语义关系，提高合并准确性（可能会增加翻译时间及费用）</div>
             </div>
             
+            <div class="form-group" style="margin-top: 10px;">
+                <label class="checkbox-option">
+                    <input type="checkbox" id="ocr_mode" name="ocr_mode">
+                    启用OCR提取（扫描版PDF）
+                </label>
+                <div class="form-hint">启用后使用OCR引擎提取扫描版PDF中的文字、表格和图表（需安装PaddleOCR）</div>
+            </div>
+            
             <div class="form-group">
                 <button type="submit" id="start-translation-btn" class="btn btn-primary">开始翻译</button>
             </div>

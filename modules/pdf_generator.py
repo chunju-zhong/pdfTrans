@@ -25,7 +25,7 @@ class PdfGenerator:
         os.makedirs(self.fonts_dir, exist_ok=True)
         logger.info(f"PDF生成器初始化完成，字体目录: {self.fonts_dir}")
     
-    def generate_pdf(self, original_pdf_path, translated_content, output_pdf_path, target_lang="zh"):
+    def generate_pdf(self, original_pdf_path, translated_content, output_pdf_path, target_lang="zh", target_pages=None):
         """生成翻译后的PDF文件
         
         Args:
@@ -66,7 +66,7 @@ class PdfGenerator:
                     block_no = block.block_no
                     logger.debug(f"PDF生成器 第 {i+1} 页 文本块 {j+1}: '{block_text}' 位置: {block_bbox} 块编号: {block_no}")
         else:
-            logger.warning(f"PDF生成器未接收到blocks信息，无法绘制翻译文本")
+            logger.warning("PDF生成器未接收到blocks信息，无法绘制翻译文本")
         
         if not os.path.exists(original_pdf_path):
             logger.error(f"原始PDF文件不存在: {original_pdf_path}")
@@ -79,97 +79,69 @@ class PdfGenerator:
                 
                 # 创建新的PDF文档
                 new_doc = fitz.open()
-                logger.info("创建新的PDF文档成功")
-                
-                # 记录翻译内容概览
-                logger.info(f"翻译内容: 完整文本块 {len(translated_content.get('blocks', []))}, 表格 {len(translated_content.get('tables', []))}")
-                
-                # 收集有翻译内容的页码
-                pages_with_content = set()
-                
-                # 收集有文本块翻译的页码
-                for blocks_content in translated_content.get('blocks', []):
-                    pages_with_content.add(blocks_content.page_num)
-                
-                # 收集有表格翻译的页码
-                for table_content in translated_content.get('tables', []):
-                    # 使用page_num属性
-                    pages_with_content.add(table_content.page_num)
-                
-                # 将页码转换为原始文档的索引（从0开始）
-                pages_to_process = sorted(pages_with_content)
-                logger.info(f"需要处理的页码: {pages_to_process}")
-                
-                # 处理每一页，只处理有翻译内容的页面
-                for page_num in pages_to_process:
-                    # 转换为原始文档的索引（从0开始）
-                    original_page_idx = page_num - 1
+                try:
+                    logger.info("创建新的PDF文档成功")
+
+                    # 记录翻译内容概览
+                    logger.info(f"翻译内容: 完整文本块 {len(translated_content.get('blocks', []))}, 表格 {len(translated_content.get('tables', []))}")
+
+                    # 处理原始PDF的所有页面（包括无翻译内容的页面）
+                    total_original_pages = len(original_doc)
+                    logger.info(f"原始PDF总页数: {total_original_pages}")
                     
-                    # 跳过超出范围的页码
-                    if original_page_idx < 0 or original_page_idx >= len(original_doc):
-                        logger.warning(f"页码 {page_num} 超出原始文档范围，跳过")
-                        continue
+                    # 确定要输出的页面范围
+                    if target_pages:
+                        pages_to_output = [p for p in target_pages if 1 <= p <= total_original_pages]
+                        logger.info(f"指定输出页码: {pages_to_output}")
+                    else:
+                        pages_to_output = list(range(1, total_original_pages + 1))
                     
-                    logger.info(f"处理第 {page_num}/{len(pages_to_process)} 页 (原始页码: {page_num})")
-                    
-                    # 获取原始页面
-                    original_page = original_doc[original_page_idx]
-                    logger.info(f"原始页面尺寸: {original_page.rect.width}x{original_page.rect.height}")
-                    
-                    # 克隆原始页面到新文档
-                    new_page = new_doc.new_page(width=original_page.rect.width, height=original_page.rect.height)
-                    logger.info("创建新页面成功")
-                    
-                    # 复制原始页面的内容（背景、图像等）
-                    new_page.show_pdf_page(new_page.rect, original_doc, original_page_idx)
-                    logger.info("复制原始页面内容成功")
-                    
-                    # 获取当前页的翻译内容
-                    page_translated_blocks = None
-                    
-                    # 获取blocks级别翻译文本
+                    # 构建页码到翻译内容的映射，方便查找
+                    blocks_by_page = {}
                     for blocks_content in translated_content.get('blocks', []):
-                        if blocks_content.page_num == page_num:
-                            page_translated_blocks = blocks_content
-                            break
-                    
-                    if page_translated_blocks:
-                        blocks_count = len(page_translated_blocks.text_blocks)
-                        
-                        logger.info(f"第 {page_num} 页有 {blocks_count} 个完整文本块")
-                        
-                        # 绘制翻译后的文本，直接使用文本块自带的样式信息
-                        self._draw_translated_text(new_page, page_translated_blocks, target_lang)
-                        logger.info(f"第 {page_num} 页绘制完成")
-                    
-                    # 处理表格（如果有）
-                    page_tables = []
-                    for table in translated_content['tables']:
-                        # 使用page_num属性
-                        if table.page_num == page_num:
-                            page_tables.append(table)
-                    logger.info(f"第 {page_num} 页有 {len(page_tables)} 个表格需要处理")
-                    for i, table in enumerate(page_tables):
-                        self._draw_translated_table(new_page, table, target_lang)
-                        logger.info(f"第 {page_num} 页表格 {i+1} 绘制完成")
-                
-                # 如果没有需要处理的页面，生成一个空PDF或显示警告
-                if not pages_to_process:
-                    logger.warning("没有需要处理的页面，生成空PDF")
-                    # 创建一个空白页
-                    new_doc.new_page(width=595, height=842)  # A4尺寸
-                
-                # 保存新PDF
-                logger.info(f"开始保存新PDF: {output_pdf_path}")
-                
-                # 在保存文档之前获取总页数
-                total_pages = len(new_doc)
-                
-                # 保存文档
-                new_doc.save(output_pdf_path)
-                
-                # 关闭文档
-                new_doc.close()
+                        blocks_by_page[blocks_content.page_num] = blocks_content
+
+                    tables_by_page = {}
+                    for table in translated_content.get('tables', []):
+                        tables_by_page.setdefault(table.page_num, []).append(table)
+
+                    for page_num in pages_to_output:
+                        original_page_idx = page_num - 1
+                        original_page = original_doc[original_page_idx]
+
+                        # 克隆原始页面到新文档
+                        new_page = new_doc.new_page(width=original_page.rect.width, height=original_page.rect.height)
+                        new_page.show_pdf_page(new_page.rect, original_doc, original_page_idx)
+
+                        # 获取当前页的翻译内容
+                        page_translated_blocks = blocks_by_page.get(page_num)
+
+                        if page_translated_blocks and page_translated_blocks.text_blocks:
+                            blocks_count = len(page_translated_blocks.text_blocks)
+                            logger.info(f"第 {page_num} 页有 {blocks_count} 个完整文本块")
+                            self._draw_translated_text(new_page, page_translated_blocks, target_lang)
+                            logger.info(f"第 {page_num} 页绘制完成")
+                        else:
+                            logger.info(f"第 {page_num} 页无翻译文本块，保留原始页面")
+
+                        # 处理表格（如果有）
+                        page_tables = tables_by_page.get(page_num, [])
+                        if page_tables:
+                            logger.info(f"第 {page_num} 页有 {len(page_tables)} 个表格需要处理")
+                            for i, table in enumerate(page_tables):
+                                self._draw_translated_table(new_page, table, target_lang)
+                                logger.info(f"第 {page_num} 页表格 {i+1} 绘制完成")
+
+                    # 保存新PDF
+                    logger.info(f"开始保存新PDF: {output_pdf_path}")
+
+                    # 在保存文档之前获取总页数
+                    total_pages = len(new_doc)
+
+                    # 保存文档
+                    new_doc.save(output_pdf_path)
+                finally:
+                    new_doc.close()
                 
                 # 使用预存的总页数记录日志，避免在文档关闭后访问
                 logger.info(f"PDF生成完成，输出文件: {output_pdf_path}, 总页数: {total_pages}")
@@ -240,7 +212,7 @@ class PdfGenerator:
             
             if grayscale > 200:  # 接近白色，改为黑色
                 rgb_color = (0, 0, 0)  # 确保文本可见
-                logger.info(f"颜色接近白色，自动改为黑色")
+                logger.info("颜色接近白色，自动改为黑色")
             
             # 获取适合目标语言的字体
             suitable_font = self._get_suitable_font(page, original_font, target_lang)
@@ -262,7 +234,6 @@ class PdfGenerator:
             max_attempts = 5
             success = False
             current_rect = rect
-            current_font_size = original_font_size
             
             for attempt in range(1, max_attempts + 1):
                 try:
@@ -427,7 +398,7 @@ class PdfGenerator:
             return
         
         # 记录表格所有单元格的内容，用于诊断
-        logger.info(f"[表格绘制] 表格所有单元格内容预览:")
+        logger.info("[表格绘制] 表格所有单元格内容预览:")
         for row_idx, row in enumerate(table_cells):
             for col_idx, cell in enumerate(row):
                 if cell and hasattr(cell, 'text') and cell.text:

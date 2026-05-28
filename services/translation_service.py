@@ -10,10 +10,9 @@ from modules.aiping_translator import AipingTranslator
 from modules.silicon_flow_translator import SiliconFlowTranslator
 from modules.pdf_generator import PdfGenerator
 from modules.docx_generator import DocxGenerator
-from modules.markdown_generator import MarkdownGenerator, create_markdown_generator
+from modules.markdown_generator import create_markdown_generator
 from modules.semantic_analyzer_factory import SemanticAnalyzerFactory
 
-from models.text_block import TextBlock
 from models.extraction import PdfPage
 
 from utils.text_processing import merge_semantic_blocks, split_translated_result, merge_semantic_blocks_with_llm, merge_semantic_blocks_with_llm_two_phase
@@ -33,7 +32,7 @@ class TranslationService:
         # 创建可复用的线程池实例
         self.executor = ThreadPoolExecutor(max_workers=config.MAX_WORKERS)
     
-    def parse_page_range(self, page_range_str, total_pages):
+    def parse_page_range(self, page_range_str: str | None, total_pages: int) -> set[int]:
         """解析页码范围字符串，返回页码集合
         
         Args:
@@ -43,6 +42,8 @@ class TranslationService:
         Returns:
             set: 包含所有指定页码的集合
         """
+        if page_range_str and len(page_range_str) > 1000:
+            raise ValueError("页码范围字符串过长，最大允许 1000 字符")
         if not page_range_str:
             return set(range(1, total_pages + 1))
         
@@ -201,7 +202,7 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 完成，输出文件: {output_filename}")
         return output_filename
 
-    def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True, output_path=None, tmp_dir=None):
+    def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True, output_path=None, tmp_dir=None, ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch'):
         """提取PDF内容
         
         Args:
@@ -211,16 +212,24 @@ class TranslationService:
             extract_chapter: 是否提取章节信息 (默认: True)
             output_path: 输出文件路径，用于确定临时图像目录位置
             tmp_dir: 临时文件目录，优先使用
+            ocr_mode: 是否启用OCR模式提取扫描版PDF (默认: False)
+            ocr_engine: OCR引擎类型 (默认: 'paddleocr')
+            ocr_lang: OCR识别语言 (默认: 'ch')
 
         Returns:
-            tuple: (text_blocks, tables, extracted_images, chapters)
+            tuple: (text_blocks, tables, extracted_images, chapters, all_page_nums)
         """
         logger.info(f"任务 {task.task_id} extract_pdf_content方法接收到的extract_chapter值: {extract_chapter}")
         task.update_phase_progress('extraction', 0, '正在提取PDF文本...')
         
         # 1.1 创建PdfExtractor实例
         logger.info(f"任务 {task.task_id} 开始创建PdfExtractor实例")
-        pdf_extractor = PdfExtractor(input_filepath)
+        pdf_extractor = PdfExtractor(
+            input_filepath,
+            ocr_mode=ocr_mode,
+            ocr_engine=ocr_engine,
+            ocr_lang=ocr_lang
+        )
         total_pages = pdf_extractor.total_pages
         logger.info(f"任务 {task.task_id} 获取总页数完成: {total_pages}")
         
@@ -277,6 +286,10 @@ class TranslationService:
             task.update_phase_progress('extraction', 100, '没有找到需要翻译的文本块')
             return None
         
+        # 收集所有页码（包括没有文本块的页面）
+        all_page_nums = sorted(set(page.page_num for page in extracted_content.pages))
+        logger.info(f"任务 {task.task_id} 所有页码: {all_page_nums}")
+
         # 收集所有页面的所有块，方便上下文查找
         # 只收集正文块，简化后续流程
         text_blocks = []
@@ -284,18 +297,18 @@ class TranslationService:
         for i, page in enumerate(extracted_content.pages):
             phase_percent = int((i + 1) / page_count * 100)
             task.update_phase_progress('extraction', phase_percent, f'正在提取第 {page.page_num} 页...')
-            
+
             # 页面的text_blocks已经是按垂直位置排序的
             for text_block in page.text_blocks:
                 # 只添加正文块
                 if text_block.is_body_text:
                     text_blocks.append(text_block)
-        
+
         if not text_blocks or len(text_blocks) <= 0:
             logger.warning(f"任务 {task.task_id} 没有找到需要翻译的文本块")
             task.update_phase_progress('extraction', 100, '没有找到需要翻译的文本块')
             return None
-        
+
         # 获取章节信息
         chapters = []
         if extract_chapter and hasattr(pdf_extractor, 'get_chapters'):
@@ -303,8 +316,8 @@ class TranslationService:
             logger.info(f"任务 {task.task_id} 获取到 {len(chapters)} 个章节")
         elif not extract_chapter:
             logger.info(f"任务 {task.task_id} 跳过章节提取")
-        
-        return text_blocks, tables, extracted_images, chapters
+
+        return text_blocks, tables, extracted_images, chapters, all_page_nums
 
 
     def translate_merged_block(self, task, merged_block, index, translator, source_lang, target_lang, doc_type, glossary, total_blocks):
@@ -431,7 +444,6 @@ class TranslationService:
         Returns:
             tuple: (page_translated_blocks_dict, merged_translations, translated_blocks)
         """
-        total_original_blocks = len([block for merged_block in merged_blocks for block in merged_block.original_blocks])
         translated_blocks = 0
         total_blocks = len(merged_blocks)
         
@@ -445,7 +457,6 @@ class TranslationService:
         unique_pages = set()
         for block in merged_blocks:
             unique_pages.add(block.page_num)
-        total_pages = len(unique_pages)
         processed_pages = set()
         
         # 使用类的线程池实例并行翻译
@@ -469,7 +480,6 @@ class TranslationService:
                     # 标记当前页面为已处理
                     if page_num not in processed_pages:
                         processed_pages.add(page_num)
-                        processed_page_count = len(processed_pages)
                     
                     completed_blocks += 1
                     phase_percent = int((completed_blocks / total_blocks) * 100)
@@ -477,8 +487,11 @@ class TranslationService:
                     
             except Exception as e:
                 logger.error(f"任务 {task.task_id} 翻译合并块时出错: {str(e)}")
-                # 继续处理其他块
-                continue
+                # 回退到原文，避免空白
+                block, index = future_to_block[future]
+                results[index] = (block, [
+                    (b.page_num, b.copy()) for b in block.original_blocks
+                ])
         
         # 所有任务完成后，按原始顺序处理结果
         for index in sorted(results.keys()):
@@ -603,7 +616,6 @@ class TranslationService:
         unique_pages = set()
         for block in text_blocks:
             unique_pages.add(block.page_num)
-        total_pages = len(unique_pages)
         processed_pages = set()
         
         # 使用类的线程池实例并行翻译
@@ -627,7 +639,6 @@ class TranslationService:
                     # 标记当前页面为已处理
                     if page_num not in processed_pages:
                         processed_pages.add(page_num)
-                        processed_page_count = len(processed_pages)
                     
                     completed_blocks += 1
                     phase_percent = int((completed_blocks / total_original_blocks) * 100)
@@ -635,8 +646,20 @@ class TranslationService:
                     
             except Exception as e:
                 logger.error(f"任务 {task.task_id} 翻译原始块时出错: {str(e)}")
-                # 继续处理其他块
-                continue
+                # 回退到原文，避免空白
+                block, index = future_to_block[future]
+                from models.merged_block import MergedBlock
+                bbox = block.block_bbox
+                width = bbox[2] - bbox[0] if len(bbox) >= 4 else 0
+                height = bbox[3] - bbox[1] if len(bbox) >= 4 else 0
+                fallback_merged = MergedBlock(
+                    block_text=block.block_text,
+                    original_blocks=[block],
+                    max_width=width,
+                    max_height=height
+                )
+                fallback_text_block = block.copy()
+                results[index] = (block.page_num, fallback_text_block, fallback_merged)
         
         # 所有任务完成后，按原始顺序处理结果
         for index in sorted(results.keys()):
@@ -844,7 +867,6 @@ class TranslationService:
         
         # 处理翻译结果
         processed_pages = set()
-        total_pages = len(unique_pages)
         
         for future in as_completed(future_to_cell):
             try:
@@ -863,7 +885,6 @@ class TranslationService:
                     # 标记当前页面为已处理
                     if page_num not in processed_pages:
                         processed_pages.add(page_num)
-                        processed_page_count = len(processed_pages)
                     
                     translated_cells_count += 1
                     if total_cells > 0:
@@ -872,8 +893,20 @@ class TranslationService:
                         
             except Exception as e:
                 logger.error(f"任务 {task.task_id} 翻译表格单元格时出错: {str(e)}")
-                # 继续处理其他单元格
-                continue
+                # 回退到原文，避免空白
+                table_idx, row_idx, col_idx, cell = future_to_cell[future]
+                from models.extraction import PdfCell
+                fallback_cell = PdfCell(
+                    text=cell.text,
+                    bbox=cell.bbox,
+                    row_idx=cell.row_idx,
+                    col_idx=cell.col_idx
+                )
+                if table_idx not in cell_results:
+                    cell_results[table_idx] = {}
+                if row_idx not in cell_results[table_idx]:
+                    cell_results[table_idx][row_idx] = {}
+                cell_results[table_idx][row_idx][col_idx] = fallback_cell
         
         return cell_results, total_cells
     
@@ -888,7 +921,6 @@ class TranslationService:
         Returns:
             list: 翻译后的表格列表
         """
-        from models.extraction import PdfTable
         
         translated_tables = []
         
@@ -915,7 +947,7 @@ class TranslationService:
         
         return translated_tables
 
-    def generate_pdf_output(self, task, input_filepath, unique_id, filename, translated_content, target_lang, output_path=None, output_filename=None):
+    def generate_pdf_output(self, task, input_filepath, unique_id, filename, translated_content, target_lang, output_path=None, output_filename=None, target_pages=None):
         """生成PDF输出文件
 
         Args:
@@ -940,8 +972,8 @@ class TranslationService:
         
         # 创建PDF生成器实例
         pdf_generator = PdfGenerator()
-        # 生成翻译后的PDF，传递目标语言参数
-        pdf_generator.generate_pdf(input_filepath, translated_content, output_filepath, target_lang)
+        # 生成翻译后的PDF，传递目标语言参数和页码范围
+        pdf_generator.generate_pdf(input_filepath, translated_content, output_filepath, target_lang, target_pages=target_pages)
         logger.info(f"任务 {task.task_id} PDF生成完成，输出文件: {final_output_filename}")
         return final_output_filename
     
@@ -1171,7 +1203,7 @@ class TranslationService:
             shutil.rmtree(images_dir)
             logger.info(f"已清理临时图像目录: {images_dir}")
     
-    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True, output_path=None, output_filename=None, tmp_dir=None):
+    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True, output_path=None, output_filename=None, tmp_dir=None, target_pages=None):
         """生成输出文件
 
         Args:
@@ -1204,7 +1236,7 @@ class TranslationService:
         
         # 处理PDF生成
         if output_format in ['pdf', 'pdf_docx', 'all']:
-            pdf_filename = self.generate_pdf_output(task, input_filepath, unique_id, filename, translated_content, target_lang, output_path, output_filename)
+            pdf_filename = self.generate_pdf_output(task, input_filepath, unique_id, filename, translated_content, target_lang, output_path, output_filename, target_pages=target_pages)
             output_files.append(pdf_filename)
         
         # 处理Word生成
@@ -1351,7 +1383,7 @@ class TranslationService:
                 task, text_blocks, translator, source_lang, target_lang, doc_type, glossary
             )
     
-    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False, chapter_split=True):
+    def process_translation(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False, chapter_split=True, ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch'):
         """异步翻译任务处理函数
 
         Args:
@@ -1388,20 +1420,24 @@ class TranslationService:
             self.cleanup_output_directory()
             
             # 提取PDF内容
-            extract_result = self.extract_pdf_content(task, input_filepath, page_range)
+            extract_result = self.extract_pdf_content(
+                task, input_filepath, page_range,
+                ocr_mode=ocr_mode, ocr_engine=ocr_engine, ocr_lang=ocr_lang,
+                extract_chapter=chapter_split
+            )
             if not extract_result:
                 return
-            
-            text_blocks, tables, extracted_images, chapters = extract_result
-            
+
+            text_blocks, tables, extracted_images, chapters, all_page_nums = extract_result
+
             # 创建翻译器和语义分析器
             translator, semantic_analyzer = self._create_translators(task, translator_type)
             if task.is_canceled():
                 self.cleanup_on_cancel(task, input_filepath)
                 return
-            
+
             # 翻译文本内容
-            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary)
+            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums)
             if not translated_content:
                 return
             
@@ -1422,7 +1458,7 @@ class TranslationService:
                 return
             
             # 生成输出文件
-            output_files = self._generate_outputs(task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split)
+            output_files = self._generate_outputs(task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, target_pages=all_page_nums)
             if task.is_canceled():
                 self.cleanup_on_cancel(task, input_filepath)
                 return
@@ -1465,9 +1501,9 @@ class TranslationService:
         
         return translator, semantic_analyzer
     
-    def _translate_content(self, task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary):
+    def _translate_content(self, task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums):
         """翻译文本内容
-        
+
         Args:
             task: 任务对象
             text_blocks: 文本块列表
@@ -1479,7 +1515,8 @@ class TranslationService:
             target_lang: 目标语言
             doc_type: 文档类型
             glossary: 术语表
-            
+            all_page_nums: 所有页码列表（包括没有文本块的页面）
+
         Returns:
             dict: 翻译后的内容
         """
@@ -1503,8 +1540,15 @@ class TranslationService:
         # 添加合并后的翻译结果到translated_content
         translated_content['merged_translations'] = merged_translations
         
-        # 将翻译结果添加到translated_content中
-        translated_content['blocks'] = [page_translated_blocks_dict[page_num] for page_num in sorted(page_translated_blocks_dict.keys())]
+        # 将翻译结果添加到translated_content中，确保所有页面（包括无文本块的页面）都被保留
+        blocks_list = []
+        for page_num in sorted(all_page_nums):
+            if page_num in page_translated_blocks_dict:
+                blocks_list.append(page_translated_blocks_dict[page_num])
+            else:
+                logger.info(f"任务 {task.task_id} 页码 {page_num} 无翻译文本块，保留空页面")
+                blocks_list.append(PdfPage(page_num, []))
+        translated_content['blocks'] = blocks_list
         
         logger.info(f"任务 {task.task_id} 翻译完成，总翻译块数量: {translated_blocks}")
         
@@ -1518,7 +1562,7 @@ class TranslationService:
         
         return translated_content
     
-    def _generate_outputs(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path=None, output_filename=None, tmp_dir=None):
+    def _generate_outputs(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path=None, output_filename=None, tmp_dir=None, target_pages=None):
         """生成输出文件
         
         Args:
@@ -1548,7 +1592,7 @@ class TranslationService:
         # 生成输出文件
         logger.info(f"任务 {task.task_id} 开始调用 generate_output_files 方法")
         output_files = self.generate_output_files(
-            task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir
+            task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir, target_pages
         )
         logger.info(f"任务 {task.task_id} generate_output_files 方法执行完成，返回 {len(output_files)} 个输出文件")
         
@@ -1595,7 +1639,7 @@ class TranslationService:
         else:
             logger.warning(f"任务 {task.task_id} 未生成任何输出文件")
 
-    def process_translation_sync(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False, chapter_split=True, progress_callback=None, is_cli=False, output_path=None, output_filename=None, tmp_dir=None):
+    def process_translation_sync(self, task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type=config.DEFAULT_DOC_TYPE, glossary="", page_range="", output_format="pdf", semantic_merge=True, use_llm_merging=False, chapter_split=True, ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch', progress_callback=None, is_cli=False, output_path=None, output_filename=None, tmp_dir=None):
         """同步翻译任务处理函数
 
         Args:
@@ -1645,27 +1689,31 @@ class TranslationService:
                 self.cleanup_output_directory()
             
             # 提取PDF内容
-            extract_result = self.extract_pdf_content(task, input_filepath, page_range, output_path=output_path, tmp_dir=tmp_dir)
+            extract_result = self.extract_pdf_content(
+                task, input_filepath, page_range,
+                ocr_mode=ocr_mode, ocr_engine=ocr_engine, ocr_lang=ocr_lang,
+                extract_chapter=chapter_split
+            )
             if not extract_result:
                 logger.error(f"任务 {task.task_id} PDF内容提取失败")
                 return None
             
-            text_blocks, tables, extracted_images, chapters = extract_result
-            
+            text_blocks, tables, extracted_images, chapters, all_page_nums = extract_result
+
             if progress_callback:
                 progress_callback(10, 'PDF内容提取完成')
-            
+
             # 创建翻译器和语义分析器
             translator, semantic_analyzer = self._create_translators(task, translator_type)
             if task.is_canceled():
                 self.cleanup_on_cancel(task, input_filepath)
                 return None
-            
+
             if progress_callback:
                 progress_callback(15, '翻译器创建完成')
-            
+
             # 翻译文本内容
-            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary)
+            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums)
             if not translated_content:
                 logger.error(f"任务 {task.task_id} 文本翻译失败")
                 return None
@@ -1697,7 +1745,7 @@ class TranslationService:
                 progress_callback(75, '正在生成输出文件...')
             
             # 生成输出文件
-            output_files = self._generate_outputs(task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir)
+            output_files = self._generate_outputs(task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir, target_pages=all_page_nums)
             
             if progress_callback:
                 progress_callback(95, '输出文件生成完成')

@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 import os
+import re
 import uuid
 import threading
 import fitz  # PyMuPDF用于获取PDF页数
@@ -60,9 +61,11 @@ def translate():
             semantic_merge = request.form.get('semantic_merge', '') == 'on'
             use_llm_merging = request.form.get('use_llm_merging', '') == 'on'
             chapter_split = request.form.get('chapter_split', '') == 'on'
+            ocr_mode = request.form.get('ocr_mode', '') == 'on'
+            ocr_engine = request.form.get('ocr_engine', 'paddleocr')
             
             # 打印所有参数值
-            logger.info(f"前端传递的参数值:")
+            logger.info("前端传递的参数值:")
             logger.info(f"  source_lang: {source_lang}")
             logger.info(f"  target_lang: {target_lang}")
             logger.info(f"  translator_type: {translator_type}")
@@ -72,6 +75,8 @@ def translate():
             logger.info(f"  semantic_merge: {semantic_merge}")
             logger.info(f"  use_llm_merging: {use_llm_merging}")
             logger.info(f"  chapter_split: {chapter_split}")
+            logger.info(f"  ocr_mode: {ocr_mode}")
+            logger.info(f"  ocr_engine: {ocr_engine}")
             
             # 保存文件（在主线程中完成）
             filename = secure_filename(file.filename)
@@ -88,7 +93,7 @@ def translate():
             
             # 启动异步翻译任务，传递文件路径、unique_id和filename
             threading.Thread(target=translation_service.process_translation, 
-                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge, use_llm_merging, chapter_split)).start()
+                            args=(task, input_filepath, source_lang, target_lang, translator_type, unique_id, filename, doc_type, glossary, page_range, output_format, semantic_merge, use_llm_merging, chapter_split, ocr_mode, ocr_engine, source_lang)).start()
             
             # 返回任务ID
             return jsonify({
@@ -98,12 +103,13 @@ def translate():
             })
             
         except Exception as e:
-            return jsonify({'success': False, 'message': f"创建任务失败: {str(e)}"})
+            logger.error(f"创建任务失败: {str(e)}")
+            return jsonify({'success': False, 'message': '创建任务失败，请稍后重试'})
     
     return jsonify({'success': False, 'message': '不支持的文件类型'})
 
 @app.route('/progress/<task_id>')
-def get_progress(task_id):
+def get_progress(task_id: str):
     """获取任务进度API"""
     task = task_service.get_task(task_id)
     if not task:
@@ -127,7 +133,7 @@ def get_progress(task_id):
     })
 
 @app.route('/cancel/<task_id>', methods=['POST'])
-def cancel_task(task_id):
+def cancel_task(task_id: str):
     """取消翻译任务API"""
     if not task_service.cancel_task(task_id):
         return jsonify({'success': False, 'message': '任务不存在'}), 404
@@ -138,13 +144,18 @@ def cancel_task(task_id):
     })
 
 @app.route('/download/<filename>')
-def download(filename):
+def download(filename: str):
     """下载页面路由"""
+    if not re.match(r'^[a-zA-Z0-9_\-.]+$', filename):
+        return jsonify({'error': '无效的文件名'}), 400
     return render_template('download.html', filename=filename)
 
 @app.route('/download_file/<filename>')
-def download_file(filename):
+def download_file(filename: str):
     """实际文件下载路由"""
+    # 校验文件名：仅允许字母数字、下划线、连字符、点号
+    if not re.match(r'^[a-zA-Z0-9_\-.]+$', filename):
+        return jsonify({'error': '无效的文件名'}), 400
     return send_from_directory(app.config['OUTPUT_FOLDER'], filename, as_attachment=True)
 
 @app.route('/get_pdf_pages', methods=['POST'])
@@ -159,26 +170,27 @@ def get_pdf_pages():
         return jsonify({'success': False, 'message': '没有选择文件'})
     
     if file and allowed_file(file.filename):
+        temp_filepath = None
         try:
             # 保存临时文件
             temp_filename = secure_filename(file.filename)
             temp_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_{uuid.uuid4()}_{temp_filename}")
             file.save(temp_filepath)
-            
+
             # 使用PyMuPDF获取PDF页数
             with fitz.open(temp_filepath) as doc:
                 total_pages = len(doc)
-            
-            # 删除临时文件
-            os.remove(temp_filepath)
-            
+
             return jsonify({
                 'success': True,
                 'total_pages': total_pages
             })
         except Exception as e:
             logger.error(f"获取PDF页数失败: {str(e)}")
-            return jsonify({'success': False, 'message': f"获取PDF页数失败: {str(e)}"})
+            return jsonify({'success': False, 'message': '获取PDF页数失败，请检查文件是否有效'})
+        finally:
+            if temp_filepath and os.path.exists(temp_filepath):
+                os.remove(temp_filepath)
     
     return jsonify({'success': False, 'message': '不支持的文件类型'})
 
@@ -204,23 +216,27 @@ def extract_glossary():
             target_lang = request.form.get('target_lang', config.DEFAULT_TARGET_LANGUAGE)
             translator_type = request.form.get('translator', 'aiping')
             page_range = request.form.get('page_range', '')
+            if page_range and len(page_range) > 1000:
+                return jsonify({'success': False, 'message': '页码范围字符串过长，最大允许 1000 字符'})
             doc_type = request.form.get('doc_type', config.DEFAULT_DOC_TYPE)
             
-            # 解析页码范围
             pages = None
             if page_range:
                 try:
-                    # 解析页码范围，支持如"1-3,5,7-9"格式
                     page_list = []
                     ranges = page_range.split(',')
                     for r in ranges:
                         r = r.strip()
                         if '-' in r:
                             start, end = r.split('-')
-                            page_list.extend(range(int(start), int(end) + 1))
+                            start_int = int(start)
+                            end_int = int(end)
+                            if start_int < 1 or end_int > 100000 or end_int - start_int > 10000:
+                                logger.warning(f"页码范围超出合理范围: {start}-{end}")
+                                continue
+                            page_list.extend(range(start_int, end_int + 1))
                         else:
                             page_list.append(int(r))
-                    # 去重并排序
                     pages = sorted(list(set(page_list)))
                     logger.info(f"解析页码范围: {page_range} -> {pages}")
                 except Exception as e:
@@ -257,7 +273,7 @@ def extract_glossary():
     return jsonify({'success': False, 'message': '不支持的文件类型'})
 
 @app.route('/glossary_progress/<task_id>')
-def get_glossary_progress(task_id):
+def get_glossary_progress(task_id: str):
     """获取术语提取任务进度API"""
     task = task_service.get_task(task_id)
     if not task:
@@ -274,7 +290,7 @@ def get_glossary_progress(task_id):
     })
 
 @app.route('/glossary_cancel/<task_id>', methods=['POST'])
-def cancel_glossary_task(task_id):
+def cancel_glossary_task(task_id: str):
     """取消术语提取任务API"""
     if not task_service.cancel_task(task_id):
         return jsonify({'success': False, 'message': '任务不存在'}), 404
@@ -319,4 +335,4 @@ if __name__ == '__main__':
     port = 5000
     if len(sys.argv) > 2 and sys.argv[1] == '--port':
         port = int(sys.argv[2])
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='127.0.0.1', port=port, use_reloader=False)

@@ -168,7 +168,7 @@ class TestOutputFilenameIntegration(unittest.TestCase):
         mock_translate_tables, mock_md_output
     ):
         """测试 process_translation_sync 正确传递 output_filename 参数"""
-        mock_extract.return_value = ([], [], [], [])
+        mock_extract.return_value = ([], [], [], [], [])
         mock_create_translators.return_value = (Mock(), Mock())
         mock_translate_content.return_value = {'blocks': [], 'tables': []}
         mock_translate_tables.return_value = []

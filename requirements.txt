@@ -8,3 +8,9 @@ python-dotenv
 openai
 pytest
 python-docx
+
+# OCR支持（PaddleOCR 3.x 需要安装完整依赖）
+psutil
+paddleocr[all]>=3.0.0    # PaddleOCR完整依赖（包含PP-StructureV3）
+paddlepaddle>=3.0.0      # CPU版本（与GPU版本二选一）
+#paddlepaddle-gpu>=3.0.0  # GPU版本（与CPU版本二选一）

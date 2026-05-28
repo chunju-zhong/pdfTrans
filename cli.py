@@ -183,6 +183,22 @@ def create_parser():
         action='store_true',
         help='按章节拆分输出Markdown（只在选择Markdown输出格式时起作用）'
     )
+    translate_parser.add_argument(
+        '--ocr',
+        action='store_true',
+        help='启用OCR模式提取扫描版PDF内容'
+    )
+    translate_parser.add_argument(
+        '--ocr-engine',
+        default='paddleocr',
+        choices=['paddleocr'],
+        help='OCR引擎类型（默认：paddleocr）'
+    )
+    translate_parser.add_argument(
+        '--ocr-lang',
+        default=None,
+        help='OCR识别语言（默认：根据源语言自动选择）'
+    )
     
     # glossary 子命令
     glossary_parser = subparsers.add_parser(

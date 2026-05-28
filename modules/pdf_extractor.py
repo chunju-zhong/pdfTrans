@@ -2,7 +2,7 @@ import fitz  # PyMuPDF
 import os
 import logging
 from models.text_block import TextBlock
-from models.extraction import PdfPage, PdfTable, PdfImage, PdfExtraction
+from models.extraction import PdfPage, PdfImage, PdfExtraction
 from .extractors import (
     extract_tables_by_camelot,
     extract_tables_by_pymupdf,
@@ -22,19 +22,27 @@ class PdfExtractor:
     负责从PDF文件中提取文本内容，包括普通文本和表格内容，并保留文本的位置信息。
     """
     
-    def __init__(self, pdf_path=None, table_extractor='pymupdf'):
+    def __init__(self, pdf_path=None, table_extractor='pymupdf',
+                 ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch'):
         """初始化PdfExtractor对象
 
         Args:
             pdf_path (str, optional): PDF文件路径. Defaults to None.
             table_extractor (str, optional): 表格提取器类型，可选值: 'pymupdf' 或 'camelot'. Defaults to 'pymupdf'.
+            ocr_mode (bool, optional): 是否启用OCR模式提取扫描版PDF. Defaults to False.
+            ocr_engine (str, optional): OCR引擎类型. Defaults to 'paddleocr'.
+            ocr_lang (str, optional): OCR识别语言. Defaults to 'ch'.
         """
         self.pdf_path = pdf_path
         self.metadata = None
         self.total_pages = 0
         self.chapter_identifier = ChapterIdentifier()
         self.table_extractor = table_extractor
-        
+        self.ocr_mode = ocr_mode
+        self.ocr_engine = ocr_engine
+        self.ocr_lang = ocr_lang
+        self._ocr_extractor = None
+
         if pdf_path:
             self.metadata = self.get_metadata()
             self.total_pages = self.metadata.get('total_pages', 0)
@@ -61,6 +69,27 @@ class PdfExtractor:
             logger.info("使用PyMuPDF提取表格")
             return extract_tables_by_pymupdf(self.pdf_path, pages)
     
+    @property
+    def ocr_extractor(self):
+        """延迟初始化OCR提取器
+
+        仅在ocr_mode=True时才会创建OCR提取器实例，
+        避免import PaddleOCR时自动下载模型文件。
+
+        Returns:
+            OcrExtractor | None: OCR提取器实例，非OCR模式返回None
+        """
+        if self._ocr_extractor is None and self.ocr_mode:
+            from modules.ocr.factory import create_ocr_extractor
+            from config import config
+            logger.info(f"初始化OCR提取器: engine={self.ocr_engine}, lang={self.ocr_lang}")
+            self._ocr_extractor = create_ocr_extractor(
+                self.ocr_engine,
+                lang=self.ocr_lang,
+                use_gpu=config.OCR_USE_GPU,
+            )
+        return self._ocr_extractor
+
     def get_metadata(self):
         """提取PDF的元数据信息
 
@@ -149,7 +178,17 @@ class PdfExtractor:
         
         try:
             logger.info(f"开始提取PDF: {self.pdf_path}")
-            
+
+            # OCR模式：使用OCR引擎提取，跳过PyMuPDF文本提取
+            if self.ocr_mode:
+                logger.info(f"OCR模式: 使用 {self.ocr_engine} 提取PDF内容（子进程隔离）")
+                from modules.ocr.ocr_worker import run_ocr_in_subprocess
+                from config import config
+                return run_ocr_in_subprocess(
+                    self.pdf_path, pages=pages, temp_images_dir=temp_images_dir,
+                    lang=self.ocr_lang, use_gpu=config.OCR_USE_GPU
+                )
+
             # 提取章节信息
             logger.info("重置章节信息")
             self.chapter_identifier.reset()

@@ -10,7 +10,7 @@ import uuid
 
 from cli.progress_display import ProgressDisplay, TaskProgressCallback
 from config import config
-from services.task_service import Task, task_service
+from services.task_service import task_service
 from services.translation_service import translation_service
 from utils.file_utils import allowed_file
 
@@ -61,7 +61,7 @@ def translate_handler(args):
         sys.exit(1)
     
     if not allowed_file(input_path):
-        print(f"错误: 不支持的文件类型，仅支持PDF文件")
+        print("错误: 不支持的文件类型，仅支持PDF文件")
         sys.exit(1)
     
     # 检查章节拆分和输出格式的兼容性
@@ -128,13 +128,15 @@ def translate_handler(args):
     if args.pages:
         progress.log(f"页码范围: {args.pages}")
     if glossary:
-        progress.log(f"已加载术语表")
+        progress.log("已加载术语表")
     if args.semantic_merge:
         progress.log("启用语义合并")
     if args.llm_merge:
         progress.log("使用LLM合并")
     if args.chapter_split:
         progress.log("按章节拆分输出")
+    if args.ocr:
+        progress.log(f"启用OCR模式 (引擎: {args.ocr_engine})")
     
     try:
         # 执行同步翻译
@@ -153,6 +155,9 @@ def translate_handler(args):
             semantic_merge=args.semantic_merge,
             use_llm_merging=args.llm_merge,
             chapter_split=args.chapter_split,
+            ocr_mode=args.ocr,
+            ocr_engine=args.ocr_engine,
+            ocr_lang=args.ocr_lang or args.source,
             progress_callback=TaskProgressCallback(progress),
             is_cli=True,
             output_path=os.path.dirname(output_path) if args.output else None,
@@ -163,7 +168,7 @@ def translate_handler(args):
         if result:
             # 直接使用用户指定的输出路径或默认路径
             final_output_path = output_path if args.output else os.path.join(config.OUTPUT_FOLDER, result)
-            progress.success(f"翻译完成！")
+            progress.success("翻译完成！")
             progress.log(f"输出文件: {final_output_path}")
             
             # 显示警告信息

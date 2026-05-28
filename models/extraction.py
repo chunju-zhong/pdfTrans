@@ -23,9 +23,24 @@ class PdfPage(CopyableMixin):
         self.page_num = page_num
         self.text_blocks = text_blocks
     
+    @classmethod
+    def from_dict(cls, data):
+        """从字典创建PdfPage对象
+
+        Args:
+            data (dict): 包含属性的字典
+
+        Returns:
+            PdfPage: 页面对象
+        """
+        return cls(
+            page_num=data['page_num'],
+            text_blocks=[TextBlock.from_dict(b) for b in data['text_blocks']],
+        )
+
     def to_dict(self):
         """转换为字典格式
-        
+
         Returns:
             dict: 包含所有属性的字典
         """
@@ -58,9 +73,29 @@ class PdfCell(CopyableMixin):
         self.width = bbox[2] - bbox[0]
         self.height = bbox[3] - bbox[1]
     
+    @classmethod
+    def from_dict(cls, data):
+        """从字典创建PdfCell对象
+
+        Args:
+            data (dict): 包含属性的字典
+
+        Returns:
+            PdfCell: 单元格对象
+        """
+        obj = cls(
+            text=data['text'],
+            bbox=tuple(data['bbox']),
+            row_idx=data['row_idx'],
+            col_idx=data['col_idx'],
+        )
+        obj.width = data.get('width', 0)
+        obj.height = data.get('height', 0)
+        return obj
+
     def to_dict(self):
         """转换为字典格式
-        
+
         Returns:
             dict: 包含所有属性的字典
         """
@@ -103,9 +138,37 @@ class PdfTable(CopyableMixin):
         self.chapter_level = 0  # 章节层级
         self.chapter_number = None  # 章节编号
     
+    @classmethod
+    def from_dict(cls, data):
+        """从字典创建PdfTable对象
+
+        Args:
+            data (dict): 包含属性的字典
+
+        Returns:
+            PdfTable: 表格对象
+        """
+        cells = []
+        for row_data in data['cells']:
+            row = [PdfCell.from_dict(c) for c in row_data]
+            cells.append(row)
+        obj = cls(
+            page_num=data['page_num'],
+            table_idx=data['table_idx'],
+            cells=cells,
+            bbox=tuple(data['bbox']) if data.get('bbox') else None,
+            row_heights=data.get('row_heights', []),
+            col_widths=data.get('col_widths', []),
+        )
+        obj.chapter_id = data.get('chapter_id')
+        obj.chapter_title = data.get('chapter_title')
+        obj.chapter_level = data.get('chapter_level', 0)
+        obj.chapter_number = data.get('chapter_number')
+        return obj
+
     def to_dict(self):
         """转换为字典格式
-        
+
         Returns:
             dict: 包含所有属性的字典
         """
@@ -116,7 +179,7 @@ class PdfTable(CopyableMixin):
             for cell in row:
                 row_dict.append(cell.to_dict())
             cells_dict.append(row_dict)
-        
+
         return {
             'page_num': self.page_num,
             'table_idx': self.table_idx,
@@ -156,9 +219,31 @@ class PdfImage(CopyableMixin):
         self.chapter_level = 0  # 章节层级
         self.chapter_number = None  # 章节编号
     
+    @classmethod
+    def from_dict(cls, data):
+        """从字典创建PdfImage对象
+
+        Args:
+            data (dict): 包含属性的字典
+
+        Returns:
+            PdfImage: 图像对象
+        """
+        obj = cls(
+            page_num=data['page_num'],
+            image_idx=data['image_idx'],
+            image_path=data['image_path'],
+            bbox=tuple(data['bbox']),
+        )
+        obj.chapter_id = data.get('chapter_id')
+        obj.chapter_title = data.get('chapter_title')
+        obj.chapter_level = data.get('chapter_level', 0)
+        obj.chapter_number = data.get('chapter_number')
+        return obj
+
     def to_dict(self):
         """转换为字典格式
-        
+
         Returns:
             dict: 包含所有属性的字典
         """
@@ -194,9 +279,26 @@ class PdfExtraction(CopyableMixin):
         self.tables = tables
         self.images = images or []
     
+    @classmethod
+    def from_dict(cls, data):
+        """从字典创建PdfExtraction对象
+
+        Args:
+            data (dict): 包含属性的字典
+
+        Returns:
+            PdfExtraction: 提取结果对象
+        """
+        return cls(
+            total_pages=data['total_pages'],
+            pages=[PdfPage.from_dict(p) for p in data['pages']],
+            tables=[PdfTable.from_dict(t) for t in data['tables']],
+            images=[PdfImage.from_dict(i) for i in data.get('images', [])],
+        )
+
     def to_dict(self):
         """转换为字典格式
-        
+
         Returns:
             dict: 包含所有属性的字典
         """
