@@ -42,6 +42,8 @@ trae-sandbox-
 .trae/README.md
 .trae/uninstall.sh
 .trae/README.zh-CN.md
+
+.claude/reviews/
         
 # Temporary images
 temp_images/

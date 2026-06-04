@@ -1,5 +1,150 @@
 # 更新日志
 
+## 2026-06-05
+
+- 修复OCR公式识别三端输出失败问题：
+  - 修复 `modules/ocr/system_profiler.py` 内存分级逻辑：`_determine_tier` 改为按物理内存（`total_memory_gb`）分级，而非可用内存，避免因系统占用导致16GB机器被错误降级为 `minimal`
+  - 调整 `system_profiler.py` DPI分级参数：`minimal` 从100提升至120，`medium` 从120提升至150，`unlimited` 从150提升至200，提高低内存机器的OCR识别质量
+  - 调整 `system_profiler.py` 推理参数：`minimal` 和 `low` 级别的 `text_det_limit_side_len` 从720提升至960，确保公式检测分辨率充足
+  - 修复 `system_profiler.py` 日志格式：分级日志改为先显示总内存再显示可用内存，更直观
+  - 修复 `modules/ocr/paddle_extractor.py` 日志误导：移除 `use_formula=True` 时强制覆盖 `text_det_limit_side_len=960` 的逻辑，日志现在准确反映实际传入参数
+  - 优化 `modules/ocr/paddle_extractor.py`：将 `header` 标签加入 `NON_BODY_LABELS`，避免页眉被当作正文翻译
+  - 优化 `modules/ocr/ocr_worker.py` 参数降级策略：降级衰减因子从0.7调整为0.8，DPI步进从-30调整为-20，更温和的降级避免过度降低质量
+  - 优化 `modules/ocr/ocr_worker.py`：降级重试时自动跳过表格和公式识别（`skip_table`/`skip_formula`），优先保证基础文本提取成功
+  - 修复 `utils/text_processing.py` 文本块合并高度计算：使用 `max()` 取最大高度而非直接覆盖，避免合并块高度计算错误
+  - 修复 `tests/test_semantic_merge_extended.py` 测试断言：修正 `block_text` 属性访问方式，移除冗余测试用例
+  - 修复 `tests/test_translation_service.py` 测试：适配 `extract()` 返回值变更（返回元组），移除过时注释断言
+- 相关文件：
+  - `modules/ocr/system_profiler.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/ocr/ocr_worker.py`
+  - `utils/text_processing.py`
+  - `tests/test_semantic_merge_extended.py`
+  - `tests/test_translation_service.py`
+
+## 2026-06-04
+
+- 实现OCR提取引擎完善和代码审查修复：
+  - 修复 `modules/ocr/ocr_worker.py` 中 `_logging` 未定义导致OCR子进程崩溃的bug（改为 `logging`）
+  - 新增 `tests/test_ocr_worker.py`，覆盖OCR工作器异常类型、心跳发送、参数降级、子进程重试逻辑
+  - 新增 `tests/test_system_profiler.py`，覆盖系统资源检测、5个内存层级参数计算、高负载参数缩减
+  - 新增 `tests/test_omml_constants.py`，测试OMML常量定义
+  - 新增 `tests/test_table_grid.py`，测试表格网格布局计算
+  - 更新 `tests/test_ocr_extractor.py`，覆盖工厂创建、提取、表格、GPU回退等场景
+  - 新增 `modules/ocr/system_profiler.py`，实现系统资源自适应参数计算
+  - 重构 `modules/ocr/ocr_worker.py`，增强子进程管理、心跳监控、动态超时和参数降级重试
+  - 重构 `modules/ocr/paddle_extractor.py`，增强LaTeX清洗、figure_caption文本提取、表格HTML提取修正
+  - 新增 `install_paddle.sh`，自动检测OS和CUDA版本安装PaddlePaddle
+  - 更新 `README.md` 和 `README.zh.md`，添加OCR安装和使用说明
+  - 更新 `SKILL.md`，添加OCR相关技能说明
+  - 修改 `modules/pdf_extractor.py`，增强OCR模式集成
+  - 修改 `modules/pdf_generator.py`，优化PDF生成和资源释放
+  - 修改 `modules/docx_generator.py`，增强Word文档生成
+  - 修改 `modules/markdown_generator.py`，优化Markdown生成
+  - 修改 `services/translation_service.py`，增强翻译服务和OCR集成
+  - 修改 `utils/text_processing.py`，修复文本块合并高度计算错误
+  - 修改 `config.py`，新增OCR相关配置参数
+  - 更新 `requirements.txt`，添加OCR依赖
+- 相关文件：
+  - `modules/ocr/ocr_worker.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/ocr/system_profiler.py`
+  - `modules/pdf_extractor.py`
+  - `modules/pdf_generator.py`
+  - `modules/docx_generator.py`
+  - `modules/markdown_generator.py`
+  - `services/translation_service.py`
+  - `utils/text_processing.py`
+  - `config.py`
+  - `install_paddle.sh`
+  - `tests/test_ocr_worker.py`
+  - `tests/test_system_profiler.py`
+  - `tests/test_ocr_extractor.py`
+  - `tests/test_omml_constants.py`
+  - `tests/test_table_grid.py`
+
+## 2026-05-29
+
+- 上传OCR需求文档和PRP文件：
+  - 新增 `docs/OCR-requiremnt.md`，定义三阶段OCR功能规划
+  - 新增 `.claude/PRPs/plans/pdf-ocr-extraction.plan.md`，OCR提取功能实施计划
+  - 新增 `.claude/PRPs/prds/pdf-ocr-extraction.prd.md`，OCR提取功能产品需求文档
+  - 新增 `plans/ocr-timeout-optimization.md`，OCR超时优化方案
+  - 新增 `tests/test_ocr_extractor.py`，OCR提取器测试用例
+- 相关文件：
+  - `docs/OCR-requiremnt.md`
+  - `.claude/PRPs/plans/pdf-ocr-extraction.plan.md`
+  - `.claude/PRPs/prds/pdf-ocr-extraction.prd.md`
+  - `plans/ocr-timeout-optimization.md`
+  - `tests/test_ocr_extractor.py`
+
+## 2026-05-29
+
+- 实现OCR模式改进、安全修复与代码质量提升：
+  - 创建 `modules/ocr/` 包，包含OCR引擎架构：
+    - `base.py`：定义 `OcrExtractor` 抽象基类，统一OCR引擎接口
+    - `factory.py`：工厂函数 `create_ocr_extractor()`，支持引擎扩展
+    - `__init__.py`：模块入口，导出核心类和异常
+  - 实现 `modules/ocr/paddle_extractor.py` PaddleOCR提取器核心：
+    - 基于PP-StructureV3实现分步加载策略，避免2.5GB+内存溢出
+    - 支持文本块提取、表格识别、公式识别（LaTeX提取与清洗）、图像区域裁剪
+    - GPU自动检测与CPU回退机制
+    - 内存检查：创建管线前检查可用内存
+    - 日志系统恢复：PPStructureV3构造后自动恢复root logger配置
+    - 字体大小估算：三级策略解决多行文本块字体估算过大问题
+    - 精确边界框：使用textline级别bbox计算tight bbox
+    - 表格网格布局计算：基于textline数据计算统一网格bbox
+  - 实现 `modules/ocr/ocr_worker.py` OCR子进程工作器：
+    - 独立子进程（spawn模式）避免主进程崩溃
+    - 心跳监控和进度停滞检测
+    - 动态超时延长和参数降级重试
+  - 实现 `modules/ocr/system_profiler.py` 系统资源自适应参数：
+    - 5个内存层级（minimal/low/medium/high/unlimited）自动计算参数
+    - 高负载时自动降低参数
+  - 扩展数据模型 `models/extraction.py`：
+    - 添加 `from_dict()`/`to_dict()` 序列化方法，支持子进程间数据传递
+    - `PdfTable` 新增 `row_heights`、`col_widths` 字段
+  - 安全修复：
+    - 移除 `config.py` 中 `SECRET_KEY` 硬编码默认值，强制环境变量配置
+    - `DEBUG` 默认值安全处理
+    - 下载文件名正则验证，防止路径遍历攻击
+    - 页码范围输入长度限制（1000字符），防止DoS
+  - 代码质量提升：
+    - 翻译API异常时回退返回原文而非空字符串
+    - 字体大小估算修正（多行块120pt估算为9pt而非90pt）
+    - PDF生成器资源释放保护（try/finally确保close()）
+    - numpy数组真值检查修复
+  - 新增 `install_paddle.sh` PaddlePaddle安装脚本
+  - 新增 `tests/test_code_review_fixes.py` 代码审查修复测试
+  - 修改 `app.py`，添加OCR模式支持
+  - 修改 `cli.py` 和 `cli/translate_command.py`，添加OCR命令行选项
+  - 修改 `config.py`，新增大量OCR相关配置参数
+  - 修改 `modules/pdf_extractor.py`，集成OCR提取
+  - 修改 `modules/pdf_generator.py`，优化PDF生成
+  - 修改 `services/translation_service.py`，集成OCR翻译服务
+  - 修改 `templates/index.html`，添加OCR界面元素
+  - 更新 `requirements.txt`，添加OCR依赖
+- 相关文件：
+  - `modules/ocr/base.py`
+  - `modules/ocr/factory.py`
+  - `modules/ocr/__init__.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/ocr/ocr_worker.py`
+  - `modules/ocr/system_profiler.py`
+  - `models/extraction.py`
+  - `models/text_block.py`
+  - `config.py`
+  - `app.py`
+  - `cli.py`
+  - `cli/translate_command.py`
+  - `modules/pdf_extractor.py`
+  - `modules/pdf_generator.py`
+  - `services/translation_service.py`
+  - `templates/index.html`
+  - `install_paddle.sh`
+  - `tests/test_code_review_fixes.py`
+  - `requirements.txt`
+
 ## 2026-03-30
 
 - 添加命令行支持：

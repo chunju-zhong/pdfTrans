@@ -166,25 +166,16 @@ class TestPaddleOcrExtractor:
         mock_overall_ocr_res = MagicMock()
         mock_overall_ocr_res.get.return_value = None
 
-        def mock_layout_predict(img_path):
-            return [{'parsing_res_list': [mock_text_block], 'overall_ocr_res': mock_overall_ocr_res}]
-
         mock_table_res = MagicMock()
-        mock_html_dict = {'html': '<html><body><table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table></body></html>'}
+        mock_html_dict = {'pred': '<html><body><table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table></body></html>'}
         mock_table_res.html = mock_html_dict
 
-        mock_table_block = MagicMock()
-        mock_table_block.label = 'table'
-        mock_table_block.bbox = [10, 10, 300, 200]
+        def mock_predict(img_path):
+            return [{'parsing_res_list': [mock_text_block], 'table_res_list': [mock_table_res], 'overall_ocr_res': mock_overall_ocr_res}]
 
-        def mock_table_predict(img_path):
-            return [{'parsing_res_list': [mock_table_block], 'table_res_list': [mock_table_res], 'overall_ocr_res': mock_overall_ocr_res}]
-
-        mock_layout_pipeline = MagicMock()
-        mock_layout_pipeline.predict = mock_layout_predict
-        mock_table_pipeline = MagicMock()
-        mock_table_pipeline.predict = mock_table_predict
-        mock_create_pipeline.side_effect = [mock_layout_pipeline, mock_table_pipeline]
+        mock_pipeline = MagicMock()
+        mock_pipeline.predict = mock_predict
+        mock_create_pipeline.return_value = mock_pipeline
 
         extractor = PaddleOcrExtractor(lang='en', skip_formula=True)
         result = extractor.extract_from_pdf('test.pdf')

@@ -12,27 +12,27 @@ class TestPdfExtractor:
     
     def test_extract(self, test_pdf_path):
         """测试正常PDF文件的文本提取
-        
+
         验证extract方法能够正确提取PDF中的文本内容，包括文本块和表格。
         """
         pdf_extractor = PdfExtractor(test_pdf_path)
-        result = pdf_extractor.extract()
-        
+        result, _ = pdf_extractor.extract()
+
         # 验证结果类型
         from models.extraction import PdfExtraction
         assert isinstance(result, PdfExtraction)
-        
+
         # 验证结果属性
         assert hasattr(result, 'total_pages')
         assert hasattr(result, 'pages')
         assert hasattr(result, 'tables')
-        
+
         # 验证页面数量大于0
         assert result.total_pages > 0
-        
+
         # 验证文本内容列表长度与总页数一致
         assert len(result.pages) == result.total_pages
-        
+
         # 验证每个页面都包含正确的属性
         from models.extraction import PdfPage
         for page_content in result.pages:
@@ -40,7 +40,7 @@ class TestPdfExtractor:
             assert hasattr(page_content, 'page_num')
             assert hasattr(page_content, 'text_blocks')
             assert isinstance(page_content.text_blocks, list)
-        
+
         # 验证至少有一个文本块
         assert any(len(page.text_blocks) > 0 for page in result.pages)
     

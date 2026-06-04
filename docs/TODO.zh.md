@@ -15,7 +15,15 @@
 - [x] 实现翻译进度系统重构
 - [x] 实现语义块两阶段合并功能
 - [x] 优化文本块合并算法
+- [x] 修复文本块合并高度计算错误
+- [x] 实现OCR提取引擎（PaddleOCR PP-StructureV3）
+- [x] 实现OCR子进程工作器和心跳监控
+- [x] 实现系统资源自适应参数计算
+- [x] 安全修复（SECRET_KEY硬编码移除、文件名验证、页码范围限制）
+- [x] 代码质量提升（翻译回退、字体估算修正、资源释放保护）
+- [x] 修复OCR公式识别三端输出失败（内存分级改用物理内存、DPI/推理参数提升、日志修正）
 - [ ] 进一步优化术语提取的准确性和效率
+- [ ] 优化LaTeX公式语法修复能力，处理模型输出的语法错误
 
 ## 中优先级
 - [x] 修复 test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages

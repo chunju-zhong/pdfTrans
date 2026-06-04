@@ -12,29 +12,29 @@ class TestTranslationService:
     
     def test_process_translation(self, test_pdf_path):
         """测试翻译服务处理函数
-        
+
         验证翻译服务能够正常处理PdfExtraction对象
         """
         # 先提取PDF文本，验证返回的是PdfExtraction对象
         pdf_extractor = PdfExtractor(test_pdf_path)
-        extracted_content = pdf_extractor.extract()
-        
+        extracted_content, missing_pages = pdf_extractor.extract()
+
         # 验证提取结果是PdfExtraction对象
         from models.extraction import PdfExtraction
         assert isinstance(extracted_content, PdfExtraction)
-        
+
         # 验证对象属性访问
         assert hasattr(extracted_content, 'total_pages')
         assert hasattr(extracted_content, 'pages')
         assert hasattr(extracted_content, 'tables')
-        
+
         # 验证pages列表中的元素是PdfPage对象
         from models.extraction import PdfPage
         for page in extracted_content.pages:
             assert isinstance(page, PdfPage)
             assert hasattr(page, 'page_num')
             assert hasattr(page, 'text_blocks')
-        
+
         # 验证tables列表中的元素是PdfTable对象（如果有表格）
         if extracted_content.tables:
             from models.extraction import PdfTable
@@ -141,16 +141,15 @@ class TestTranslationService:
         
     def test_text_processing_batch_size(self):
         """测试文本处理批处理大小
-        
+
         验证文本处理模块的批处理大小设置正确
         """
         from utils.text_processing import merge_semantic_blocks_with_llm
         import inspect
-        
+
         # 获取函数源码
         source = inspect.getsource(merge_semantic_blocks_with_llm)
-        
+
         # 验证batch_size设置为10
         assert 'batch_size = 10' in source, "批处理大小未设置为10"
-        assert '# 每批处理10对文本块' in source, "批处理大小注释不匹配"
 

@@ -43,9 +43,9 @@ def _setup_subprocess_logger(name):
     _log = logging.getLogger(name)
     _log.setLevel(logging.INFO)
     _fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    _fh = _logging.FileHandler(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'app.log'))
+    _fh = logging.FileHandler(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'app.log'))
     _fh.setFormatter(_fmt)
-    _sh = _logging.StreamHandler()
+    _sh = logging.StreamHandler()
     _sh.setFormatter(_fmt)
     _log.addHandler(_fh)
     _log.addHandler(_sh)
@@ -79,8 +79,8 @@ def _ocr_worker_func(pdf_path, pages, temp_images_dir, lang, use_gpu,
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            _logging.FileHandler(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'app.log')),
-            _logging.StreamHandler()
+            logging.FileHandler(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'app.log')),
+            logging.StreamHandler()
         ]
     )
 
@@ -137,31 +137,36 @@ def _degrade_params(current_params, attempt):
     thread_params = dict(degraded.get('thread_params', {}))
     for key in ('CPU_NUM', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
         current_val = int(thread_params.get(key, '2'))
-        thread_params[key] = str(max(1, current_val - attempt))
+        thread_params[key] = str(max(1, current_val - 1 - attempt))
     degraded['thread_params'] = thread_params
 
     memory_params = dict(degraded.get('memory_params', {}))
-    memory_params['memory_factor'] = round(memory_params.get('memory_factor', 0.55) * 0.7, 2)
+    memory_params['memory_factor'] = round(memory_params.get('memory_factor', 0.55) * 0.8, 2)
     for cap_key in ('memory_cap_layout', 'memory_cap_table', 'memory_cap_formula'):
         if cap_key in memory_params:
-            memory_params[cap_key] = int(memory_params[cap_key] * 0.7)
+            memory_params[cap_key] = int(memory_params[cap_key] * 0.8)
     degraded['memory_params'] = memory_params
 
     current_dpi = degraded.get('render_dpi', 120)
-    degraded['render_dpi'] = max(72, current_dpi - 30)
+    degraded['render_dpi'] = max(72, current_dpi - 20)
 
     timeout_params = dict(degraded.get('timeout_params', {}))
     current_max_total = timeout_params.get('max_total_time', 1800)
     timeout_params['max_total_time'] = int(current_max_total * 2.0)
     degraded['timeout_params'] = timeout_params
 
+    degraded['skip_table'] = attempt >= 1
+    degraded['skip_formula'] = attempt >= 2
+
     logger.info(
-        "参数降级(第%d次重试): 线程=%s, DPI=%d, 内存因子=%.2f, 超时=%ds",
+        "参数降级(第%d次重试): 线程=%s, DPI=%d, 内存因子=%.2f, 超时=%ds, skip_table=%s, skip_formula=%s",
         attempt + 1,
         thread_params.get('CPU_NUM'),
         degraded['render_dpi'],
         memory_params['memory_factor'],
         timeout_params['max_total_time'],
+        degraded['skip_table'],
+        degraded['skip_formula'],
     )
     return degraded
 

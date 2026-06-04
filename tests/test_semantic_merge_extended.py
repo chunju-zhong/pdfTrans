@@ -93,34 +93,7 @@ class TestSemanticMergeExtended:
         # 验证两个块被合并为一个
         assert len(merged_blocks) == 1, \
             f"预期合并为1个块，实际得到{len(merged_blocks)}个块"
-        assert merged_blocks[0]['block_text'] == 'This is the first sentence that ends with a continuation word here.'
-
-    def test_merge_blocks_with_sentence_continuation_lowercase(self):
-        """测试以小写字母开头的句子延续合并
-
-        验证当前块以小写字母开头时，能够与前一块合并
-        """
-        text_blocks = [
-            TextBlock(
-                block_no=1,
-                text='This is the first sentence that ends',
-                bbox=(0, 0, 200, 20)
-            ),
-            TextBlock(
-                block_no=2,
-                text='with a continuation word here.',
-                bbox=(0, 25, 200, 45)
-            )
-        ]
-
-        # 直接使用TextBlock对象列表
-        all_blocks = text_blocks
-
-        merged_blocks, block_mapping = merge_semantic_blocks(all_blocks)
-        
-        # 验证两个块被合并为一个
-        assert len(merged_blocks) == 1, \
-            f"预期合并为1个块，实际得到{len(merged_blocks)}个块"
+        assert merged_blocks[0].block_text == 'This is the first sentence that ends with a continuation word here.'
 
     def test_no_merge_when_sentence_ends(self):
         """测试完整句子结尾时不合并

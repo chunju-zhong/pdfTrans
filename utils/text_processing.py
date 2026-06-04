@@ -211,7 +211,7 @@ def merge_semantic_blocks(text_blocks):
             
             # 更新最大宽度和高度
             current_merged.max_width = max(current_merged.max_width, curr_width)
-            current_merged.max_height = curr_bbox[3] - first_bbox[1]
+            current_merged.max_height = max(current_merged.max_height, curr_height)
 
         i += 1
     # 添加最后一个合并块（如果存在）

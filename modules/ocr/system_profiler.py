@@ -66,7 +66,7 @@ class OcrParameterCalculator:
     def __init__(self, profile: SystemProfile):
         self.profile = profile
         self.tier = self._determine_tier()
-        logger.info("内存分级: %s (可用%.1fGB/总%.1fGB)", self.tier, self.profile.available_memory_gb, self.profile.total_memory_gb)
+        logger.info("内存分级: %s (总%.1fGB, 可用%.1fGB)", self.tier, self.profile.total_memory_gb, self.profile.available_memory_gb)
 
     def _determine_tier(self):
         total_gb = self.profile.total_memory_gb
@@ -126,11 +126,11 @@ class OcrParameterCalculator:
         if user_dpi is not None:
             return user_dpi
         tier_dpi = {
-            "minimal": 100,
+            "minimal": 120,
             "low": 120,
-            "medium": 120,
+            "medium": 150,
             "high": 150,
-            "unlimited": 150,
+            "unlimited": 200,
         }
         return tier_dpi[self.tier]
 
@@ -203,8 +203,8 @@ class OcrParameterCalculator:
     }
 
     INFERENCE_PARAMS = {
-        "minimal": {"text_recognition_batch_size": 4, "text_det_limit_side_len": 720},
-        "low": {"text_recognition_batch_size": 6, "text_det_limit_side_len": 720},
+        "minimal": {"text_recognition_batch_size": 4, "text_det_limit_side_len": 960},
+        "low": {"text_recognition_batch_size": 6, "text_det_limit_side_len": 960},
         "medium": {"text_recognition_batch_size": 10, "text_det_limit_side_len": 960},
         "high": {"text_recognition_batch_size": 16, "text_det_limit_side_len": 960},
         "unlimited": {"text_recognition_batch_size": 16, "text_det_limit_side_len": 960},
@@ -225,10 +225,10 @@ class OcrParameterCalculator:
         return self.profile.gpu_available and config.OCR_USE_GPU
 
     def should_skip_table(self):
-        return self.profile.total_memory_gb <= 4
+        return self.tier == "minimal" and self.profile.total_memory_gb <= 6
 
     def should_skip_formula(self):
-        return self.profile.total_memory_gb <= 8
+        return self.tier == "minimal"
 
     def compute_all_params(self, page_count=1, user_dpi=None):
         thread_params = self.compute_thread_params()

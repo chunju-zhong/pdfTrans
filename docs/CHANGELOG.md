@@ -1,5 +1,150 @@
 # Changelog
 
+## 2026-06-05
+
+- Fixed OCR formula recognition failure across all three output formats (PDF/Word/Markdown):
+  - Fixed `modules/ocr/system_profiler.py` memory tier logic: `_determine_tier` now uses physical memory (`total_memory_gb`) instead of available memory, preventing 16GB machines from being incorrectly downgraded to `minimal` tier
+  - Adjusted `system_profiler.py` DPI tier parameters: `minimal` from 100 to 120, `medium` from 120 to 150, `unlimited` from 150 to 200, improving OCR recognition quality on low-memory machines
+  - Adjusted `system_profiler.py` inference parameters: `text_det_limit_side_len` for `minimal` and `low` tiers raised from 720 to 960, ensuring sufficient formula detection resolution
+  - Fixed `system_profiler.py` log format: tier log now shows total memory before available memory for clarity
+  - Fixed `modules/ocr/paddle_extractor.py` misleading log: removed the logic that forced `text_det_limit_side_len=960` when `use_formula=True`, log now accurately reflects actual parameters
+  - Improved `modules/ocr/paddle_extractor.py`: added `header` label to `NON_BODY_LABELS` to prevent headers from being translated as body text
+  - Optimized `modules/ocr/ocr_worker.py` parameter degradation strategy: degradation factor from 0.7 to 0.8, DPI step from -30 to -20, gentler degradation to avoid excessive quality loss
+  - Optimized `modules/ocr/ocr_worker.py`: auto-skip table and formula recognition during retry degradation (`skip_table`/`skip_formula`), prioritizing basic text extraction success
+  - Fixed `utils/text_processing.py` text block merge height calculation: use `max()` for maximum height instead of direct overwrite, preventing incorrect merged block height
+  - Fixed `tests/test_semantic_merge_extended.py` test assertions: corrected `block_text` property access, removed redundant test cases
+  - Fixed `tests/test_translation_service.py` tests: adapted to `extract()` return value change (returns tuple), removed outdated comment assertions
+- Related files:
+  - `modules/ocr/system_profiler.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/ocr/ocr_worker.py`
+  - `utils/text_processing.py`
+  - `tests/test_semantic_merge_extended.py`
+  - `tests/test_translation_service.py`
+
+## 2026-06-04
+
+- Implemented OCR extraction engine improvements and code review fixes:
+  - Fixed `_logging` undefined NameError in `modules/ocr/ocr_worker.py` causing OCR subprocess crash (changed to `logging`)
+  - Added `tests/test_ocr_worker.py`, covering OCR worker exception types, heartbeat, parameter degradation, subprocess retry logic
+  - Added `tests/test_system_profiler.py`, covering system resource detection, 5 memory tier parameter calculation, high load parameter reduction
+  - Added `tests/test_omml_constants.py`, testing OMML constant definitions
+  - Added `tests/test_table_grid.py`, testing table grid layout calculation
+  - Updated `tests/test_ocr_extractor.py`, covering factory creation, extraction, tables, GPU fallback scenarios
+  - Added `modules/ocr/system_profiler.py`, implementing system resource adaptive parameter calculation
+  - Refactored `modules/ocr/ocr_worker.py`, enhanced subprocess management, heartbeat monitoring, dynamic timeout and parameter degradation retry
+  - Refactored `modules/ocr/paddle_extractor.py`, enhanced LaTeX cleaning, figure_caption text extraction, table HTML extraction fix
+  - Added `install_paddle.sh`, auto-detect OS and CUDA version for PaddlePaddle installation
+  - Updated `README.md` and `README.zh.md`, added OCR installation and usage instructions
+  - Updated `SKILL.md`, added OCR-related skill documentation
+  - Modified `modules/pdf_extractor.py`, enhanced OCR mode integration
+  - Modified `modules/pdf_generator.py`, optimized PDF generation and resource release
+  - Modified `modules/docx_generator.py`, enhanced Word document generation
+  - Modified `modules/markdown_generator.py`, optimized Markdown generation
+  - Modified `services/translation_service.py`, enhanced translation service and OCR integration
+  - Modified `utils/text_processing.py`, fixed text block merge height calculation bug
+  - Modified `config.py`, added OCR-related configuration parameters
+  - Updated `requirements.txt`, added OCR dependencies
+- Related files:
+  - `modules/ocr/ocr_worker.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/ocr/system_profiler.py`
+  - `modules/pdf_extractor.py`
+  - `modules/pdf_generator.py`
+  - `modules/docx_generator.py`
+  - `modules/markdown_generator.py`
+  - `services/translation_service.py`
+  - `utils/text_processing.py`
+  - `config.py`
+  - `install_paddle.sh`
+  - `tests/test_ocr_worker.py`
+  - `tests/test_system_profiler.py`
+  - `tests/test_ocr_extractor.py`
+  - `tests/test_omml_constants.py`
+  - `tests/test_table_grid.py`
+
+## 2026-05-29
+
+- Uploaded OCR requirement documents and PRP files:
+  - Added `docs/OCR-requiremnt.md`, defining three-phase OCR feature planning
+  - Added `.claude/PRPs/plans/pdf-ocr-extraction.plan.md`, OCR extraction implementation plan
+  - Added `.claude/PRPs/prds/pdf-ocr-extraction.prd.md`, OCR extraction product requirements document
+  - Added `plans/ocr-timeout-optimization.md`, OCR timeout optimization plan
+  - Added `tests/test_ocr_extractor.py`, OCR extractor test cases
+- Related files:
+  - `docs/OCR-requiremnt.md`
+  - `.claude/PRPs/plans/pdf-ocr-extraction.plan.md`
+  - `.claude/PRPs/prds/pdf-ocr-extraction.prd.md`
+  - `plans/ocr-timeout-optimization.md`
+  - `tests/test_ocr_extractor.py`
+
+## 2026-05-29
+
+- Implemented OCR mode improvements, security fixes and code quality enhancements:
+  - Created `modules/ocr/` package with OCR engine architecture:
+    - `base.py`: Defined `OcrExtractor` abstract base class, unified OCR engine interface
+    - `factory.py`: Factory function `create_ocr_extractor()`, supporting engine extension
+    - `__init__.py`: Module entry point, exporting core classes and exceptions
+  - Implemented `modules/ocr/paddle_extractor.py` PaddleOCR extractor core:
+    - Step-by-step loading strategy based on PP-StructureV3, avoiding 2.5GB+ memory overflow
+    - Support for text block extraction, table recognition, formula recognition (LaTeX extraction and cleaning), image region cropping
+    - GPU auto-detection and CPU fallback mechanism
+    - Memory check: verify available memory before creating pipeline
+    - Logger recovery: auto-restore root logger configuration after PPStructureV3 construction
+    - Font size estimation: three-tier strategy fixing oversized estimation for multi-line text blocks
+    - Precise bounding boxes: using textline-level bbox for tight bbox calculation
+    - Table grid layout calculation: computing unified grid bbox based on textline data
+  - Implemented `modules/ocr/ocr_worker.py` OCR subprocess worker:
+    - Independent subprocess (spawn mode) to prevent main process crashes
+    - Heartbeat monitoring and progress stall detection
+    - Dynamic timeout extension and parameter degradation retry
+  - Implemented `modules/ocr/system_profiler.py` system resource adaptive parameters:
+    - 5 memory tiers (minimal/low/medium/high/unlimited) with auto parameter calculation
+    - Automatic parameter reduction under high load
+  - Extended data models in `models/extraction.py`:
+    - Added `from_dict()`/`to_dict()` serialization methods for inter-process data transfer
+    - `PdfTable` added `row_heights` and `col_widths` fields
+  - Security fixes:
+    - Removed hardcoded `SECRET_KEY` default value in `config.py`, enforcing environment variable configuration
+    - Safe `DEBUG` default value handling
+    - Download filename regex validation, preventing path traversal attacks
+    - Page range input length limit (1000 characters), preventing DoS
+  - Code quality improvements:
+    - Translation API exception fallback returns original text instead of empty string
+    - Font size estimation fix (multi-line block 120pt estimated as 9pt instead of 90pt)
+    - PDF generator resource release protection (try/finally ensuring close())
+    - numpy array truth value check fix
+  - Added `install_paddle.sh` PaddlePaddle installation script
+  - Added `tests/test_code_review_fixes.py` code review fix tests
+  - Modified `app.py`, added OCR mode support
+  - Modified `cli.py` and `cli/translate_command.py`, added OCR command line options
+  - Modified `config.py`, added numerous OCR-related configuration parameters
+  - Modified `modules/pdf_extractor.py`, integrated OCR extraction
+  - Modified `modules/pdf_generator.py`, optimized PDF generation
+  - Modified `services/translation_service.py`, integrated OCR translation service
+  - Modified `templates/index.html`, added OCR UI elements
+  - Updated `requirements.txt`, added OCR dependencies
+- Related files:
+  - `modules/ocr/base.py`
+  - `modules/ocr/factory.py`
+  - `modules/ocr/__init__.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/ocr/ocr_worker.py`
+  - `modules/ocr/system_profiler.py`
+  - `models/extraction.py`
+  - `models/text_block.py`
+  - `config.py`
+  - `app.py`
+  - `cli.py`
+  - `cli/translate_command.py`
+  - `modules/pdf_extractor.py`
+  - `modules/pdf_generator.py`
+  - `services/translation_service.py`
+  - `templates/index.html`
+  - `install_paddle.sh`
+  - `tests/test_code_review_fixes.py`
+  - `requirements.txt`
+
 ## 2026-03-30
 
 - Added command line support:

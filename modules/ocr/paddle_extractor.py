@@ -84,7 +84,7 @@ class PaddleOcrExtractor(OcrExtractor):
     }
 
     # 标记为非正文的标签
-    NON_BODY_LABELS = {'footer', 'page_number', 'footnote'}
+    NON_BODY_LABELS = {'footer', 'page_number', 'footnote', 'header'}
 
     # 需要保存为图片的版面标签
     IMAGE_LABELS = {'image', 'figure', 'chart', 'figure_caption', 'seal'}
@@ -304,8 +304,6 @@ class PaddleOcrExtractor(OcrExtractor):
             elif use_formula:
                 kwargs['formula_recognition_model_name'] = 'PP-FormulaNet_plus-S'
             kwargs['text_det_limit_side_len'] = self.inference_params.get('text_det_limit_side_len', 960)
-            if use_formula:
-                kwargs['text_det_limit_side_len'] = 960
             kwargs['text_det_thresh'] = 0.3
             kwargs['text_det_box_thresh'] = 0.5
             kwargs['text_recognition_batch_size'] = self.inference_params.get('text_recognition_batch_size', 10)

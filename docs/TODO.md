@@ -15,7 +15,15 @@
 - [x] Implement translation progress system refactoring
 - [x] Implement two-phase semantic block merging
 - [x] Optimize text block merging algorithm
+- [x] Fix text block merge height calculation bug
+- [x] Implement OCR extraction engine (PaddleOCR PP-StructureV3)
+- [x] Implement OCR subprocess worker with heartbeat monitoring
+- [x] Implement system resource adaptive parameter calculation
+- [x] Security fixes (SECRET_KEY hardcoded removal, filename validation, page range limit)
+- [x] Code quality improvements (translation fallback, font estimation fix, resource release protection)
+- [x] Fix OCR formula recognition failure across all output formats (memory tier uses physical memory, DPI/inference params raised, log corrected)
 - [ ] Further optimize glossary extraction accuracy and efficiency
+- [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
 
 ## Medium Priority
 - [x] Fix test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages
