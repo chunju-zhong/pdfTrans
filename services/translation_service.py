@@ -2,8 +2,7 @@ import os
 import shutil
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import fitz  # PyMuPDF
+from typing import Set
 
 from modules.pdf_extractor import PdfExtractor
 from modules.aiping_translator import AipingTranslator
@@ -13,7 +12,7 @@ from modules.docx_generator import DocxGenerator
 from modules.markdown_generator import create_markdown_generator
 from modules.semantic_analyzer_factory import SemanticAnalyzerFactory
 
-from models.extraction import PdfPage
+from models.extraction import PdfPage, PdfCell
 
 from utils.text_processing import merge_semantic_blocks, split_translated_result, merge_semantic_blocks_with_llm, merge_semantic_blocks_with_llm_two_phase
 from utils.file_utils import remove_file, create_zip
@@ -32,7 +31,7 @@ class TranslationService:
         # 创建可复用的线程池实例
         self.executor = ThreadPoolExecutor(max_workers=config.MAX_WORKERS)
     
-    def parse_page_range(self, page_range_str: str | None, total_pages: int) -> set[int]:
+    def parse_page_range(self, page_range_str: str | None, total_pages: int) -> Set[int]:
         """解析页码范围字符串，返回页码集合
         
         Args:
@@ -128,79 +127,7 @@ class TranslationService:
         else:
             raise ValueError("无效的语义分析器类型")
 
-    def handle_same_language(self, task, input_filepath, unique_id, filename, page_range, output_path=None):
-        """处理源语言和目标语言相同的情况，直接拷贝原始PDF页面
 
-        Args:
-            task: 任务对象
-            input_filepath: 输入文件路径
-            unique_id: 唯一ID
-            filename: 原始文件名
-            page_range: 页码范围，格式如"1-5,7,9-10"或空字符串表示所有页
-            output_path: 自定义输出路径，默认使用配置的OUTPUT_FOLDER
-
-        Returns:
-            str: 输出文件名
-        """
-        logger.info(f"任务 {task.task_id} 源语言和目标语言相同，直接拷贝原始页")
-        task.update_phase_progress('generation', 0, '正在准备输出文件...')
-        
-        # 生成输出文件路径
-        output_filename = f"translated_{unique_id}_{filename}"
-        output_filepath = os.path.join(output_path if output_path else config.OUTPUT_FOLDER, output_filename)
-        
-        # 使用 PdfExtractor 的 total_pages 属性获取总页数
-        with fitz.open(input_filepath) as doc:
-            total_pages = len(doc)
-        
-        # 解析页码范围，获取需要拷贝的页码集合
-        target_pages = self.parse_page_range(page_range, total_pages)
-        logger.info(f"任务 {task.task_id} 总页数: {total_pages}, 需要拷贝的页码: {sorted(target_pages)}")
-        
-        # 如果页码范围为空或包含所有页面，直接拷贝整个文件
-        if len(target_pages) == 0 or len(target_pages) == total_pages:
-            logger.info(f"任务 {task.task_id} 页码范围为空或包含所有页面，直接拷贝整个文件")
-            shutil.copy(input_filepath, output_filepath)
-        else:
-            # 使用PyMuPDF库只拷贝指定的页面
-            logger.info(f"任务 {task.task_id} 开始拷贝指定页码的页面")
-            
-            # 打开原始PDF
-            with fitz.open(input_filepath) as original_doc:
-                # 创建新的PDF文档
-                new_doc = fitz.open()
-                
-                # 拷贝指定的页面
-                page_list = sorted(target_pages)
-                for idx, page_num in enumerate(page_list):
-                    # 转换为原始文档的索引（从0开始）
-                    original_page_idx = page_num - 1
-                    # 跳过超出范围的页码
-                    if original_page_idx < 0 or original_page_idx >= len(original_doc):
-                        logger.warning(f"任务 {task.task_id} 页码 {page_num} 超出原始文档范围，跳过")
-                        continue
-                    # 克隆页面到新文档
-                    new_doc.insert_pdf(original_doc, from_page=original_page_idx, to_page=original_page_idx)
-                    
-                    # 更新进度
-                    phase_percent = int((idx + 1) / len(page_list) * 100)
-                    task.update_phase_progress('generation', phase_percent, f'正在拷贝第 {page_num} 页...')
-                # 保存新文档
-                new_doc.save(output_filepath)
-                new_doc.close()
-            
-            logger.info(f"任务 {task.task_id} 拷贝指定页码的页面完成，共拷贝 {len(target_pages)} 页")
-        
-        task.update_phase_progress('clean', 0, '正在清理临时文件...')
-        # 清理临时文件
-        remove_file(input_filepath)
-        logger.info(f"任务 {task.task_id} 已清理临时文件")
-        
-        task.update_phase_progress('clean', 100, '翻译完成！')
-        # 设置任务结果
-        task.set_result(output_filename)
-        logger.info(f"任务 {task.task_id} 完成，输出文件: {output_filename}")
-        return output_filename
 
     def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True, output_path=None, tmp_dir=None, ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch'):
         """提取PDF内容
@@ -256,7 +183,59 @@ class TranslationService:
         
         # 1.4 根据页码范围提取PDF文本
         logger.info(f"任务 {task.task_id} 开始提取PDF文本")
-        extracted_content = pdf_extractor.extract(pages=list(target_pages), extract_chapter=extract_chapter, temp_images_dir=temp_images_dir)
+        ocr_progress_callback = None
+        if ocr_mode:
+            STEP_WEIGHTS = {1: 0.45, 1.5: 0.05, 2: 0.25, 3: 0.25}
+            def _ocr_progress_cb(msg_type, payload):
+                step = payload.get('step', 1)
+                step_name = payload.get('step_name', '')
+                pages_done = payload.get('pages_done', 0)
+                total_pages = payload.get('total_pages', 1)
+                batch_idx = payload.get('batch_idx')
+                total_batches = payload.get('total_batches')
+                message = payload.get('message')
+
+                if msg_type == 'step_start':
+                    pages_done = 0
+
+                if msg_type == 'step_complete' and payload.get('skipped'):
+                    reason = payload.get('reason', '')
+                    if step == 1.5:
+                        warn_msg = ('公式识别因内存不足被跳过' if reason == 'memory'
+                                    else '公式识别已被配置跳过')
+                        task.add_warning(warn_msg, context={"process": "extraction", "step": step, "reason": reason})
+
+                step_weight = STEP_WEIGHTS.get(step, 0.05)
+                step_progress = pages_done / max(total_pages, 1)
+                ocr_progress = step_weight * step_progress
+
+                if batch_idx is not None and total_batches is not None and total_batches > 0:
+                    batch_base = batch_idx / total_batches
+                    batch_range = 1.0 / total_batches
+                    overall_ocr = batch_base + batch_range * ocr_progress
+                else:
+                    overall_ocr = ocr_progress
+
+                phase_percent = int(overall_ocr * 100)
+
+                if message:
+                    msg = f"OCR提取: {message}"
+                elif batch_idx is not None and total_batches is not None:
+                    msg = f"OCR提取: 第{batch_idx+1}/{total_batches}批 - {step_name} {pages_done}/{total_pages}页"
+                else:
+                    msg = f"OCR提取: {step_name} {pages_done}/{total_pages}页"
+
+                task.update_phase_progress('extraction', phase_percent, msg)
+
+            ocr_progress_callback = _ocr_progress_cb
+        extracted_content, missing_pages = pdf_extractor.extract(pages=list(target_pages), extract_chapter=extract_chapter, temp_images_dir=temp_images_dir, progress_callback=ocr_progress_callback)
+        if missing_pages:
+            task.add_warning(f"OCR提取失败，以下页面内容缺失: {missing_pages}", context={"process": "extraction", "missing_pages": missing_pages})
+            logger.warning(f"任务 {task.task_id} OCR提取失败，以下页面内容缺失: {missing_pages}")
+        if missing_pages and set(missing_pages) >= set(target_pages):
+            logger.warning(f"任务 {task.task_id} 所有目标页面OCR提取均失败")
+            task.update_phase_progress('extraction', 100, '所有页面OCR提取失败')
+            return None
         logger.info(f"任务 {task.task_id} PDF文本提取完成")
         
         # 保存提取的图像信息
@@ -293,16 +272,31 @@ class TranslationService:
         # 收集所有页面的所有块，方便上下文查找
         # 只收集正文块，简化后续流程
         text_blocks = []
+        total_body_blocks = 0
+        total_non_body_blocks = 0
         page_count = len(extracted_content.pages)
         for i, page in enumerate(extracted_content.pages):
-            phase_percent = int((i + 1) / page_count * 100)
-            task.update_phase_progress('extraction', phase_percent, f'正在提取第 {page.page_num} 页...')
+            if not ocr_mode:
+                phase_percent = int((i + 1) / page_count * 100)
+                task.update_phase_progress('extraction', phase_percent, f'正在提取第 {page.page_num} 页...')
 
-            # 页面的text_blocks已经是按垂直位置排序的
+            page_body_count = 0
+            page_non_body_count = 0
             for text_block in page.text_blocks:
-                # 只添加正文块
                 if text_block.is_body_text:
                     text_blocks.append(text_block)
+                    page_body_count += 1
+                else:
+                    page_non_body_count += 1
+            total_body_blocks += page_body_count
+            total_non_body_blocks += page_non_body_count
+            logger.info(f"任务 {task.task_id} 第 {page.page_num} 页提取统计: 总块数={len(page.text_blocks)}, 正文块={page_body_count}, 非正文块={page_non_body_count}")
+
+        logger.info(f"任务 {task.task_id} 提取完成统计: 总页数={page_count}, 正文块总数={total_body_blocks}, 非正文块总数={total_non_body_blocks}")
+        pages_without_body = [page.page_num for page in extracted_content.pages if not any(tb.is_body_text for tb in page.text_blocks)]
+        if pages_without_body:
+            logger.warning(f"任务 {task.task_id} 以下页面无正文块，可能存在内容丢失: {pages_without_body}")
+            task.add_warning(f"以下页面无正文内容: {pages_without_body}", context={"process": "extraction"})
 
         if not text_blocks or len(text_blocks) <= 0:
             logger.warning(f"任务 {task.task_id} 没有找到需要翻译的文本块")
@@ -340,14 +334,41 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 处理合并块 {index+1}/{total_blocks}")
         logger.info(f"任务 {task.task_id} 合并块 {index+1} 原文: {merged_block.block_text}")
         
+        if any(getattr(b, 'is_formula', False) for b in merged_block.original_blocks):
+            block_results = []
+            for j, block_info in enumerate(merged_block.original_blocks):
+                text_block = block_info
+                translated_text_block = text_block.copy()
+                translated_text_block.block_text = text_block.block_text
+                translated_text_block.update_style(
+                    font=text_block.font,
+                    font_size=text_block.font_size,
+                    color=text_block.color,
+                    flags=text_block.flags
+                )
+                block_results.append((text_block.page_num, translated_text_block))
+            from models.merged_block import MergedBlock
+            translated_merged_block = MergedBlock(
+                block_text=merged_block.block_text,
+                original_blocks=merged_block.original_blocks,
+                max_width=merged_block.max_width,
+                max_height=merged_block.max_height
+            )
+            return translated_merged_block, block_results, merged_block.page_num
+
+        merged_text = merged_block.block_text
+        logger.info(f'合并翻译请求: 原文前100字符="{merged_text[:100]}", 长度={len(merged_text)}')
         translation_result = translator.translate(
-            merged_block.block_text,
+            merged_text,
             source_lang,
             target_lang,
             doc_type=doc_type,
             glossary=glossary
         )
         merged_translation = translation_result.content
+        logger.info(f'合并翻译结果: 结果前200字符="{merged_translation[:200]}", 长度={len(merged_translation)}')
+        if merged_translation == merged_text:
+            logger.warning(f'合并翻译结果与原文相同，可能翻译失败: 原文前100字符="{merged_text[:100]}"')
         logger.info(f"任务 {task.task_id} 合并块 {index+1} 翻译结果: {merged_translation}")
         
         # 检查是否被截断
@@ -534,8 +555,30 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 处理原始块 {index+1}/{total_blocks}")
         logger.info(f"任务 {task.task_id} 原始块 {index+1} 原文: {text_block.block_text}")
         
+        if getattr(text_block, 'is_formula', False):
+            translated_text_block = text_block.copy()
+            translated_text_block.block_text = text_block.block_text
+            translated_text_block.update_style(
+                font=text_block.font,
+                font_size=text_block.font_size,
+                color=text_block.color,
+                flags=text_block.flags
+            )
+            from models.merged_block import MergedBlock
+            bbox = text_block.block_bbox
+            width = bbox[2] - bbox[0] if len(bbox) >= 4 else 0
+            height = bbox[3] - bbox[1] if len(bbox) >= 4 else 0
+            translated_merged_block = MergedBlock(
+                block_text=text_block.block_text,
+                original_blocks=[block_info],
+                max_width=width,
+                max_height=height
+            )
+            return page_num, translated_text_block, translated_merged_block
+
         logger.info(f"任务 {task.task_id} 原始块 {index+1} 是正文块，开始翻译")
         # 调用翻译API
+        logger.info(f'翻译请求: 原文前100字符="{text_block.block_text[:100]}", 长度={len(text_block.block_text)}')
         translation_result = translator.translate(
             text_block.block_text,
             source_lang,
@@ -544,6 +587,9 @@ class TranslationService:
             glossary=glossary
         )
         translated_text = translation_result.content
+        logger.info(f'翻译结果: 结果前200字符="{translated_text[:200]}", 长度={len(translated_text)}')
+        if translated_text == text_block.block_text:
+            logger.warning(f'翻译结果与原文相同，可能翻译失败: 原文前100字符="{text_block.block_text[:100]}"')
         logger.info(f"任务 {task.task_id} 原始块 {index+1} 翻译结果: {translated_text}")
         
         # 检查是否被截断
@@ -726,7 +772,6 @@ class TranslationService:
                 "finish_reason": translation_result.finish_reason
             })
         # 创建翻译后的PdfCell对象
-        from models.extraction import PdfCell
         translated_cell = PdfCell(
             text=translated_text,
             bbox=cell.bbox,
@@ -734,6 +779,72 @@ class TranslationService:
             col_idx=cell.col_idx
         )
         return table_idx, row_idx, col_idx, translated_cell, table_pages.get(table_idx, 0)
+
+    def translate_table_row(self, task, table_idx, row_idx, row_cells, translator, source_lang, target_lang, doc_type, glossary, table_pages):
+        non_empty_cells = []
+        for col_idx, cell in enumerate(row_cells):
+            if cell and cell.text:
+                non_empty_cells.append((col_idx, cell.text))
+
+        if not non_empty_cells:
+            return table_idx, row_idx, {}, table_pages.get(table_idx, 0)
+
+        SEPARATOR = "\n|||"
+        joined_text = SEPARATOR.join(text for _, text in non_empty_cells)
+
+        logger.info(f"任务 {task.task_id} 批量翻译行: 表格={table_idx}, 行={row_idx}, 单元格数={len(non_empty_cells)}")
+
+        try:
+            translation_result = translator.translate(
+                joined_text,
+                source_lang,
+                target_lang,
+                doc_type=doc_type,
+                glossary=glossary
+            )
+            translated = translation_result.content
+
+            if translation_result.truncated:
+                logger.warning(f"任务 {task.task_id} 表格行翻译被截断: {translation_result.truncation_info}")
+                task.add_warning("表格行翻译被截断", {
+                    "process": "translation",
+                    "table_index": table_idx,
+                    "row_index": row_idx,
+                    "token_usage": translation_result.token_usage,
+                    "finish_reason": translation_result.finish_reason
+                })
+
+            parts = translated.split(SEPARATOR)
+            result = {}
+            for i, (col_idx, original) in enumerate(non_empty_cells):
+                cell = row_cells[col_idx]
+                if i < len(parts) and parts[i].strip():
+                    result[col_idx] = PdfCell(
+                        text=parts[i].strip(),
+                        bbox=cell.bbox,
+                        row_idx=cell.row_idx,
+                        col_idx=cell.col_idx
+                    )
+                else:
+                    result[col_idx] = PdfCell(
+                        text=original,
+                        bbox=cell.bbox,
+                        row_idx=cell.row_idx,
+                        col_idx=cell.col_idx
+                    )
+            return table_idx, row_idx, result, table_pages.get(table_idx, 0)
+        except Exception as e:
+            logger.warning(f"任务 {task.task_id} 表格行翻译失败: {e}")
+            result = {}
+            for col_idx, text in non_empty_cells:
+                cell = row_cells[col_idx]
+                result[col_idx] = PdfCell(
+                    text=text,
+                    bbox=cell.bbox,
+                    row_idx=cell.row_idx,
+                    col_idx=cell.col_idx
+                )
+            return table_idx, row_idx, result, table_pages.get(table_idx, 0)
 
     def build_translated_row(self, task, row_idx, row, table_idx, cell_results):
         """构建翻译后的表格行
@@ -748,7 +859,6 @@ class TranslationService:
         Returns:
             list: 翻译后的行
         """
-        from models.extraction import PdfCell
         translated_row = []
         
         for col_idx, cell in enumerate(row):
@@ -822,93 +932,70 @@ class TranslationService:
         return translated_tables
     
     def _process_table_translation(self, task, tables, translator, source_lang, target_lang, doc_type, glossary):
-        """处理表格翻译任务
-        
-        Args:
-            task: 任务对象
-            tables: 提取的表格列表
-            translator: 翻译器实例
-            source_lang: 源语言
-            target_lang: 目标语言
-            doc_type: 文档类型
-            glossary: 术语表
-            
-        Returns:
-            tuple: (cell_results, total_cells)
-        """
-        # 获取所有唯一的页码
         unique_pages = set()
-        # 线程安全的结果存储
         cell_results = {}
         results_lock = threading.Lock()
-        translated_cells_count = 0
-        total_cells = 0
-        
-        # 获取表格的页面信息
+        translated_rows_count = 0
+        total_rows = 0
+
         table_pages = {table_idx: table.page_num for table_idx, table in enumerate(tables)}
-        
-        # 提交翻译任务
-        future_to_cell = {}
-        
+
+        future_to_row = {}
+
         for table_idx, table in enumerate(tables):
             unique_pages.add(table.page_num)
             logger.info(f"任务 {task.task_id} 处理表格 {table_idx}: 页码={table.page_num}, 行数={len(table.cells)}")
-            
-            # 直接提交单元格翻译任务，避免创建中间列表
+
             for row_idx, row in enumerate(table.cells):
-                for col_idx, cell in enumerate(row):
-                    if cell and cell.text:
-                        total_cells += 1
-                        text_preview = cell.text[:50] + '...' if len(cell.text) > 50 else cell.text
-                        logger.info(f"任务 {task.task_id} 提交单元格: 表格={table_idx}, 行={row_idx}, 列={col_idx}, 原文='{text_preview}'")
-                        future_to_cell[self.executor.submit(self.translate_table_cell, task, table_idx, row_idx, col_idx, cell, translator, source_lang, target_lang, doc_type, glossary, table_pages)] = (table_idx, row_idx, col_idx, cell)
-        
-        logger.info(f"任务 {task.task_id} 共提交 {total_cells} 个需要翻译的单元格")
-        
-        # 处理翻译结果
+                has_content = any(cell and cell.text for cell in row)
+                if has_content:
+                    total_rows += 1
+                    future_to_row[self.executor.submit(
+                        self.translate_table_row, task, table_idx, row_idx, row,
+                        translator, source_lang, target_lang, doc_type, glossary, table_pages
+                    )] = (table_idx, row_idx)
+
+        logger.info(f"任务 {task.task_id} 共提交 {total_rows} 行需要翻译的表格行")
+
         processed_pages = set()
-        
-        for future in as_completed(future_to_cell):
+
+        for future in as_completed(future_to_row):
+            table_idx, row_idx = future_to_row[future]
             try:
-                table_idx, row_idx, col_idx, translated_cell, page_num = future.result()
-                translated_preview = translated_cell.text[:50] + '...' if len(translated_cell.text) > 50 else translated_cell.text
-                logger.info(f"任务 {task.task_id} 存储翻译结果: 表格={table_idx}, 行={row_idx}, 列={col_idx}, 译文='{translated_preview}'")
-                
+                t_idx, r_idx, row_result, page_num = future.result()
+                logger.info(f"任务 {task.task_id} 存储行翻译结果: 表格={t_idx}, 行={r_idx}, 单元格数={len(row_result)}")
+
                 with results_lock:
-                    # 存储翻译结果
-                    if table_idx not in cell_results:
-                        cell_results[table_idx] = {}
-                    if row_idx not in cell_results[table_idx]:
-                        cell_results[table_idx][row_idx] = {}
-                    cell_results[table_idx][row_idx][col_idx] = translated_cell
-                    
-                    # 标记当前页面为已处理
+                    if t_idx not in cell_results:
+                        cell_results[t_idx] = {}
+                    cell_results[t_idx][r_idx] = row_result
+
                     if page_num not in processed_pages:
                         processed_pages.add(page_num)
-                    
-                    translated_cells_count += 1
-                    if total_cells > 0:
-                        phase_percent = int((translated_cells_count / total_cells) * 100)
-                        task.update_phase_progress('table_translation', phase_percent, f'正在翻译表格: {translated_cells_count}/{total_cells}')
-                        
+
+                    translated_rows_count += 1
+                    if total_rows > 0:
+                        phase_percent = int((translated_rows_count / total_rows) * 100)
+                        task.update_phase_progress('table_translation', phase_percent, f'正在翻译表格: {translated_rows_count}/{total_rows} 行')
+
             except Exception as e:
-                logger.error(f"任务 {task.task_id} 翻译表格单元格时出错: {str(e)}")
-                # 回退到原文，避免空白
-                table_idx, row_idx, col_idx, cell = future_to_cell[future]
-                from models.extraction import PdfCell
-                fallback_cell = PdfCell(
-                    text=cell.text,
-                    bbox=cell.bbox,
-                    row_idx=cell.row_idx,
-                    col_idx=cell.col_idx
-                )
+                logger.error(f"任务 {task.task_id} 翻译表格行时出错: {str(e)}")
+                table = tables[table_idx]
+                row = table.cells[row_idx]
                 if table_idx not in cell_results:
                     cell_results[table_idx] = {}
-                if row_idx not in cell_results[table_idx]:
-                    cell_results[table_idx][row_idx] = {}
-                cell_results[table_idx][row_idx][col_idx] = fallback_cell
-        
-        return cell_results, total_cells
+                fallback_result = {}
+                for col_idx, cell in enumerate(row):
+                    if cell and cell.text:
+                        fallback_result[col_idx] = PdfCell(
+                            text=cell.text,
+                            bbox=cell.bbox,
+                            row_idx=cell.row_idx,
+                            col_idx=cell.col_idx
+                        )
+                cell_results[table_idx][row_idx] = fallback_result
+
+        return cell_results, total_rows
     
     def _build_translated_tables(self, task, tables, cell_results):
         """构建翻译后的表格
@@ -1203,6 +1290,36 @@ class TranslationService:
             shutil.rmtree(images_dir)
             logger.info(f"已清理临时图像目录: {images_dir}")
     
+    def _cleanup_ocr_temp_images(self, extracted_images):
+        """清理OCR提取的临时图片目录（temp_images）
+        
+        在全部输出文件生成完成后调用，确保 markdown_generator 的
+        _copy_images_to_output 已成功复制图片后再清理。
+        
+        Args:
+            extracted_images (list): 提取的图像列表
+        """
+        if not extracted_images:
+            return
+        
+        # 从图像路径提取临时目录
+        temp_dirs = set()
+        for img in extracted_images:
+            img_path = getattr(img, 'image_path', None)
+            if img_path and img_path != '':
+                img_dir = os.path.dirname(img_path)
+                if img_dir:
+                    temp_dirs.add(img_dir)
+        
+        for temp_dir in temp_dirs:
+            if os.path.exists(temp_dir):
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    logger.info(f"已清理OCR临时图片目录: {temp_dir}")
+                except Exception as e:
+                    logger.warning(f"清理OCR临时图片目录失败: {e}")
+    
     def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True, output_path=None, output_filename=None, tmp_dir=None, target_pages=None):
         """生成输出文件
 
@@ -1411,11 +1528,7 @@ class TranslationService:
             task.update_phase_progress('init', 50, '正在检查源文件...')
             task.update_phase_progress('init', 100, '源文件检查完成，准备提取内容')
             
-            # 优化：如果目标语言和源语言相同，直接拷贝原始页
-            if source_lang == target_lang:
-                self.handle_same_language(task, input_filepath, unique_id, filename, page_range)
-                return
-            
+
             # 清理输出目录中的旧文件
             self.cleanup_output_directory()
             
@@ -1466,6 +1579,9 @@ class TranslationService:
             # 完成任务
             self._complete_task(task, input_filepath, output_files, is_cli=False)
             
+            # 清理OCR临时图片目录（所有输出文件生成完成后）
+            self._cleanup_ocr_temp_images(extracted_images)
+            
         except Exception as e:
             # 记录错误信息到日志
             logger.error(f"任务 {task.task_id} 处理失败: {str(e)}", exc_info=True)
@@ -1475,6 +1591,9 @@ class TranslationService:
             if 'input_filepath' in locals():
                 remove_file(input_filepath)
                 logger.info(f"任务 {task.task_id} 失败，已清理临时文件")
+            # 清理OCR临时图片目录
+            if 'extracted_images' in locals():
+                self._cleanup_ocr_temp_images(extracted_images)
     
     def _create_translators(self, task, translator_type):
         """创建翻译器和语义分析器实例
@@ -1680,10 +1799,7 @@ class TranslationService:
             if progress_callback:
                 progress_callback(5, '源文件检查完成')
             
-            # 优化：如果目标语言和源语言相同，直接拷贝原始页
-            if source_lang == target_lang:
-                return self.handle_same_language(task, input_filepath, unique_id, filename, page_range, output_path)
-            
+
             # 清理输出目录中的旧文件（仅当使用默认输出目录时）
             if not output_path:
                 self.cleanup_output_directory()
@@ -1760,6 +1876,9 @@ class TranslationService:
             if progress_callback:
                 progress_callback(100, '翻译完成！')
             
+            # 清理OCR临时图片目录（所有输出文件生成完成后）
+            self._cleanup_ocr_temp_images(extracted_images)
+            
             # 返回第一个输出文件
             return output_files[0] if output_files else None
             
@@ -1774,6 +1893,9 @@ class TranslationService:
                 logger.info(f"任务 {task.task_id} 失败，已清理临时文件")
             elif 'input_filepath' in locals() and is_cli:
                 logger.info(f"任务 {task.task_id} 失败，CLI模式下保留源文件")
+            # 清理OCR临时图片目录
+            if 'extracted_images' in locals():
+                self._cleanup_ocr_temp_images(extracted_images)
             return None
 
 # 创建翻译服务实例

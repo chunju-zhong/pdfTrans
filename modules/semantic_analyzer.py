@@ -1,4 +1,5 @@
 from openai import OpenAI
+from config import config
 
 class SemanticAnalyzer:
     """语义分析基类
@@ -65,6 +66,7 @@ class SemanticAnalyzer:
                 temperature=0.1,  # 降低温度，提高分析准确性
                 top_p=0.9,  # 核采样参数
                 max_tokens=self.max_tokens,  # 使用类属性作为最大token数
+                extra_body=config.SILICON_FLOW_EXTRA_BODY,
                 messages=[
                     {
                         "role": "system",
@@ -138,6 +140,7 @@ class SemanticAnalyzer:
                     temperature=0.1,  # 降低温度，提高分析准确性
                     top_p=0.9,  # 核采样参数
                     max_tokens=self.batch_max_tokens,  # 使用类属性作为最大token数
+                    extra_body=config.SILICON_FLOW_EXTRA_BODY,
                     messages=[
                         {
                             "role": "system",

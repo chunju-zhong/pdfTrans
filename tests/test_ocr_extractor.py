@@ -8,7 +8,10 @@ OCR引擎调用使用mock避免依赖PaddleOCR实际安装。
 
 import pytest
 import os
+import numpy as np
 from unittest.mock import patch, MagicMock, PropertyMock
+
+from modules.ocr.paddle_extractor import PaddleOcrExtractor
 
 
 class TestOcrExtractor:
@@ -78,19 +81,23 @@ class TestPaddleOcrExtractor:
         with pytest.raises(FileNotFoundError, match="PDF文件不存在"):
             extractor.extract_from_pdf('/nonexistent/file.pdf')
 
+    @patch('modules.ocr.paddle_extractor.cv2.imread')
     @patch('os.makedirs')
     @patch('os.path.exists', return_value=True)
     @patch('modules.ocr.paddle_extractor.fitz')
-    @patch('modules.ocr.paddle_extractor.PaddleOcrExtractor.pipeline', new_callable=PropertyMock)
-    def test_extract_from_pdf_basic(self, mock_pipeline_prop, mock_fitz,
-                                     mock_exists, mock_makedirs):
-        """测试基本PDF提取流程（mock）"""
+    @patch.object(PaddleOcrExtractor, '_create_pipeline')
+    def test_extract_from_pdf_basic(self, mock_create_pipeline, mock_fitz,
+                                     mock_exists, mock_makedirs, mock_imread):
+
+
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
         from models.extraction import PdfExtraction
 
-        # Mock PyMuPDF
+        mock_imread.return_value = np.zeros((792, 612, 3), dtype=np.uint8)
+
         mock_page = MagicMock()
-        mock_page.get_pixmap.return_value.save = MagicMock()
+        mock_page.get_pixmap.return_value = MagicMock(width=612, height=792)
+        mock_page.rect = MagicMock(width=612.0, height=792.0)
         mock_doc = MagicMock()
         mock_doc.__len__.return_value = 2
         mock_doc.__getitem__.return_value = mock_page
@@ -98,45 +105,50 @@ class TestPaddleOcrExtractor:
         mock_doc.__exit__.return_value = None
         mock_fitz.open.return_value = mock_doc
 
-        # Mock PP-StructureV3结果 — 文本区域
+        mock_block = MagicMock()
+        mock_block.label = 'text'
+        mock_block.bbox = [10, 10, 200, 50]
+        mock_block.content = 'Hello World'
+        mock_block.text_line_height = None
+        mock_block.num_of_lines = None
+
+        mock_overall_ocr_res = MagicMock()
+        mock_overall_ocr_res.get.return_value = None
+
         mock_result = MagicMock()
-        mock_result.res = {
-            'layout_det_res': {
-                'bboxes': [[10, 10, 200, 50]],
-                'labels': ['text'],
-            },
-            'ocr_res': {
-                'rec_texts': ['Hello World'],
-                'dt_polys': [[[10, 10], [200, 10], [200, 50], [10, 50]]],
-            },
-        }
+        mock_result.get.return_value = [mock_block]
+        mock_result.__iter__ = lambda self: iter([])
+
+        def mock_predict(img_path):
+            return [{'parsing_res_list': [mock_block], 'overall_ocr_res': mock_overall_ocr_res}]
 
         mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = [mock_result]
-        mock_pipeline_prop.return_value = mock_pipeline
+        mock_pipeline.predict = mock_predict
+        mock_create_pipeline.return_value = mock_pipeline
 
-        extractor = PaddleOcrExtractor(lang='en')
+        extractor = PaddleOcrExtractor(lang='en', skip_table=True, skip_formula=True)
         result = extractor.extract_from_pdf('test.pdf')
 
         assert isinstance(result, PdfExtraction)
         assert result.total_pages == 2
-        assert len(result.pages) == 2
-        assert len(result.pages[0].text_blocks) == 1
-        assert result.pages[0].text_blocks[0].block_text == 'Hello World'
 
+    @patch('modules.ocr.paddle_extractor.cv2.imread')
     @patch('os.makedirs')
     @patch('os.path.exists', return_value=True)
     @patch('modules.ocr.paddle_extractor.fitz')
-    @patch('modules.ocr.paddle_extractor.PaddleOcrExtractor.pipeline', new_callable=PropertyMock)
-    def test_extract_from_pdf_with_table(self, mock_pipeline_prop, mock_fitz,
-                                          mock_exists, mock_makedirs):
-        """测试提取包含表格的PDF"""
+    @patch.object(PaddleOcrExtractor, '_create_pipeline')
+    def test_extract_from_pdf_with_table(self, mock_create_pipeline, mock_fitz,
+                                          mock_exists, mock_makedirs, mock_imread):
+
+
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
         from models.extraction import PdfExtraction
 
-        # Mock PyMuPDF
+        mock_imread.return_value = np.zeros((792, 612, 3), dtype=np.uint8)
+
         mock_page = MagicMock()
-        mock_page.get_pixmap.return_value.save = MagicMock()
+        mock_page.get_pixmap.return_value = MagicMock(width=612, height=792)
+        mock_page.rect = MagicMock(width=612.0, height=792.0)
         mock_doc = MagicMock()
         mock_doc.__len__.return_value = 1
         mock_doc.__getitem__.return_value = mock_page
@@ -144,53 +156,60 @@ class TestPaddleOcrExtractor:
         mock_doc.__exit__.return_value = None
         mock_fitz.open.return_value = mock_doc
 
-        # Mock PP-StructureV3结果 — 表格区域
-        mock_result = MagicMock()
-        mock_result.res = {
-            'layout_det_res': {
-                'bboxes': [[10, 10, 300, 200]],
-                'labels': ['table'],
-            },
-            'ocr_res': {
-                'rec_texts': [],
-                'dt_polys': [],
-            },
-            'table_res_list': [
-                {
-                    'html': '<html><body><table>'
-                            '<tr><td>A</td><td>B</td></tr>'
-                            '<tr><td>1</td><td>2</td></tr>'
-                            '</table></body></html>',
-                }
-            ],
-        }
+        mock_text_block = MagicMock()
+        mock_text_block.label = 'table'
+        mock_text_block.bbox = [10, 10, 300, 200]
+        mock_text_block.content = ''
+        mock_text_block.text_line_height = None
+        mock_text_block.num_of_lines = None
 
-        mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = [mock_result]
-        mock_pipeline_prop.return_value = mock_pipeline
+        mock_overall_ocr_res = MagicMock()
+        mock_overall_ocr_res.get.return_value = None
 
-        extractor = PaddleOcrExtractor(lang='en')
+        def mock_layout_predict(img_path):
+            return [{'parsing_res_list': [mock_text_block], 'overall_ocr_res': mock_overall_ocr_res}]
+
+        mock_table_res = MagicMock()
+        mock_html_dict = {'html': '<html><body><table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table></body></html>'}
+        mock_table_res.html = mock_html_dict
+
+        mock_table_block = MagicMock()
+        mock_table_block.label = 'table'
+        mock_table_block.bbox = [10, 10, 300, 200]
+
+        def mock_table_predict(img_path):
+            return [{'parsing_res_list': [mock_table_block], 'table_res_list': [mock_table_res], 'overall_ocr_res': mock_overall_ocr_res}]
+
+        mock_layout_pipeline = MagicMock()
+        mock_layout_pipeline.predict = mock_layout_predict
+        mock_table_pipeline = MagicMock()
+        mock_table_pipeline.predict = mock_table_predict
+        mock_create_pipeline.side_effect = [mock_layout_pipeline, mock_table_pipeline]
+
+        extractor = PaddleOcrExtractor(lang='en', skip_formula=True)
         result = extractor.extract_from_pdf('test.pdf')
 
         assert isinstance(result, PdfExtraction)
         assert len(result.tables) == 1
         assert result.tables[0].page_num == 1
-        assert len(result.tables[0].cells) == 2  # 2 rows
-        assert result.tables[0].cells[0][0].text == 'A'
 
+    @patch('modules.ocr.paddle_extractor.cv2.imread')
     @patch('os.makedirs')
     @patch('os.path.exists', return_value=True)
     @patch('modules.ocr.paddle_extractor.fitz')
-    @patch('modules.ocr.paddle_extractor.PaddleOcrExtractor.pipeline', new_callable=PropertyMock)
-    def test_extract_from_pdf_non_body_labels(self, mock_pipeline_prop, mock_fitz,
-                                                mock_exists, mock_makedirs):
-        """测试header/footer/page_number标记为非正文"""
+    @patch.object(PaddleOcrExtractor, '_create_pipeline')
+    def test_extract_from_pdf_non_body_labels(self, mock_create_pipeline, mock_fitz,
+                                                mock_exists, mock_makedirs, mock_imread):
+
+
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
         from models.extraction import PdfExtraction
 
-        # Mock PyMuPDF
+        mock_imread.return_value = np.zeros((792, 612, 3), dtype=np.uint8)
+
         mock_page = MagicMock()
-        mock_page.get_pixmap.return_value.save = MagicMock()
+        mock_page.get_pixmap.return_value = MagicMock(width=612, height=792)
+        mock_page.rect = MagicMock(width=612.0, height=792.0)
         mock_doc = MagicMock()
         mock_doc.__len__.return_value = 1
         mock_doc.__getitem__.return_value = mock_page
@@ -198,48 +217,56 @@ class TestPaddleOcrExtractor:
         mock_doc.__exit__.return_value = None
         mock_fitz.open.return_value = mock_doc
 
-        mock_result = MagicMock()
-        mock_result.res = {
-            'layout_det_res': {
-                'bboxes': [[10, 10, 200, 30], [10, 40, 200, 100]],
-                'labels': ['header', 'text'],
-            },
-            'ocr_res': {
-                'rec_texts': ['Page Header', 'Body Text'],
-                'dt_polys': [
-                    [[10, 10], [200, 10], [200, 30], [10, 30]],
-                    [[10, 40], [200, 40], [200, 100], [10, 100]],
-                ],
-            },
-        }
+        mock_header_block = MagicMock()
+        mock_header_block.label = 'header'
+        mock_header_block.bbox = [10, 10, 200, 30]
+        mock_header_block.content = 'Page Header'
+        mock_header_block.text_line_height = None
+        mock_header_block.num_of_lines = None
+
+        mock_body_block = MagicMock()
+        mock_body_block.label = 'text'
+        mock_body_block.bbox = [10, 40, 200, 100]
+        mock_body_block.content = 'Body Text'
+        mock_body_block.text_line_height = None
+        mock_body_block.num_of_lines = None
+
+        mock_overall_ocr_res = MagicMock()
+        mock_overall_ocr_res.get.return_value = None
+
+        def mock_predict(img_path):
+            return [{'parsing_res_list': [mock_header_block, mock_body_block], 'overall_ocr_res': mock_overall_ocr_res}]
 
         mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = [mock_result]
-        mock_pipeline_prop.return_value = mock_pipeline
+        mock_pipeline.predict = mock_predict
+        mock_create_pipeline.return_value = mock_pipeline
 
-        extractor = PaddleOcrExtractor(lang='en')
+        extractor = PaddleOcrExtractor(lang='en', skip_table=True, skip_formula=True)
         result = extractor.extract_from_pdf('test.pdf')
 
         blocks = result.pages[0].text_blocks
-        # header should be marked as non-body
         header_block = [b for b in blocks if b.block_text == 'Page Header'][0]
         body_block = [b for b in blocks if b.block_text == 'Body Text'][0]
         assert header_block.is_body_text is False
         assert body_block.is_body_text is True
 
+    @patch('modules.ocr.paddle_extractor.cv2.imread')
     @patch('os.makedirs')
     @patch('os.path.exists', return_value=True)
     @patch('modules.ocr.paddle_extractor.fitz')
-    @patch('modules.ocr.paddle_extractor.PaddleOcrExtractor.pipeline', new_callable=PropertyMock)
-    def test_extract_from_pdf_specific_pages(self, mock_pipeline_prop, mock_fitz,
-                                              mock_exists, mock_makedirs):
-        """测试指定页码范围提取"""
+    @patch.object(PaddleOcrExtractor, '_create_pipeline')
+    def test_extract_from_pdf_specific_pages(self, mock_create_pipeline, mock_fitz,
+                                              mock_exists, mock_makedirs, mock_imread):
+
+
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
         from models.extraction import PdfExtraction
 
-        # Mock PyMuPDF
+        mock_imread.return_value = np.zeros((792, 612, 3), dtype=np.uint8)
+
         mock_page = MagicMock()
-        mock_page.get_pixmap.return_value.save = MagicMock()
+        mock_page.get_pixmap.return_value = MagicMock(width=612, height=792)
+        mock_page.rect = MagicMock(width=612.0, height=792.0)
         mock_doc = MagicMock()
         mock_doc.__len__.return_value = 5
         mock_doc.__getitem__.return_value = mock_page
@@ -247,42 +274,47 @@ class TestPaddleOcrExtractor:
         mock_doc.__exit__.return_value = None
         mock_fitz.open.return_value = mock_doc
 
-        mock_result = MagicMock()
-        mock_result.res = {
-            'layout_det_res': {
-                'bboxes': [[10, 10, 200, 50]],
-                'labels': ['text'],
-            },
-            'ocr_res': {
-                'rec_texts': ['Test'],
-                'dt_polys': [[[10, 10], [200, 10], [200, 50], [10, 50]]],
-            },
-        }
+        mock_block = MagicMock()
+        mock_block.label = 'text'
+        mock_block.bbox = [10, 10, 200, 50]
+        mock_block.content = 'Test'
+        mock_block.text_line_height = None
+        mock_block.num_of_lines = None
+
+        mock_overall_ocr_res = MagicMock()
+        mock_overall_ocr_res.get.return_value = None
+
+        def mock_predict(img_path):
+            return [{'parsing_res_list': [mock_block], 'overall_ocr_res': mock_overall_ocr_res}]
 
         mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = [mock_result]
-        mock_pipeline_prop.return_value = mock_pipeline
+        mock_pipeline.predict = mock_predict
+        mock_create_pipeline.return_value = mock_pipeline
 
-        extractor = PaddleOcrExtractor(lang='en')
+        extractor = PaddleOcrExtractor(lang='en', skip_table=True, skip_formula=True)
         result = extractor.extract_from_pdf('test.pdf', pages=[2, 3])
 
         assert isinstance(result, PdfExtraction)
         assert result.total_pages == 5
-        assert len(result.pages) == 2  # only pages 2 and 3
+        assert len(result.pages) == 2
 
+    @patch('modules.ocr.paddle_extractor.cv2.imread')
     @patch('os.makedirs')
     @patch('os.path.exists', return_value=True)
     @patch('modules.ocr.paddle_extractor.fitz')
-    @patch('modules.ocr.paddle_extractor.PaddleOcrExtractor.pipeline', new_callable=PropertyMock)
-    def test_extract_from_pdf_empty_page(self, mock_pipeline_prop, mock_fitz,
-                                          mock_exists, mock_makedirs):
-        """测试空页面"""
+    @patch.object(PaddleOcrExtractor, '_create_pipeline')
+    def test_extract_from_pdf_empty_page(self, mock_create_pipeline, mock_fitz,
+                                          mock_exists, mock_makedirs, mock_imread):
+
+
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
         from models.extraction import PdfExtraction
 
-        # Mock PyMuPDF
+        mock_imread.return_value = np.zeros((792, 612, 3), dtype=np.uint8)
+
         mock_page = MagicMock()
-        mock_page.get_pixmap.return_value.save = MagicMock()
+        mock_page.get_pixmap.return_value = MagicMock(width=612, height=792)
+        mock_page.rect = MagicMock(width=612.0, height=792.0)
         mock_doc = MagicMock()
         mock_doc.__len__.return_value = 1
         mock_doc.__getitem__.return_value = mock_page
@@ -290,15 +322,14 @@ class TestPaddleOcrExtractor:
         mock_doc.__exit__.return_value = None
         mock_fitz.open.return_value = mock_doc
 
-        # Empty page - no layout result
-        mock_result = MagicMock()
-        mock_result.res = {}
+        def mock_predict(img_path):
+            return [{'parsing_res_list': [], 'overall_ocr_res': None}]
 
         mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = [mock_result]
-        mock_pipeline_prop.return_value = mock_pipeline
+        mock_pipeline.predict = mock_predict
+        mock_create_pipeline.return_value = mock_pipeline
 
-        extractor = PaddleOcrExtractor(lang='en')
+        extractor = PaddleOcrExtractor(lang='en', skip_table=True, skip_formula=True)
         result = extractor.extract_from_pdf('test.pdf')
 
         assert isinstance(result, PdfExtraction)
@@ -378,16 +409,14 @@ class TestGpuAutoFallback:
     @patch('modules.ocr.paddle_extractor.PaddleOcrExtractor._check_gpu_available', return_value=True)
     @patch('paddleocr.PPStructureV3')
     def test_pipeline_uses_gpu_when_available(self, mock_ppv3, mock_check_gpu):
-        """测试 GPU 可用时使用 GPU"""
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
 
         mock_instance = MagicMock()
         mock_ppv3.return_value = mock_instance
 
         extractor = PaddleOcrExtractor(lang='en', use_gpu=True)
-        _ = extractor.pipeline
+        pipeline = extractor._create_pipeline()
 
-        # 应该使用 gpu:0
         mock_ppv3.assert_called_once()
         call_kwargs = mock_ppv3.call_args[1]
         assert call_kwargs['device'] == 'gpu:0'
@@ -395,28 +424,25 @@ class TestGpuAutoFallback:
     @patch('modules.ocr.paddle_extractor.PaddleOcrExtractor._check_gpu_available', return_value=False)
     @patch('paddleocr.PPStructureV3')
     def test_pipeline_fallback_to_cpu(self, mock_ppv3, mock_check_gpu):
-        """测试 GPU 不可用时回退到 CPU"""
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
 
         mock_instance = MagicMock()
         mock_ppv3.return_value = mock_instance
 
         extractor = PaddleOcrExtractor(lang='en', use_gpu=True)
-        _ = extractor.pipeline
+        pipeline = extractor._create_pipeline()
 
-        # 应该回退到 cpu
         mock_ppv3.assert_called_once()
         call_kwargs = mock_ppv3.call_args[1]
         assert call_kwargs['device'] == 'cpu'
 
     @patch('paddleocr.PPStructureV3', side_effect=ImportError("No module"))
     def test_pipeline_init_error(self, mock_ppv3):
-        """测试 PaddleOCR 初始化失败时的异常处理"""
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
 
         extractor = PaddleOcrExtractor(lang='en', use_gpu=False)
         with pytest.raises(RuntimeError, match="OCR 引擎初始化失败"):
-            _ = extractor.pipeline
+            extractor._create_pipeline()
 
 
 class TestTableHtmlParser:

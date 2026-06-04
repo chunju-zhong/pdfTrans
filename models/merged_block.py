@@ -21,6 +21,9 @@ class MergedBlock(CopyableMixin):
         self.max_width = max_width
         self.max_height = max_height
         
+        # 自动检测是否为公式块
+        self.is_formula = any(getattr(b, 'is_formula', False) for b in (original_blocks or []))
+        
         # 从第一个原始块中提取样式信息和页码
         if original_blocks:
             first_block = original_blocks[0]
@@ -53,6 +56,7 @@ class MergedBlock(CopyableMixin):
             'original_blocks': self.original_blocks,
             'max_width': self.max_width,
             'max_height': self.max_height,
+            'is_formula': self.is_formula,
             'font': self.font,
             'font_size': self.font_size,
             'color': self.color,

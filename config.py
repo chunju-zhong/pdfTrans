@@ -15,7 +15,7 @@ class Config:
     DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
     
     # 上传配置
-    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
+    MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
     OUTPUT_FOLDER = os.path.join(os.getcwd(), 'outputs')
     
@@ -26,6 +26,7 @@ class Config:
     AIPING_MODEL_LAYOUT = os.environ.get('AIPING_MODEL_LAYOUT') or 'Qwen3-32B'
     AIPING_MODEL_GLOSSARY = os.environ.get('AIPING_MODEL_GLOSSARY') or 'Qwen3-32B'
     AIPING_EXTRA_BODY = {
+        "enable_thinking": False,
         "provider": {
             "only": [],
             "order": [],
@@ -44,7 +45,8 @@ class Config:
     SILICON_FLOW_MODEL = os.environ.get('SILICON_FLOW_MODEL_TRANSLATION') or 'tencent/Hunyuan-MT-7B'
     SILICON_FLOW_MODEL_LAYOUT = os.environ.get('SILICON_FLOW_MODEL_LAYOUT') or 'Qwen/Qwen3-32B'
     SILICON_FLOW_MODEL_GLOSSARY = os.environ.get('SILICON_FLOW_MODEL_GLOSSARY') or 'Qwen/Qwen3-32B'
-    
+    SILICON_FLOW_EXTRA_BODY = {"enable_thinking": False}
+
     # 支持的语言列表
     SUPPORTED_LANGUAGES = {
         'zh': '中文',
@@ -91,6 +93,15 @@ class Config:
     OCR_SKIP_TABLE = os.environ.get('OCR_SKIP_TABLE', 'false').lower() == 'true'  # 跳过表格识别节省内存
     OCR_SKIP_FORMULA = os.environ.get('OCR_SKIP_FORMULA', 'false').lower() == 'true'  # 跳过公式识别节省内存
     OCR_RENDER_DPI = int(os.environ.get('OCR_RENDER_DPI', '120'))  # OCR渲染DPI: 120默认激进内存优化 | 150质量优先
+
+    # OCR 超时与重试配置
+    OCR_HEARTBEAT_TIMEOUT = int(os.environ.get('OCR_HEARTBEAT_TIMEOUT', '0'))  # 心跳超时(秒)，0=禁用，超过判定子进程死机
+    OCR_MAX_TOTAL_TIME = int(os.environ.get('OCR_MAX_TOTAL_TIME', '86400'))  # OCR最大总执行时间(秒)
+    OCR_STALL_TIMEOUT = int(os.environ.get('OCR_STALL_TIMEOUT', '1800'))  # OCR进度停滞超时(秒)
+    OCR_BATCH_SIZE = int(os.environ.get('OCR_BATCH_SIZE', '5'))  # OCR分批处理每批页数
+    OCR_MAX_RETRIES = int(os.environ.get('OCR_MAX_RETRIES', '2'))  # 子进程崩溃后最大重试次数
+    OCR_RETRY_BACKOFF = float(os.environ.get('OCR_RETRY_BACKOFF', '5.0'))  # 重试间隔(秒)，每次递增1.5倍
+    OCR_DYNAMIC_PARAMS = os.environ.get('OCR_DYNAMIC_PARAMS', 'true').lower() == 'true'  # 根据系统负载动态调整OCR参数
 
 # 创建配置实例
 config = Config()

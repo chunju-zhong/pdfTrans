@@ -6,5 +6,6 @@
 
 from modules.ocr.base import OcrExtractor
 from modules.ocr.factory import create_ocr_extractor
+from modules.ocr.ocr_worker import OcrRetryableError, OcrFatalError
 
-__all__ = ['OcrExtractor', 'create_ocr_extractor']
+__all__ = ['OcrExtractor', 'create_ocr_extractor', 'OcrRetryableError', 'OcrFatalError']

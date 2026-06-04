@@ -267,7 +267,7 @@ class GlossaryService:
             
             # 使用PdfExtractor提取文本，传递页码范围，禁用非正文文本块标记
             pdf_extractor = PdfExtractor(pdf_path)
-            extraction_result = pdf_extractor.extract(pages, mark_non_body=False, temp_images_dir=tmp_dir)
+            extraction_result, _ = pdf_extractor.extract(pages, mark_non_body=False, temp_images_dir=tmp_dir)
             
             # 收集所有文本，包括标题、正文等，以确保捕获所有可能的术语
             page_texts = {}
@@ -344,7 +344,7 @@ class GlossaryService:
             
             # 使用PdfExtractor提取指定页面的文本
             pdf_extractor = PdfExtractor(pdf_path)
-            extraction_result = pdf_extractor.extract([page_num])
+            extraction_result, _ = pdf_extractor.extract([page_num])
             
             # 收集页面文本
             page_text = ""

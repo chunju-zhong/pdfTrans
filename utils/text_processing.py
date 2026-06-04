@@ -1,5 +1,29 @@
 # 语义块合并逻辑
 
+import logging
+from models.merged_block import MergedBlock
+
+
+def _create_merged_block(text_block):
+    """Create a MergedBlock from a single TextBlock.
+
+    Args:
+        text_block: A TextBlock object.
+
+    Returns:
+        MergedBlock with width/height computed from the block's bbox.
+    """
+    bbox = text_block.block_bbox
+    width = bbox[2] - bbox[0] if len(bbox) >= 4 else 0
+    height = bbox[3] - bbox[1] if len(bbox) >= 4 else 0
+    return MergedBlock(
+        block_text=text_block.block_text,
+        original_blocks=[text_block],
+        max_width=width,
+        max_height=height,
+    )
+
+
 def _is_sentence_continuation(curr_text):
     """检查当前文本是否是前一个句子的延续
     
@@ -41,8 +65,7 @@ def merge_semantic_blocks(text_blocks):
             merged_blocks: 合并后的语义块列表（MergedBlock对象列表）
             block_mapping: 原始块与合并块的映射关系
     """
-    from models.merged_block import MergedBlock
-    
+
     merged_blocks = []
     block_mapping = []  # 记录原始块与合并块的映射关系
 
@@ -51,40 +74,55 @@ def merge_semantic_blocks(text_blocks):
 
     # 获取第一个块的TextBlock对象和文本
     first_block = text_blocks[0]
-    first_text_block = first_block
-    first_bbox = first_text_block.block_bbox
-    first_width = first_bbox[2] - first_bbox[0]  # x1 - x0
-    first_height = first_bbox[3] - first_bbox[1]  # y1 - y0
 
-    # 记录第一个块的信息
-    import logging
     logger = logging.getLogger(__name__)
-    logger.info(f"创建合并块，第一个原始块字体大小: {first_text_block.font_size}, 文本: '{first_text_block.block_text[:50]}...'")
+    logger.info(f"创建合并块，第一个原始块字体大小: {getattr(first_block, 'font_size', 'N/A')}, 文本: '{first_block.block_text[:50]}...'")
 
-    # 初始化当前合并块
-    current_merged = MergedBlock(
-        block_text=first_text_block.block_text,
-        original_blocks=[first_block],  # 保留完整的块信息
-        max_width=first_width,  # 初始化为第一个块的宽度
-        max_height=first_height  # 初始化为第一个块的高度
-    )
-    # 记录当前合并块的章节信息
-    current_chapter_id = getattr(first_text_block, 'chapter_id', None)
+    first_is_formula = getattr(first_block, 'is_formula', False)
+    if first_is_formula:
+        merged_blocks.append(_create_merged_block(first_block))
+        block_mapping.append([first_block])
+        if len(text_blocks) > 1:
+            second_block = text_blocks[1]
+            current_merged = _create_merged_block(second_block)
+            current_chapter_id = getattr(second_block, 'chapter_id', None)
+            start_i = 2
+        else:
+            current_merged = None
+            start_i = 1
+    else:
+        current_merged = _create_merged_block(first_block)
+        current_chapter_id = getattr(first_block, 'chapter_id', None)
+        start_i = 1
     
-    for i in range(1, len(text_blocks)):
-        # 通过索引i-1直接判断上一块（已按垂直位置排序）
-        prev_block_info = text_blocks[i-1]  # 上一块信息
-        curr_block_info = text_blocks[i]    # 当前块信息
-        curr_text_block = curr_block_info
-        prev_text_block = prev_block_info
+    i = start_i
+    while i < len(text_blocks):
+        curr_block = text_blocks[i]
+        prev_block = text_blocks[i-1]
+
+        curr_is_formula = getattr(curr_block, 'is_formula', False)
+        if curr_is_formula:
+            merged_blocks.append(current_merged)
+            block_mapping.append(current_merged.original_blocks)
+            formula_merged = _create_merged_block(curr_block)
+            merged_blocks.append(formula_merged)
+            block_mapping.append(formula_merged.original_blocks)
+            if i + 1 < len(text_blocks):
+                next_block = text_blocks[i + 1]
+                current_merged = _create_merged_block(next_block)
+                current_chapter_id = getattr(next_block, 'chapter_id', None)
+                i += 2
+            else:
+                current_merged = None
+                i += 1
+            continue
         
         # 获取当前块的章节信息
-        curr_chapter_id = getattr(curr_text_block, 'chapter_id', None)
-        curr_chapter_title = getattr(curr_text_block, 'chapter_title', None)
+        curr_chapter_id = getattr(curr_block, 'chapter_id', None)
         
         # 位置相邻检查（垂直距离小于阈值）
-        prev_bbox = prev_text_block.block_bbox
-        curr_bbox = curr_text_block.block_bbox
+        prev_bbox = prev_block.block_bbox
+        curr_bbox = curr_block.block_bbox
         vertical_distance = curr_bbox[1] - prev_bbox[3]  # y0 - previous y1
         is_vertically_adjacent = vertical_distance < 10  # 阈值设为10
         
@@ -93,13 +131,13 @@ def merge_semantic_blocks(text_blocks):
         prev_ends_with_sentence = prev_merged_text.strip().endswith(('.', '!', '?', '。', '！', '？'))
         
         # 检查当前块是否延续前一个句子
-        is_continuation = _is_sentence_continuation(curr_text_block.block_text)
+        is_continuation = _is_sentence_continuation(curr_block.block_text)
         
         # 检查是否是不同章节
         is_different_chapter = curr_chapter_id != current_chapter_id
         
         # 检查当前块是否为章节标题
-        is_chapter_title = getattr(curr_text_block, 'is_title_block', False)
+        is_chapter_title = getattr(curr_block, 'is_title_block', False)
         
         # 检查当前合并块是否为章节标题
         current_is_title = False
@@ -123,7 +161,7 @@ def merge_semantic_blocks(text_blocks):
                 # 两个正文块合并需要满足：垂直相邻
                 if is_vertically_adjacent:
                     # 检查当前块是否延续前一个句子
-                    is_continuation = _is_sentence_continuation(curr_text_block.block_text)
+                    is_continuation = _is_sentence_continuation(curr_block.block_text)
                     # 合并条件：
                     # 1. 有章节信息，或者
                     # 2. 前一块不是完整句子结束，或者
@@ -144,22 +182,15 @@ def merge_semantic_blocks(text_blocks):
             # 保存当前合并块
             merged_blocks.append(current_merged)
             block_mapping.append(current_merged.original_blocks)
-            
+
             # 开始新的合并块
-            curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
-            curr_height = curr_bbox[3] - curr_bbox[1]  # y1 - y0
-            current_merged = MergedBlock(
-                block_text=curr_text_block.block_text,
-                original_blocks=[curr_block_info],
-                max_width=curr_width,
-                max_height=curr_height
-            )
+            current_merged = _create_merged_block(curr_block)
             # 更新当前合并块的章节信息
             current_chapter_id = curr_chapter_id
         else:
             # 合并块，处理空格
             prev_text = current_merged.block_text
-            curr_text = curr_text_block.block_text
+            curr_text = curr_block.block_text
             
             # 检查前一个块是否以空格结尾，当前块是否以空格开头
             if prev_text.endswith(' ') and curr_text.startswith(' '):
@@ -172,7 +203,7 @@ def merge_semantic_blocks(text_blocks):
                 # 直接拼接
                 current_merged.block_text = prev_text + curr_text
             
-            current_merged.original_blocks.append(curr_block_info)
+            current_merged.original_blocks.append(curr_block)
             
             # 计算当前块的宽度和高度
             curr_width = curr_bbox[2] - curr_bbox[0]  # x1 - x0
@@ -180,8 +211,9 @@ def merge_semantic_blocks(text_blocks):
             
             # 更新最大宽度和高度
             current_merged.max_width = max(current_merged.max_width, curr_width)
-            current_merged.max_height = max(current_merged.max_height, curr_height)
-    
+            current_merged.max_height = curr_bbox[3] - first_bbox[1]
+
+        i += 1
     # 添加最后一个合并块（如果存在）
     if current_merged is not None:
         merged_blocks.append(current_merged)
@@ -317,7 +349,6 @@ def adjust_split_position(text, split_pos):
     # 5. 再次检查并确保拆分位置前的字符不是左成对字符
     # 如果向后调整不行，尝试向前调整
     if split_pos > 1 and is_left_pair_character(text[split_pos-1]):
-        original_split_pos = split_pos
         adjustment_count = 0
         while split_pos > 1 and is_left_pair_character(text[split_pos-1]):
             split_pos -= 1
@@ -372,9 +403,8 @@ def split_translated_result(merged_translation, original_blocks):
     Returns:
         list: 拆分后的翻译结果，与原始块一一对应
     """
-    import logging
     logger = logging.getLogger(__name__)
-    
+
     # 记录函数调用和参数信息
     logger.info(f"开始拆分翻译结果: 合并翻译长度={len(merged_translation)}, 原始块数量={len(original_blocks)}")
     logger.debug(f"合并翻译内容: '{merged_translation[:200]}...' (完整长度={len(merged_translation)})")
@@ -499,7 +529,11 @@ def split_translated_result(merged_translation, original_blocks):
 
         # 如果已经到达文本末尾，跳出循环
         if start_pos >= translation_len:
-            logger.info(f"已到达文本末尾，跳出循环，处理了 {i+1} 个块")
+            remaining_count = num_blocks - i - 1
+            logger.warning(
+                f"翻译文本在处理 {i+1} 个块后耗尽，剩余 {remaining_count} 个块为空，"
+                f"翻译文本长度={translation_len}"
+            )
             break
 
     # 处理可能的空块情况
@@ -628,7 +662,13 @@ def split_translated_result(merged_translation, original_blocks):
     # 记录每个块的内容摘要
     for i, block in enumerate(translated_blocks):
         logger.info(f"块 {i+1}: 长度={len(block)}, 内容='{block[:100]}...'")
-    
+
+    empty_block_indices = [i for i, block in enumerate(translated_blocks) if not block.strip()]
+    if empty_block_indices:
+        logger.warning(
+            f"拆分完成后仍有 {len(empty_block_indices)} 个空块，块编号: {[i+1 for i in empty_block_indices]}"
+        )
+
     return translated_blocks
 
 
@@ -646,10 +686,6 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
             merged_blocks: 合并后的语义块列表（MergedBlock对象列表）
             block_mapping: 原始块与合并块的映射关系
     """
-    from models.merged_block import MergedBlock
-    import logging
-    import re
-
     logger = logging.getLogger(__name__)
     merged_blocks = []
     block_mapping = []
@@ -667,27 +703,50 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
 
     # 初始化当前合并块
     first_block = text_blocks[0]
-    first_bbox = first_block.block_bbox
-    first_width = first_bbox[2] - first_bbox[0] if len(first_bbox) >= 4 else 0
-    first_height = first_bbox[3] - first_bbox[1] if len(first_bbox) >= 4 else 0
 
-    current_merged = MergedBlock(
-        block_text=first_block.block_text,
-        original_blocks=[first_block],
-        max_width=first_width,
-        max_height=first_height
-    )
-    # 记录当前合并块的章节信息
-    current_chapter_id = getattr(first_block, 'chapter_id', None)
-    logger.info(f"初始化第一个合并块: 文本='{current_merged.block_text[:100]}...' (包含 {len(current_merged.original_blocks)} 个原始块), 章节ID={current_chapter_id}")
+    first_is_formula = getattr(first_block, 'is_formula', False)
+    if first_is_formula:
+        merged_blocks.append(_create_merged_block(first_block))
+        block_mapping.append([first_block])
+        if len(text_blocks) > 1:
+            second_block = text_blocks[1]
+            current_merged = _create_merged_block(second_block)
+            current_chapter_id = getattr(second_block, 'chapter_id', None)
+            start_i = 2
+        else:
+            current_merged = None
+            start_i = 1
+    else:
+        current_merged = _create_merged_block(first_block)
+        current_chapter_id = getattr(first_block, 'chapter_id', None)
+        start_i = 1
 
-    # 批量处理参数
-    batch_size = 10  # 每批处理10对文本块
-    i = 1  # 当前处理的块索引
+    logger.info(f"初始化第一个合并块: 文本='{current_merged.block_text[:100] if current_merged else ''}...' (包含 {len(current_merged.original_blocks) if current_merged else 0} 个原始块), 章节ID={current_chapter_id}")
+
+    batch_size = 10
+    i = start_i
     total_blocks = len(text_blocks)
     logger.info(f"总原始块数量: {total_blocks}, 批量处理大小: {batch_size}")
 
     while i < total_blocks:
+        curr_block = text_blocks[i]
+
+        curr_is_formula = getattr(curr_block, 'is_formula', False)
+        if curr_is_formula:
+            merged_blocks.append(current_merged)
+            block_mapping.append(current_merged.original_blocks)
+            formula_merged = _create_merged_block(curr_block)
+            merged_blocks.append(formula_merged)
+            block_mapping.append(formula_merged.original_blocks)
+            if i + 1 < total_blocks:
+                next_block = text_blocks[i + 1]
+                current_merged = _create_merged_block(next_block)
+                current_chapter_id = getattr(next_block, 'chapter_id', None)
+            else:
+                current_merged = None
+            i += 1
+            continue
+
         # 准备当前批次的文本对
         text_pairs = []
         batch_blocks = []
@@ -743,7 +802,6 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
                 for j, (should_merge, curr_block) in enumerate(zip(merge_results, batch_blocks)):
                     # 获取当前块的章节信息
                     curr_chapter_id = getattr(curr_block, 'chapter_id', None)
-                    curr_chapter_title = getattr(curr_block, 'chapter_title', None)
                     # 检查是否是不同章节
                     is_different_chapter = curr_chapter_id != current_chapter_id
                     
@@ -789,16 +847,7 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
                         logger.info(f"保存当前合并块: 文本='{current_merged.block_text[:100]}...', 包含 {len(current_merged.original_blocks)} 个原始块")
 
                         # 开始新的合并块
-                        curr_bbox = curr_block.block_bbox
-                        curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
-                        curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
-
-                        current_merged = MergedBlock(
-                            block_text=curr_block.block_text,
-                            original_blocks=[curr_block],
-                            max_width=curr_width,
-                            max_height=curr_height
-                        )
+                        current_merged = _create_merged_block(curr_block)
                         # 更新当前合并块的章节信息
                         current_chapter_id = curr_chapter_id
                         
@@ -871,7 +920,6 @@ def parallel_batch_analyze(semantic_analyzer, text_pairs, source_lang, max_worke
     Returns:
         list: 布尔值列表，表示每个文本块对是否应该合并（顺序与text_pairs一致）
     """
-    import logging
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     logger = logging.getLogger(__name__)
@@ -942,8 +990,6 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
             merged_blocks: 合并后的语义块列表（MergedBlock对象列表）
             block_mapping: 原始块与合并块的映射关系
     """
-    from models.merged_block import MergedBlock
-    import logging
     import time
 
     logger = logging.getLogger(__name__)
@@ -974,26 +1020,47 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
     logger.info(f"阶段1完成：获取了 {len(merge_decisions)} 个合并判断，耗时 {time.time() - start_time:.2f}秒")
 
     first_block = text_blocks[0]
-    first_bbox = first_block.block_bbox
-    first_width = first_bbox[2] - first_bbox[0] if len(first_bbox) >= 4 else 0
-    first_height = first_bbox[3] - first_bbox[1] if len(first_bbox) >= 4 else 0
 
-    current_merged = MergedBlock(
-        block_text=first_block.block_text,
-        original_blocks=[first_block],
-        max_width=first_width,
-        max_height=first_height
-    )
-    current_chapter_id = getattr(first_block, 'chapter_id', None)
+    first_is_formula = getattr(first_block, 'is_formula', False)
+    if first_is_formula:
+        merged_blocks.append(_create_merged_block(first_block))
+        block_mapping.append([first_block])
+        if len(text_blocks) > 1:
+            second_block = text_blocks[1]
+            current_merged = _create_merged_block(second_block)
+            current_chapter_id = getattr(second_block, 'chapter_id', None)
+            two_phase_start_i = 2
+        else:
+            current_merged = None
+            two_phase_start_i = 1
+    else:
+        current_merged = _create_merged_block(first_block)
+        current_chapter_id = getattr(first_block, 'chapter_id', None)
+        two_phase_start_i = 1
 
     logger.info(f"初始化第一个合并块: 包含原始块0, 章节ID={current_chapter_id}")
 
-    for i in range(1, len(text_blocks)):
+    for i in range(two_phase_start_i, len(text_blocks)):
         curr_block = text_blocks[i]
+
+        curr_is_formula = getattr(curr_block, 'is_formula', False)
+        if curr_is_formula:
+            merged_blocks.append(current_merged)
+            block_mapping.append(current_merged.original_blocks)
+            formula_merged = _create_merged_block(curr_block)
+            merged_blocks.append(formula_merged)
+            block_mapping.append(formula_merged.original_blocks)
+            if i + 1 < len(text_blocks):
+                next_block = text_blocks[i + 1]
+                current_merged = _create_merged_block(next_block)
+                current_chapter_id = getattr(next_block, 'chapter_id', None)
+            else:
+                current_merged = None
+            continue
+
         should_merge = merge_decisions[i-1]
 
         curr_chapter_id = getattr(curr_block, 'chapter_id', None)
-        curr_chapter_title = getattr(curr_block, 'chapter_title', None)
 
         is_different_chapter = curr_chapter_id != current_chapter_id
 
@@ -1023,16 +1090,7 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
             block_mapping.append(current_merged.original_blocks)
             logger.debug(f"保存合并块 {len(merged_blocks)}: 文本长度={len(current_merged.block_text)}, 包含 {len(current_merged.original_blocks)} 个原始块")
 
-            curr_bbox = curr_block.block_bbox
-            curr_width = curr_bbox[2] - curr_bbox[0] if len(curr_bbox) >= 4 else 0
-            curr_height = curr_bbox[3] - curr_bbox[1] if len(curr_bbox) >= 4 else 0
-
-            current_merged = MergedBlock(
-                block_text=curr_block.block_text,
-                original_blocks=[curr_block],
-                max_width=curr_width,
-                max_height=curr_height
-            )
+            current_merged = _create_merged_block(curr_block)
             current_chapter_id = curr_chapter_id
         else:
             if current_merged.block_text.endswith(' ') and curr_block.block_text.startswith(' '):

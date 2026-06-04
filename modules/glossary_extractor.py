@@ -291,7 +291,8 @@ autonomous problem-solving: 自主问题解决
                 model=self.model,
                 messages=messages,
                 temperature=0.3,
-                timeout=30
+                timeout=30,
+                extra_body=config.SILICON_FLOW_EXTRA_BODY
             )
             
             # 处理响应

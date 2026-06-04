@@ -90,6 +90,13 @@ class MarkdownGenerator:
 5.  **【!!!】保留图像元素**：
     * **绝对不要**删除或修改任何图像URL元素，保持所有图像URL的完整性。
     * 图像URL格式为 `![image](path/to/image.png)`，请确保完全保留这些元素。
+6.  **【!!!】保留数学公式**：
+    * **绝对不要**修改、删除或转义任何 `$...$`（行内公式）和 `$$...$$`（独立行公式）标记。
+    * 公式内容（LaTeX 表达式）必须原样保留，不添加空格、换行、加粗、斜体或任何解释。
+    * ✅ **正确示例**：这是 $E=mc^2$ 公式，独立公式为 $$\frac{a}{b}$$
+    * ❌ **错误示例**：这是 E=mc^2 公式（丢失 $ 标记）
+    * ❌ **错误示例**：这是 \$E=mc^2\$ 公式（转义 $ 标记）
+    * ❌ **错误示例**：这是 **$E=mc^2$** 公式（对公式加粗）
         """
     
     def _format_with_layout_model(self, text):
@@ -103,11 +110,31 @@ class MarkdownGenerator:
         """
         logger.info("使用布局模型格式化文本为Markdown")
         
+        # 1. 提取并替换公式占位符，保护公式内容不被LLM修改
+        import re
+        formula_placeholders = {}
+        placeholder_idx = 0
+        
+        def replace_formula(m):
+            nonlocal placeholder_idx
+            key = f'__FORMULA_{placeholder_idx}__'
+            formula_placeholders[key] = m.group(0)
+            placeholder_idx += 1
+            return key
+        
+        # 先替换独立行公式 $$...$$，再替换行内公式 $...$
+        # 使用非贪婪匹配 + DOTALL 以支持多行公式
+        text_for_llm = re.sub(r'\$\$(.+?)\$\$', replace_formula, text, flags=re.DOTALL)
+        text_for_llm = re.sub(r'(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)', replace_formula, text_for_llm)
+        
+        if formula_placeholders:
+            logger.info(f"检测到 {len(formula_placeholders)} 个公式，已替换为占位符保护")
+        
         # 加载布局提示词模板
         system_prompt = self._load_layout_prompt()
         
-        # 构建用户提示词
-        user_prompt = f"请将以下内容转换为Markdown格式：\n\n{text}"
+        # 构建用户提示词（使用含占位符的文本）
+        user_prompt = f"请将以下内容转换为Markdown格式：\n\n{text_for_llm}"
         
         max_retries = 3  # 最大重试次数
         retry_delay = 2  # 重试间隔（秒）
@@ -123,6 +150,11 @@ class MarkdownGenerator:
                 
                 if not formatted_text:
                     raise Exception("布局模型返回空响应")
+                
+                # 4. 恢复公式占位符为原始公式内容
+                for placeholder, original_formula in formula_placeholders.items():
+                    formatted_text = formatted_text.replace(placeholder, original_formula)
+                markdown_result.content = formatted_text
                 
                 logger.info("布局模型格式化完成")
                 return markdown_result
@@ -151,12 +183,14 @@ class MarkdownGenerator:
             MarkdownResult: 包含格式化后的文本和截断信息的结果对象
         """
         # 调用布局模型API（使用流式）
+        from config import config
         stream = self.client.chat.completions.create(
             model=self.model,
             stream=True,  # 启用流式响应
             temperature=0.1,  # 降低温度，提高格式一致性
             max_tokens=self.max_tokens,  # 使用类属性作为最大token数
             timeout=60.0,  # 增加超时时间
+            extra_body=config.SILICON_FLOW_EXTRA_BODY,
             messages=[
                 {
                     "role": "system",
@@ -252,25 +286,31 @@ class MarkdownGenerator:
         # 构建Markdown表格
         markdown_table = []
         
-        # 添加表头行
-        header_row = cells[0]
-        row_cells = []
-        for cell in header_row:
-            cell_text = cell.text if hasattr(cell, 'text') else str(cell)
-            row_cells.append(cell_text)
-        markdown_table.append("|" + "|".join(row_cells) + "| ")
-        
-        # 添加表头分隔线
+        def _is_header_row(row):
+            for cell in row:
+                text = cell.text.strip() if hasattr(cell, 'text') else str(cell).strip()
+                if text and not text.replace('.', '').replace('-', '').replace(',', '').isdigit():
+                    return True
+            return False
+
+        first_row = cells[0]
+        if _is_header_row(first_row):
+            header_texts = [cell.text if hasattr(cell, 'text') else str(cell) for cell in first_row]
+            markdown_table.append("|" + "|".join(header_texts) + "| ")
+            data_rows = cells[1:]
+        else:
+            markdown_table.append("|" + "|".join([""] * num_cols) + "| ")
+            data_rows = cells
+
         header_separator = ["---"] * num_cols
         markdown_table.append(" |" + "|".join(header_separator) + "| ")
-        
-        # 添加表格内容（跳过表头行）
-        for i, row in enumerate(cells[1:]):
+
+        for i, row in enumerate(data_rows):
             row_cells = []
             for cell in row:
                 cell_text = cell.text if hasattr(cell, 'text') else str(cell)
                 row_cells.append(cell_text)
-            if i == len(cells[1:]) - 1:
+            if i == len(data_rows) - 1:
                 # 最后一行 - 无尾部空格
                 markdown_table.append(" |" + "|".join(row_cells) + "|")
             else:
@@ -547,10 +587,19 @@ class MarkdownGenerator:
                 
                 # 如果没有在块内部插入，则正常添加文本块
                 if block_idx not in processed_blocks:
-                    # 添加文本块
-                    logger.info(f"  添加文本块 {block_idx+1}: 内容='{block.block_text[:50]}...'")
+                    text = block.block_text
+                    if getattr(block, 'is_formula', False):
+                        # 优先使用 max_width (MergedBlock)，其次从 block_bbox 计算
+                        block_width = getattr(block, 'max_width', 0) or 0
+                        if not block_width:
+                            bbox = getattr(block, 'block_bbox', None)
+                            if bbox:
+                                block_width = bbox[2] - bbox[0]
+                        is_display = block_width >= 612.0 * 0.6
+                        text = f'$${text}$$' if is_display else f'${text}$'
+                    logger.info(f"  添加文本块 {block_idx+1}: 内容='{text[:50]}...'")
 
-                    full_text.append(block.block_text)
+                    full_text.append(text)
                     full_text.append("")
                     processed_blocks.add(block_idx)
                     logger.info(f"  文本块 {block_idx+1} 处理完成")
@@ -620,6 +669,16 @@ class MarkdownGenerator:
         logger.info(f"拆分合并块，插入点: {insertion_point:.2f}, 合并块内容: '{merged_block.block_text[:50]}...'")
         
         text = merged_block.block_text
+        if getattr(merged_block, 'is_formula', False):
+            # 优先使用 max_width (MergedBlock)，其次从 block_bbox 计算
+            block_width = getattr(merged_block, 'max_width', 0) or 0
+            if not block_width:
+                bbox = getattr(merged_block, 'block_bbox', None)
+                if bbox:
+                    block_width = bbox[2] - bbox[0]
+            page_width = 612.0
+            is_display = block_width >= page_width * 0.6
+            text = f'$${text}$$' if is_display else f'${text}$'
         text_length = len(text)
         
         # 计算插入位置

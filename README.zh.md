@@ -11,6 +11,7 @@ PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持We
 ### 核心功能
 
 - **PDF文本提取**：支持提取普通文本和表格内容，保留位置信息
+- **OCR支持**：通过 PaddleOCR（PP-StructureV3）支持扫描版PDF文档，包括版面分析、文字识别、公式识别和表格提取
 - **多翻译API支持**：
   - aiping 模型调用API
   - 硅基流动 模型调用API
@@ -39,6 +40,9 @@ PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持We
   - PyMuPDF (fitz) 1.23+：用于PDF文本提取和生成
   - camelot-py\[cv]：用于表格提取
   - opencv-python：camelot-py\[cv]的依赖
+- **OCR引擎**：
+  - PaddleOCR 3.0+（PP-StructureV3）：用于扫描版PDF文字提取、版面分析、公式识别
+  - PaddlePaddle 3.0+：深度学习框架（CPU/GPU自动检测）
 - **文档处理**：
   - python-docx：用于Word文档生成
 - **翻译API**：aiping翻译API、硅基流动翻译API
@@ -78,6 +82,26 @@ cp .env.example .env
 pip install -r requirements.txt
 ```
 
+### 5. 安装 PaddlePaddle（OCR支持）
+
+PaddlePaddle 的 CPU 和 GPU 版本互斥，不能同时安装。使用自动检测脚本：
+
+```bash
+bash install_paddle.sh
+```
+
+或手动安装：
+
+```bash
+# CPU版本（默认，适用于所有平台）
+pip install paddlepaddle>=3.0.0
+
+# GPU版本（需要 NVIDIA GPU + CUDA 11.8+）
+pip install paddlepaddle-gpu>=3.0.0
+```
+
+> **注意**：OCR功能需要安装 PaddlePaddle。如未安装，仅支持非扫描版PDF文档。
+
 ## 使用方法
 
 ### 启动Web服务
@@ -97,6 +121,10 @@ python app.py
   - 可以混合使用（如：1-3,5,7-9）
 - 选择翻译服务和目标语言
 - 选择输出格式（PDF、Word、Markdown或任意组合）
+- 启用OCR模式（可选，用于扫描版PDF）
+  - 勾选"启用OCR"可从扫描版/图片型PDF中提取文字
+  - 选择OCR引擎（当前仅支持PaddleOCR）
+  - 系统自动检测GPU，可用时使用GPU加速
 - 点击"翻译"按钮
 - 等待翻译完成，下载翻译后的PDF和/或Word文件
 
@@ -140,6 +168,12 @@ pdftrans translate document.pdf --semantic-merge -o output.pdf
 # 启用语合并及LLM语义判断
 pdftrans translate document.pdf -m -l -f docs -o output.pdf
 
+# 启用OCR模式翻译扫描版PDF
+pdftrans translate document.pdf --ocr -o output.pdf
+
+# 指定OCR引擎和识别语言
+pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o output.pdf
+
 # 翻译时使用术语表
 pdftrans translate document.pdf -g glossary.txt -o output.pdf
 
@@ -178,6 +212,9 @@ AIPING_API_KEY=your_aiping_api_key
 
 # 硅基流动 API 配置
 SILICON_FLOW_API_KEY=your_silicon_flow_api_key
+
+# OCR GPU加速（可选，默认：自动检测）
+OCR_USE_GPU=true
 ```
 
 只需配置其中一种翻译服务的API密钥即可使用工具。工具默认使用 aiping 大模型服务。
@@ -202,6 +239,9 @@ SILICON_FLOW_API_KEY=your_silicon_flow_api_key
 - `-m, --semantic-merge` - 启用语义合并
 - `-l, --llm-merge` - 使用LLM语义判断
 - `-c, --chapter-split` - 按章节拆分输出（仅Markdown格式）
+- `--ocr` - 启用OCR模式（用于扫描版PDF）
+- `--ocr-engine` - OCR引擎类型（默认：paddleocr）
+- `--ocr-lang` - OCR识别语言（默认：根据源语言自动选择）
 
 ## 许可证
 
@@ -221,7 +261,7 @@ AGPL-3.0
 
 ## 注意事项
 
-1. 本工具仅支持非扫描版PDF文档，不支持OCR功能
+1. 扫描版PDF通过OCR模式支持（需安装PaddlePaddle）。非扫描版PDF无需OCR即可使用
 2. 翻译质量取决于所选翻译API的质量
 3. 处理大型PDF文档可能需要较长时间，可使用指定翻译页功能分次翻译
 4. 请确保正确配置API密钥，否则翻译功能将无法使用

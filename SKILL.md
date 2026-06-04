@@ -90,7 +90,32 @@ pdftrans translate document.pdf -m -l
 
 # 按章节拆分输出Markdown
 pdftrans translate document.pdf -f markdown -c
+
+# 启用OCR模式翻译扫描版PDF
+pdftrans translate document.pdf --ocr -o output.pdf
+
+# 指定OCR引擎和识别语言
+pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o output.pdf
 ```
+
+### OCR模式说明
+
+OCR模式用于处理扫描版PDF或图片型PDF，通过OCR技术提取文本内容后翻译。
+
+**OCR参数：**
+- `--ocr` - 启用OCR模式（用于扫描版PDF）
+- `--ocr-engine` - OCR引擎类型（默认：paddleocr）
+- `--ocr-lang` - OCR识别语言（默认：根据源语言自动选择）
+
+**OCR支持的功能：**
+- 文本识别：提取扫描文档中的文字
+- 公式识别：识别数学公式并转换为LaTeX格式
+- 表格识别：识别表格结构并保留格式
+
+**注意事项：**
+- OCR模式会增加处理时间
+- 公式和表格识别需要额外内存
+- OCR识别质量取决于原始文档的清晰度
 
 ### 提取术语表使用示例
 

@@ -8,9 +8,14 @@ python-dotenv
 openai
 pytest
 python-docx
+matplotlib
+latex2mathml
 
 # OCR支持（PaddleOCR 3.x 需要安装完整依赖）
 psutil
 paddleocr[all]>=3.0.0    # PaddleOCR完整依赖（包含PP-StructureV3）
-paddlepaddle>=3.0.0      # CPU版本（与GPU版本二选一）
-#paddlepaddle-gpu>=3.0.0  # GPU版本（与CPU版本二选一）
+# PaddlePaddle 不能同时安装 CPU 和 GPU 版本，请使用安装脚本自动选择：
+#   bash install_paddle.sh
+# 或手动安装：
+#   pip install paddlepaddle>=3.0.0        # CPU版本
+#   pip install paddlepaddle-gpu>=3.0.0    # GPU版本（需要NVIDIA GPU + CUDA）

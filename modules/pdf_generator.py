@@ -150,6 +150,23 @@ class PdfGenerator:
             logger.error(f"生成PDF时出错: {str(e)}", exc_info=True)
             raise Exception(f"生成PDF时出错: {str(e)}")
     
+    def _render_formula_image(self, latex, fontsize=12):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import io
+        fig, ax = plt.subplots(figsize=(0.01, 0.01))
+        ax.axis('off')
+        text = ax.text(0, 0, f'${latex}$', fontsize=fontsize, ha='left', va='bottom')
+        fig.canvas.draw()
+        bbox = text.get_window_extent()
+        fig.set_size_inches(bbox.width / fig.dpi + 0.1, bbox.height / fig.dpi + 0.05)
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', pad_inches=0.02, transparent=True)
+        plt.close(fig)
+        buf.seek(0)
+        return buf
+
     def _draw_translated_text(self, page, translated_blocks, target_lang="zh"):
         """在页面上绘制翻译后的文本，使用块级关联实现样式保留
         
@@ -221,10 +238,24 @@ class PdfGenerator:
             # 创建文本框
             rect = fitz.Rect(block_bbox[0], block_bbox[1], block_bbox[2], block_bbox[3])
             logger.debug(f"文本框尺寸: {rect.width}x{rect.height}")
-            
-            # 绘制背景色覆盖原文
-            page.draw_rect(rect, color=(1, 1, 1), fill=True, width=0)
-            logger.debug(f"绘制背景色覆盖原文，区域: {rect}")
+
+            bg_padding = max(3, min(original_font_size * 0.4, 8))
+            bg_rect = fitz.Rect(
+                max(rect.x0 - bg_padding, 0),
+                max(rect.y0 - bg_padding, 0),
+                min(rect.x1 + bg_padding, page.rect.width),
+                min(rect.y1 + bg_padding, page.rect.height)
+            )
+            page.draw_rect(bg_rect, color=(1, 1, 1), fill=True, width=0)
+            logger.debug(f"绘制背景色覆盖原文，区域: {bg_rect} (padding={bg_padding:.1f})")
+
+            if getattr(full_block, 'is_formula', False) and full_block.block_text:
+                try:
+                    img_buf = self._render_formula_image(full_block.block_text, fontsize=original_font_size)
+                    page.insert_image(rect, stream=img_buf.getvalue())
+                    continue
+                except Exception as e:
+                    logger.warning(f'公式渲染失败，降级为文本: {e}')
             
             # 使用默认左对齐
             alignment = 0
@@ -287,7 +318,63 @@ class PdfGenerator:
                     break
             
             if not success:
-                logger.warning(f"所有尝试失败，跳过文本块绘制: '{translated_text[:50]}...'")
+                min_font_size = original_font_size * 0.5
+                for font_ratio in [0.6, 0.5]:
+                    adjusted_font_size = original_font_size * font_ratio
+                    try:
+                        result = page.insert_textbox(
+                            current_rect,
+                            translated_text,
+                            fontname=suitable_font,
+                            fontsize=adjusted_font_size,
+                            color=rgb_color,
+                            align=alignment
+                        )
+                        if result >= 0:
+                            logger.info(f"✅ 缩小字体到{font_ratio*100:.0f}%后渲染成功，字体大小: {adjusted_font_size}")
+                            success = True
+                            break
+                        logger.warning(f"缩小字体到{font_ratio*100:.0f}%仍溢出，继续尝试")
+                    except Exception as e:
+                        logger.warning(f"缩小字体到{font_ratio*100:.0f}%绘制失败: {e}")
+                        break
+
+            if not success:
+                truncated_text = translated_text
+                min_font_size = original_font_size * 0.5
+                ellipsis = "..."
+                max_truncation_attempts = 10
+                for trunc_attempt in range(1, max_truncation_attempts + 1):
+                    ratio = 1.0 - trunc_attempt * 0.1
+                    if ratio <= 0.1:
+                        break
+                    truncated_text = translated_text[:max(1, int(len(translated_text) * ratio))]
+                    if not truncated_text.endswith(ellipsis):
+                        truncated_text = truncated_text.rstrip() + ellipsis
+                    try:
+                        result = page.insert_textbox(
+                            current_rect,
+                            truncated_text,
+                            fontname=suitable_font,
+                            fontsize=min_font_size,
+                            color=rgb_color,
+                            align=alignment
+                        )
+                        if result >= 0:
+                            logger.warning(
+                                f"截断文本后渲染成功: 原始长度={len(translated_text)}, "
+                                f"截断后长度={len(truncated_text)}, 截断比例={ratio:.0%}, "
+                                f"字体大小={min_font_size:.1f}"
+                            )
+                            success = True
+                            break
+                        logger.debug(f"截断到{ratio:.0%}仍溢出，继续截断")
+                    except Exception as e:
+                        logger.warning(f"截断文本绘制失败: {e}")
+                        break
+
+            if not success:
+                logger.warning(f"所有尝试（含截断）均失败，跳过文本块绘制: '{translated_text[:50]}...'")
         
         logger.info("所有翻译文本绘制完成")
     
@@ -312,8 +399,12 @@ class PdfGenerator:
             try:
                 logger.info(f"尝试使用原始字体 '{original_font}'")
                 page.insert_font(fontname=original_font, fontfile=None)
-                logger.info(f"成功使用原始字体 '{original_font}'")
-                return original_font
+                # 检查原始字体是否支持目标语言字符
+                if self._check_embedded_font_support(page, original_font, target_lang):
+                    logger.info(f"原始字体 '{original_font}' 支持目标语言 '{target_lang}'，直接使用")
+                    return original_font
+                else:
+                    logger.info(f"原始字体 '{original_font}' 不支持目标语言 '{target_lang}'，跳过")
             except Exception as e:
                 logger.warning(f"原始字体 '{original_font}' 插入失败: {e}")
         
@@ -409,13 +500,16 @@ class PdfGenerator:
         
         # 获取表格边界框信息
         table_bbox = table.bbox
-        logger.info(f"表格边界框: {table_bbox}")
+        logger.warning(f"[TABLE_DIAG] 表格边界框: {table_bbox}, 类型: {type(table_bbox)}")
         
         # 获取行高和列宽信息
         row_heights = table.row_heights
         col_widths = table.col_widths
         logger.info(f"行高: {row_heights}")
         logger.info(f"列宽: {col_widths}")
+
+        if table_bbox:
+            table_x0, table_y0, table_x1, table_y1 = table_bbox
         
         # 获取适合目标语言的字体，使用与文本块相同的逻辑
         suitable_font = self._get_suitable_font(page, 'GoogleSansText-Regular', target_lang)
@@ -457,18 +551,19 @@ class PdfGenerator:
                     cell_bbox = None
                     logger.info(f"[表格绘制] 单元格 ({i},{j}) 是其他类型，转换为文本: '{cell_text}', 无边界框")
                 
-                # 如果有单元格边界框信息，使用它
-                if cell_bbox:
+                # 如果有单元格边界框信息，使用它（跳过零大小bbox）
+                if cell_bbox and not (cell_bbox[0] == 0 and cell_bbox[1] == 0 and cell_bbox[2] == 0 and cell_bbox[3] == 0):
                     x0, y0, x1, y1 = cell_bbox
                     cell_width = x1 - x0
                     cell_height = y1 - y0
-                    logger.info(f"使用单元格边界框: 位置=({x0:.2f}, {y0:.2f}), 大小=({cell_width:.2f}x{cell_height:.2f})")
+                    if cell_width > 0 and cell_height > 0:
+                        logger.info(f"使用单元格边界框: 位置=({x0:.2f}, {y0:.2f}), 大小=({cell_width:.2f}x{cell_height:.2f})")
+                    else:
+                        logger.info("单元格边界框大小为零，使用计算位置")
+                        cell_bbox = None
                 else:
                     # 没有边界框信息，使用表格边界框和行列信息计算
                     if table_bbox and row_heights and col_widths:
-                        table_x0, table_y0, table_x1, table_y1 = table_bbox
-                        
-                        # 计算当前单元格的位置
                         current_x = table_x0
                         for k in range(j):
                             if k < len(col_widths):
@@ -491,29 +586,28 @@ class PdfGenerator:
                         logger.info(f"使用的行高: {row_heights[i] if i < len(row_heights) else '计算值'}")
                         logger.info(f"使用的列宽: {col_widths[j] if j < len(col_widths) else '计算值'}")
                     else:
-                        # 使用默认位置和大小
-                        x0 = 50 + j * 100
-                        y0 = 200 + i * 30
-                        x1 = 150 + j * 100
-                        y1 = 230 + i * 30
-                        cell_width = 100
-                        cell_height = 30
-                        logger.warning("没有足够的表格信息，使用默认位置和大小")
+                        num_rows = len(table_cells)
+                        num_cols = len(table_cells[0]) if num_rows > 0 else 1
+                        cell_width = (table_x1 - table_x0) / num_cols if num_cols > 0 else 100
+                        cell_height = (table_y1 - table_y0) / num_rows if num_rows > 0 else 30
+                        x0 = table_x0 + j * cell_width
+                        y0 = table_y0 + i * cell_height
+                        x1 = x0 + cell_width
+                        y1 = y0 + cell_height
                 
                 rect = fitz.Rect(x0, y0, x1, y1)
                 logger.info(f"单元格矩形: {rect}")
-                
-                # 绘制单元格边框
-                try:
-                    page.draw_rect(rect, color=(0, 0, 0), width=0.5)
-                    logger.info(f"成功绘制单元格 ({i+1},{j+1}) 边框")
-                except Exception as e:
-                    logger.error(f"绘制单元格 ({i+1},{j+1}) 边框异常: {str(e)}")
-                
+
                 # 绘制单元格背景，无论是否有文本
                 try:
-                    page.draw_rect(rect, color=(1, 1, 1), fill=True, width=0)
-                    logger.debug(f"成功绘制单元格 ({i+1},{j+1}) 背景")
+                    cell_bg_rect = fitz.Rect(
+                        max(rect.x0 - 2, 0),
+                        rect.y0,
+                        min(rect.x1 + 2, page.rect.width),
+                        rect.y1
+                    )
+                    page.draw_rect(cell_bg_rect, color=(1, 1, 1), fill=True, width=0)
+                    logger.debug(f"成功绘制单元格 ({i+1},{j+1}) 背景, 区域: {cell_bg_rect}")
                 except Exception as e:
                     logger.error(f"绘制单元格 ({i+1},{j+1}) 背景异常: {str(e)}")
                 
@@ -585,13 +679,33 @@ class PdfGenerator:
                     else:
                         logger.warning(f"❌ 单元格 ({i+1},{j+1}) 绘制失败: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
                 else:
-                    logger.info(f"单元格 ({i+1},{j+1}) 无文本，但已绘制背景和边框")
-                    # 即使没有文本，也确保绘制边框
-                    try:
-                        page.draw_rect(rect, color=(0, 0, 0), width=0.5)
-                        logger.debug(f"成功绘制空单元格 ({i+1},{j+1}) 边框")
-                    except Exception as e:
-                        logger.error(f"绘制空单元格 ({i+1},{j+1}) 边框异常: {str(e)}")
+                    logger.info(f"单元格 ({i+1},{j+1}) 无文本，但已绘制背景")
+        
+        # 统一绘制表格网格线（外框 + 内部线条）
+        try:
+            if table_bbox:
+                table_rect = fitz.Rect(table_x0, table_y0, table_x1, table_y1)
+                # 外框
+                page.draw_rect(table_rect, color=(0, 0, 0), width=1)
+                # 内部水平线（每行的底部边界）
+                for row_i in range(len(row_heights) - 1):
+                    line_y = table_y0 + sum(row_heights[:row_i + 1])
+                    page.draw_line(
+                        fitz.Point(table_x0, line_y),
+                        fitz.Point(table_x1, line_y),
+                        color=(0, 0, 0), width=0.5
+                    )
+                # 内部垂直线（每列的右侧边界）
+                for col_j in range(len(col_widths) - 1):
+                    line_x = table_x0 + sum(col_widths[:col_j + 1])
+                    page.draw_line(
+                        fitz.Point(line_x, table_y0),
+                        fitz.Point(line_x, table_y1),
+                        color=(0, 0, 0), width=0.5
+                    )
+                logger.info("表格网格线绘制完成")
+        except Exception as e:
+            logger.error(f"绘制表格网格线异常: {e}")
         
         logger.info("表格绘制完成")
     
@@ -642,6 +756,68 @@ class PdfGenerator:
         
         return system_fonts
 
+    def _check_embedded_font_support(self, page, fontname, target_lang):
+        """检查PDF内嵌字体是否支持目标语言字符
+
+        通过在临时页面上用该字体插入测试文本来检测。
+        如果字体不支持目标语言字符，PyMuPDF会使用替换字形，
+        导致插入的文本长度与预期不符。
+
+        Args:
+            page (fitz.Page): PDF页面对象
+            fontname (str): 字体名称
+            target_lang (str): 目标语言代码
+
+        Returns:
+            bool: 字体是否支持目标语言字符
+        """
+        # 获取目标语言的测试字符
+        test_chars = {
+            'zh': '你好',
+            'en': 'Hello',
+            'de': 'äöüß',
+            'fr': 'éèêàç',
+            'es': 'ñ¿¡',
+            'pt': 'ãç',
+            'it': 'àèì',
+            'nl': 'ëï',
+            'ja': 'こんにちは',
+            'ko': '안녕',
+            'th': 'สวัสดี',
+            'vi': 'chào',
+            'ru': 'Привет',
+            'ar': 'مرحبا',
+            'hi': 'नमस्ते',
+            'he': 'שלום',
+        }
+        test_chars.get(target_lang, test_chars['en'])
+
+        # 拉丁语言（en/fr/de/es/pt/it/nl）的内嵌字体通常支持拉丁字符
+        latin_langs = {'en', 'fr', 'de', 'es', 'pt', 'it', 'nl'}
+        if target_lang in latin_langs:
+            # 尝试从系统字体中查找该字体文件进行精确检测
+            system_font_paths = self._get_system_fonts()
+            for font_path in system_font_paths:
+                font_filename = os.path.basename(font_path)
+                if fontname.lower().replace('-', '').replace(' ', '') in font_filename.lower().replace('-', '').replace(' ', ''):
+                    return self._check_font_support(font_path, target_lang)
+            # 找不到字体文件，拉丁语言默认支持
+            logger.debug(f"拉丁语言 '{target_lang}'，内嵌字体 '{fontname}' 默认支持")
+            return True
+
+        # 非拉丁语言：尝试从系统字体中查找该字体文件进行检测
+        system_font_paths = self._get_system_fonts()
+        for font_path in system_font_paths:
+            font_filename = os.path.basename(font_path)
+            if fontname.lower().replace('-', '').replace(' ', '') in font_filename.lower().replace('-', '').replace(' ', ''):
+                result = self._check_font_support(font_path, target_lang)
+                logger.debug(f"内嵌字体 '{fontname}' 系统文件检测: {result}")
+                return result
+
+        # 无法找到字体文件，非拉丁语言默认不支持
+        logger.debug(f"内嵌字体 '{fontname}' 未找到系统文件，非拉丁语言 '{target_lang}' 默认不支持")
+        return False
+
     def _check_font_support(self, font_path, target_lang):
         """检查字体是否真正支持目标语言
 
@@ -652,28 +828,35 @@ class PdfGenerator:
         Returns:
             bool: 字体是否真正支持目标语言
         """
-        # 1. 对于非中文目标语言，简化检测
-        if target_lang not in ['zh', 'ja', 'ko']:
-            logger.debug(f"目标语言 '{target_lang}' 为非复杂语言，默认支持")
-            return True
-        
         try:
-            # 2. 获取字体文件名
+            # 获取字体文件名
             font_filename = os.path.basename(font_path)
             
-            # 3. 尝试加载字体
+            # 尝试加载字体
             font = ImageFont.truetype(font_path, 12)
             
-            # 4. 获取目标语言的测试字符
+            # 获取目标语言的测试字符
             test_chars = {
                 'zh': '你好世界',
                 'en': 'Hello World',
+                'de': 'äöüßÄÖÜ',
+                'fr': 'éèêàçîôù',
+                'es': 'ñ¿¡áéíóú',
+                'pt': 'ãçáéíóú',
+                'it': 'àèìòù',
+                'nl': 'ëï',
                 'ja': 'こんにちは世界',
-                'ko': '안녕하세요 세계'
+                'ko': '안녕하세요 세계',
+                'th': 'สวัสดี',
+                'vi': 'Xin chào',
+                'ru': 'Привет',
+                'ar': 'مرحبا',
+                'hi': 'नमस्ते',
+                'he': 'שלום',
             }
-            test_char = test_chars.get(target_lang, test_chars['en'])
+            test_chars.get(target_lang, test_chars['en'])
             
-            # 5. 检查字体是否包含测试字符的字形
+            # 检查字体是否包含测试字符的字形
             # 使用getbbox检查每个字符的宽度，替换字符宽度通常为0或固定值
             for char in test_char:
                 bbox = font.getbbox(char)

@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectAllPagesCheckbox = document.getElementById('select-all-pages');
     const pageRangeInput = document.getElementById('page-range');
     
+    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+
     let progressInterval = null;
     let translationTaskId = null;
     let currentTotalPages = 0;
@@ -47,6 +49,16 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 准备表单数据
         const formData = new FormData(form);
+        
+        // 文件大小校验
+        const file = document.getElementById('pdf_file').files[0];
+        if (file && file.size > MAX_FILE_SIZE) {
+            alert('文件大小超过限制，请上传小于 500MB 的文件');
+            startTranslationBtn.disabled = false;
+            progressContainer.style.display = 'none';
+            cancelBtn.style.display = 'none';
+            return;
+        }
         
         // 如果全选，则不传递page_range参数或传递空值
         if (selectAllPagesCheckbox.checked) {
@@ -84,6 +96,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (error) {
                     updateProgress(0, 'error', '解析响应失败: ' + error.message);
                 }
+            } else if (xhr.status === 413) {
+                alert('文件大小超过限制，请上传小于 500MB 的文件');
+                updateProgress(0, 'error', '文件大小超过限制，请上传小于 500MB 的文件');
             } else {
                 updateProgress(0, 'error', '服务器错误: ' + xhr.status);
             }
@@ -460,6 +475,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 获取PDF页数
     function getPdfPageCount(file) {
+        if (file.size > MAX_FILE_SIZE) {
+            totalPagesElement.innerHTML = `文件大小超过限制，请上传小于 500MB 的文件`;
+            return;
+        }
+
         const formData = new FormData();
         formData.append('pdf_file', file);
         
@@ -479,6 +499,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (error) {
                     console.error('解析获取PDF页数响应失败:', error);
                 }
+            } else if (xhr.status === 413) {
+                totalPagesElement.innerHTML = `文件大小超过限制，请上传小于 500MB 的文件`;
             } else {
                 console.error('获取PDF页数请求失败:', xhr.status);
             }

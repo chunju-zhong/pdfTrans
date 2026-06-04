@@ -22,7 +22,8 @@ class TextBlock(CopyableMixin):
         self.block_bbox = bbox
         self.block_type = block_type
         self.page_num = page_num  # 添加页面号属性
-        self.is_body_text = True  # 添加是否为正文的属性，默认为True
+        self.is_body_text = True
+        self.is_formula = False
         # 章节信息
         self.chapter_id = None  # 章节ID
         self.chapter_title = None  # 章节标题
@@ -75,6 +76,7 @@ class TextBlock(CopyableMixin):
             page_num=data.get('page_num', 0),
         )
         obj.is_body_text = data.get('is_body_text', True)
+        obj.is_formula = data.get('is_formula', False)
         obj.chapter_id = data.get('chapter_id')
         obj.chapter_title = data.get('chapter_title')
         obj.chapter_level = data.get('chapter_level', 0)
@@ -101,7 +103,8 @@ class TextBlock(CopyableMixin):
             'block_bbox': self.block_bbox,
             'block_type': self.block_type,
             'page_num': self.page_num,  # 包含页面号属性
-            'is_body_text': self.is_body_text,  # 包含是否为正文的属性
+            'is_body_text': self.is_body_text,
+            'is_formula': self.is_formula,
             'chapter_id': self.chapter_id,
             'chapter_title': self.chapter_title,
             'chapter_level': self.chapter_level,

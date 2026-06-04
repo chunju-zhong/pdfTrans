@@ -89,8 +89,8 @@ class AipingTranslator(Translator):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=True,  # 保持流式调用，兼容现有测试
-                    temperature=0.1,  # 降低温度，提高翻译准确性
-                    top_p=0.9,  # 核采样参数
+                    temperature=0.7,  # Qwen3 非思考模式推荐参数
+                    top_p=0.8,  # Qwen3 非思考模式推荐参数
                     max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
@@ -109,15 +109,16 @@ class AipingTranslator(Translator):
                 translated_text = ""
                 token_usage = {}
                 finish_reason = ""
+                reasoning_content_length = 0
                 
                 for chunk in response:
                     if hasattr(chunk, "choices") and len(chunk.choices) > 0:
                         delta = chunk.choices[0].delta
                         if hasattr(delta, "content") and delta.content:
                             translated_text += delta.content
-                        elif hasattr(delta, "reasoning_content"):
-                            # 跳过思考内容
-                            continue
+                        elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                            # 统计思考内容长度（用于诊断）
+                            reasoning_content_length += len(delta.reasoning_content)
                     
                     # 捕获token使用信息
                     if hasattr(chunk, "usage") and chunk.usage:
@@ -132,6 +133,15 @@ class AipingTranslator(Translator):
                         choice = chunk.choices[0]
                         if hasattr(choice, "finish_reason") and choice.finish_reason:
                             finish_reason = choice.finish_reason
+                
+                # 翻译结果为空时记录诊断日志
+                if not translated_text:
+                    import logging
+                    _diag_logger = logging.getLogger(__name__)
+                    _diag_logger.warning(
+                        f"翻译结果为空: reasoning_content长度={reasoning_content_length}, "
+                        f"finish_reason={finish_reason}, 原文前100字符='{text[:100]}'"
+                    )
                 
                 # 检查是否被截断
                 truncated = finish_reason == "length"

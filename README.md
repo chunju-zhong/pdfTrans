@@ -11,6 +11,7 @@ If you have any questions or suggestions during use, welcome to leave a message 
 ### Core Features
 
 - **PDF Text Extraction**: Supports extracting plain text and table content while preserving position information
+- **OCR Support**: Supports scanned PDF documents via PaddleOCR (PP-StructureV3), including layout analysis, text recognition, formula recognition, and table extraction
 - **Multiple Translation API Support**:
   - aiping Model API
   - Silicon Flow Model API
@@ -39,6 +40,9 @@ If you have any questions or suggestions during use, welcome to leave a message 
   - PyMuPDF (fitz) 1.23+: Used for PDF text extraction and generation
   - camelot-py[cv]: Used for table extraction
   - opencv-python: Dependency for camelot-py[cv]
+- **OCR Engine**:
+  - PaddleOCR 3.0+ (PP-StructureV3): Used for scanned PDF text extraction, layout analysis, formula recognition
+  - PaddlePaddle 3.0+: Deep learning framework (CPU/GPU auto-detection)
 - **Document Processing**:
   - python-docx: Used for Word document generation
 - **Translation APIs**: aiping Translation API, Silicon Flow Translation API
@@ -78,6 +82,26 @@ cp .env.example .env
 pip install -r requirements.txt
 ```
 
+### 5. Install PaddlePaddle (OCR Support)
+
+PaddlePaddle CPU and GPU versions are mutually exclusive and cannot be installed simultaneously. Use the auto-detection script:
+
+```bash
+bash install_paddle.sh
+```
+
+Or install manually:
+
+```bash
+# CPU version (default, works on all platforms)
+pip install paddlepaddle>=3.0.0
+
+# GPU version (requires NVIDIA GPU + CUDA 11.8+)
+pip install paddlepaddle-gpu>=3.0.0
+```
+
+> **Note**: OCR features require PaddlePaddle. If not installed, only non-scanned PDFs can be processed.
+
 ## Usage
 
 ### Start Web Service
@@ -97,6 +121,10 @@ python app.py
   - Can mix both (e.g., 1-3,5,7-9)
 - Select translation service and target language
 - Select output format (PDF, Word, Markdown, or any combination)
+- Enable OCR mode (optional, for scanned PDFs)
+  - Check "Enable OCR" to extract text from scanned/IMAGE-based PDFs
+  - Select OCR engine (currently supports PaddleOCR only)
+  - System automatically detects GPU and uses GPU acceleration when available
 - Click "Translate" button
 - Wait for translation to complete, download translated PDF and/or Word files
 
@@ -140,6 +168,12 @@ pdftrans translate document.pdf --semantic-merge -o output.pdf
 # Enable semantic merge and LLM semantic judgment
 pdftrans translate document.pdf -m -l -f docs -o output.pdf
 
+# Enable OCR mode for scanned PDFs
+pdftrans translate document.pdf --ocr -o output.pdf
+
+# Specify OCR engine and language
+pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o output.pdf
+
 # Use glossary during translation
 pdftrans translate document.pdf -g glossary.txt -o output.pdf
 
@@ -178,6 +212,9 @@ AIPING_API_KEY=your_aiping_api_key
 
 # Silicon Flow API configuration
 SILICON_FLOW_API_KEY=your_silicon_flow_api_key
+
+# OCR GPU acceleration (optional, default: auto-detect)
+OCR_USE_GPU=true
 ```
 
 Only one translation service API key is required to use the tool. The tool defaults to using aiping model service.
@@ -202,6 +239,9 @@ Only one translation service API key is required to use the tool. The tool defau
 - `-m, --semantic-merge` - Enable semantic merge
 - `-l, --llm-merge` - Use LLM semantic judgment
 - `-c, --chapter-split` - Split output by chapter (Markdown only)
+- `--ocr` - Enable OCR mode for scanned PDFs
+- `--ocr-engine` - OCR engine type (default: paddleocr)
+- `--ocr-lang` - OCR recognition language (default: auto-detect from source language)
 
 ## License
 
@@ -221,7 +261,7 @@ The project task list is available in [docs/TODO.md](docs/TODO.md) file.
 
 ## Notes
 
-1. This tool only supports non-scanned PDFs, OCR is not supported
+1. Scanned PDFs are supported via OCR mode (requires PaddlePaddle installation). Non-scanned PDFs work without OCR
 2. Translation quality depends on the selected translation API
 3. Processing large PDF documents may take a long time, you can use the page-specific translation feature to translate in batches
 4. Please ensure API keys are correctly configured, otherwise translation functionality will not work

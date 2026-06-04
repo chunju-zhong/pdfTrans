@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
 import os
 import re
 import uuid
 import threading
+import logging
 import fitz  # PyMuPDF用于获取PDF页数
 from config import config
 from utils.logging_config import setup_logging, get_logger
@@ -16,9 +18,16 @@ from services.glossary_service import glossary_service
 setup_logging()
 logger = get_logger(__name__)
 
+# 关闭 werkzeug HTTP 访问日志
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
 # 创建Flask应用
 app = Flask(__name__)
 app.config.from_object(config)
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_entity_too_large(error):
+    return jsonify({'success': False, 'message': '文件大小超过限制，请上传小于 500MB 的文件'}), 413
 
 # 确保上传和输出目录存在
 ensure_directory_exists(app.config['UPLOAD_FOLDER'])
