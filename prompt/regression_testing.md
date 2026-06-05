@@ -21,23 +21,52 @@
 ## 2. 测试环境准备
 
 ### 2.1 环境检查清单
-- [ ] Python版本：3.9+
-- [ ] 虚拟环境：conda环境激活
+- [ ] Python版本：3.9+（推荐3.11，兼容3.13）
+- [ ] 虚拟环境：conda或venv环境激活
 - [ ] 依赖库：所有依赖已安装（`pip install -r requirements.txt`）
-- [ ] 测试配置：pytest.ini配置正确
-- [ ] 环境变量：必要的环境变量已设置
+- [ ] PaddlePaddle：已通过 `bash install_paddle.sh` 安装对应版本（CPU/GPU）
+- [ ] 测试配置：pytest.ini配置正确（testpaths=tests，已配置unit/integration/e2e标记）
+- [ ] 环境变量：已复制 `.env.example` 为 `.env` 并填写必要配置（SECRET_KEY、翻译API密钥等）
 
 ### 2.2 环境准备命令
 ```bash
-# 激活虚拟环境
+# 激活虚拟环境（二选一）
 conda activate pdfTrans
+# 或
+source venv/bin/activate
 
-# 安装依赖
+# 安装基础依赖
 pip install -r requirements.txt
+
+# 安装 PaddlePaddle（自动检测CPU/GPU环境）
+bash install_paddle.sh
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，填写以下必要配置：
+#   SECRET_KEY          - 必填，应用密钥
+#   AIPING_API_KEY      - aiping翻译服务密钥（默认翻译服务）
+#   SILICON_FLOW_API_KEY - 硅基流动翻译服务密钥（备选翻译服务）
+# 其他配置项均有默认值，按需修改
 
 # 检查Python版本
 python --version
+
+# 验证PaddlePaddle安装
+python -c "import paddle; print(paddle.__version__)"
 ```
+
+### 2.3 环境变量说明
+| 变量 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| SECRET_KEY | 是 | - | 应用密钥，未设置会报错 |
+| AIPING_API_KEY | 否* | - | aiping翻译API密钥 |
+| SILICON_FLOW_API_KEY | 否* | - | 硅基流动翻译API密钥 |
+| DEFAULT_TRANSLATOR | 否 | aiping | 默认翻译服务 |
+| USE_OCR | 否 | false | 是否启用OCR提取 |
+| OCR_USE_GPU | 否 | macOS:false / 其他:true | OCR是否使用GPU |
+
+\* 至少配置一个翻译服务的API密钥，否则翻译相关测试会失败
 
 ## 3. 测试执行流程
 
