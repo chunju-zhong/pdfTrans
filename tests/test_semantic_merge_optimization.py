@@ -97,39 +97,31 @@ def test_semantic_merge_optimization():
     logger.info(f"测试用例 1 结果: {results_1}")
     
     # 验证测试用例 1 结果
-    if len(results_1) != len(test_cases_1):
-        logger.error(f"❌ 测试用例 1 失败：结果数量不一致，期望 {len(test_cases_1)} 个结果，实际 {len(results_1)} 个结果")
-        return False
-    
+    assert len(results_1) == len(test_cases_1), \
+        f"测试用例 1 失败：结果数量不一致，期望 {len(test_cases_1)} 个结果，实际 {len(results_1)} 个结果"
+
     # 检查目标测试用例是否正确
     target_case_result = results_1[0]
-    if not target_case_result:
-        logger.error("❌ 测试用例 1 失败：目标测试用例未正确合并")
-        return False
-    
+    assert target_case_result, "测试用例 1 失败：目标测试用例未正确合并"
+
     # 执行批量语义分析 - 测试用例 2
     logger.info("\n执行测试用例 2：数量一致性测试")
     results_2 = analyzer.batch_analyze_semantic_relationship(test_cases_2, "en")
     logger.info(f"测试用例 2 结果: {results_2}")
-    
+
     # 验证测试用例 2 结果数量
-    if len(results_2) != len(test_cases_2):
-        logger.error(f"❌ 测试用例 2 失败：结果数量不一致，期望 {len(test_cases_2)} 个结果，实际 {len(results_2)} 个结果")
-        return False
-    
+    assert len(results_2) == len(test_cases_2), \
+        f"测试用例 2 失败：结果数量不一致，期望 {len(test_cases_2)} 个结果，实际 {len(results_2)} 个结果"
+
     # 检查测试用例 2 所有结果是否为 True
     for i, result in enumerate(results_2):
-        if not result:
-            logger.error(f"❌ 测试用例 2 失败：第 {i+1} 对文本应该合并")
-            return False
-    
+        assert result, f"测试用例 2 失败：第 {i+1} 对文本应该合并"
+
     logger.info("\n✅ 所有测试用例通过：")
     logger.info("- 测试用例 1：基本功能测试通过")
     logger.info("- 测试用例 2：数量一致性测试通过")
     logger.info("- 目标测试用例正确合并")
     logger.info("- 结果数量与输入数量一致")
-    
-    return True
 
 if __name__ == "__main__":
     success = test_semantic_merge_optimization()

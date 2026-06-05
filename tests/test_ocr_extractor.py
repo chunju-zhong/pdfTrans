@@ -238,7 +238,8 @@ class TestPaddleOcrExtractor:
         blocks = result.pages[0].text_blocks
         header_block = [b for b in blocks if b.block_text == 'Page Header'][0]
         body_block = [b for b in blocks if b.block_text == 'Body Text'][0]
-        assert header_block.is_body_text is False
+        # header 标签不再在 OCR 层标记为非正文，由 text_analyzer.py 基于多页重复模式判断
+        assert header_block.is_body_text is True
         assert body_block.is_body_text is True
 
     @patch('modules.ocr.paddle_extractor.cv2.imread')

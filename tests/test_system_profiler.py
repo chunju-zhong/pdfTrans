@@ -66,7 +66,7 @@ class TestSystemProfile:
 
 class TestOcrParameterCalculator:
     def test_minimal_tier(self):
-        profile = _make_profile(available_memory_gb=4.0, cpu_count=2, cpu_count_logical=4)
+        profile = _make_profile(total_memory_gb=4.0, available_memory_gb=4.0, cpu_count=2, cpu_count_logical=4)
         calc = OcrParameterCalculator(profile)
         assert calc.tier == 'minimal'
 
@@ -75,7 +75,7 @@ class TestOcrParameterCalculator:
         assert int(params['thread_params']['CPU_NUM']) <= 2
 
     def test_low_tier(self):
-        profile = _make_profile(available_memory_gb=12.0, cpu_count=4, cpu_count_logical=8)
+        profile = _make_profile(total_memory_gb=12.0, available_memory_gb=12.0, cpu_count=4, cpu_count_logical=8)
         calc = OcrParameterCalculator(profile)
         assert calc.tier == 'low'
 
@@ -84,7 +84,7 @@ class TestOcrParameterCalculator:
         assert int(params['thread_params']['CPU_NUM']) <= 4
 
     def test_medium_tier(self):
-        profile = _make_profile(available_memory_gb=24.0, cpu_count=8, cpu_count_logical=16)
+        profile = _make_profile(total_memory_gb=24.0, available_memory_gb=24.0, cpu_count=8, cpu_count_logical=16)
         calc = OcrParameterCalculator(profile)
         assert calc.tier == 'medium'
 
@@ -94,7 +94,7 @@ class TestOcrParameterCalculator:
         assert params['timeout_params']['max_total_time'] > 600
 
     def test_high_tier(self):
-        profile = _make_profile(available_memory_gb=48.0, cpu_count=16, cpu_count_logical=32)
+        profile = _make_profile(total_memory_gb=48.0, available_memory_gb=48.0, cpu_count=16, cpu_count_logical=32)
         calc = OcrParameterCalculator(profile)
         assert calc.tier == 'high'
 
@@ -104,14 +104,14 @@ class TestOcrParameterCalculator:
 
     def test_high_load_reduces_params(self):
         profile = _make_profile(
-            available_memory_gb=24.0, cpu_count=8, cpu_count_logical=16,
+            total_memory_gb=24.0, available_memory_gb=24.0, cpu_count=8, cpu_count_logical=16,
             memory_percent=90.0, load_avg_1m=10.0,
         )
         calc = OcrParameterCalculator(profile)
         assert profile.is_high_load() is True
 
         params = calc.compute_all_params()
-        normal_profile = _make_profile(available_memory_gb=24.0, cpu_count=8, cpu_count_logical=16)
+        normal_profile = _make_profile(total_memory_gb=24.0, available_memory_gb=24.0, cpu_count=8, cpu_count_logical=16)
         normal_calc = OcrParameterCalculator(normal_profile)
         normal_params = normal_calc.compute_all_params()
 

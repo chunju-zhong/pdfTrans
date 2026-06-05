@@ -90,7 +90,7 @@ class PaddleOcrExtractor(OcrExtractor):
     }
 
     # 标记为非正文的标签
-    NON_BODY_LABELS = {'footer', 'page_number', 'footnote', 'header'}
+    NON_BODY_LABELS = {'footer', 'page_number', 'footnote'}
 
     # 需要保存为图片的版面标签
     IMAGE_LABELS = {'image', 'figure', 'chart', 'figure_caption', 'seal'}
@@ -499,6 +499,29 @@ class PaddleOcrExtractor(OcrExtractor):
         return (tight_x1, tight_y1, tight_x2, tight_y2)
 
     @staticmethod
+    def _filter_uncovered_textlines(uncovered_textlines, has_textline_texts, page_num):
+        """过滤未覆盖的 textline，仅保留有文本数据的条目
+
+        Args:
+            uncovered_textlines: list of (cy, text, bbox) tuples
+            has_textline_texts: bool, whether textline_texts is available
+            page_num: int, page number for logging
+
+        Returns:
+            list of (cy, text, bbox) tuples with text, or empty list
+        """
+        if not uncovered_textlines:
+            return []
+
+        text_bearing = [t for t in uncovered_textlines if t[1]]
+        if text_bearing:
+            logger.info(f"[SUPPLEMENT] page={page_num}: 发现 {len(text_bearing)} 个未被 LayoutBlock 覆盖且有文本的 textline")
+            return text_bearing
+
+        logger.info(f"[SUPPLEMENT] page={page_num}: 发现 {len(uncovered_textlines)} 个未被覆盖的 textline，但无可用的文本数据（textline_texts 为空）")
+        return []
+
+    @staticmethod
     def _build_text_from_textlines(block_bbox, textline_boxes, textline_texts):
         if textline_boxes is None or textline_texts is None or len(textline_boxes) == 0 or len(textline_texts) == 0 or len(textline_boxes) != len(textline_texts):
             return None
@@ -565,6 +588,8 @@ class PaddleOcrExtractor(OcrExtractor):
         layout_bboxes = []
         tables = []
         label_counts = {}
+        # 记录成功创建 TextBlock 的像素 bbox，用于补充捕获时判断覆盖
+        processed_pixel_bboxes = []
 
         try:
             img_array = self._load_image_as_array(img_path, page_num)
@@ -594,11 +619,13 @@ class PaddleOcrExtractor(OcrExtractor):
                 if overall_ocr_res is not None:
                     try:
                         rec_boxes = overall_ocr_res.get("rec_boxes") if hasattr(overall_ocr_res, "get") else getattr(overall_ocr_res, "rec_boxes", None)
-                        rec_texts = overall_ocr_res.get("rec_text") if hasattr(overall_ocr_res, "get") else getattr(overall_ocr_res, "rec_text", None)
+                        rec_texts = overall_ocr_res.get("rec_texts") if hasattr(overall_ocr_res, "get") else getattr(overall_ocr_res, "rec_texts", None)
                         if rec_boxes is not None and len(rec_boxes) > 0:
                             textline_boxes = rec_boxes
                             if rec_texts is not None and len(rec_texts) == len(rec_boxes):
                                 textline_texts = rec_texts
+                            else:
+                                logger.warning(f"[OCR_WARN] page={page_num}: rec_texts 长度({len(rec_texts) if rec_texts else 0}) != rec_boxes 长度({len(rec_boxes)})，textline_texts 为空，将依赖 content 回退")
                             logger.info(f"[FONT_DEBUG] page={page_num}: 从 overall_ocr_res 获取到 {len(textline_boxes)} 个 textline bbox, {len(textline_texts)} 个 textline text")
                     except Exception as e:
                         logger.debug(f"page={page_num}: 提取 overall_ocr_res 失败: {e}")
@@ -792,6 +819,14 @@ class PaddleOcrExtractor(OcrExtractor):
                                 tb.is_body_text = False
                             text_blocks.append(tb)
                             block_no += 1
+                            # 记录成功创建 TextBlock 的像素 bbox
+                            processed_pixel_bboxes.append((float(x1), float(y1), float(x2), float(y2)))
+                        else:
+                            # textline 匹配失败且 content 也为空，记录 WARNING
+                            logger.warning(f"[TEXT_SKIP] page={page_num}, label={label}: 文本提取失败，"
+                                          f"textline_match={'成功' if textline_text else '失败'}, "
+                                          f"content={'有值' if content else '空'}, "
+                                          f"bbox=({float(x1):.0f},{float(y1):.0f},{float(x2):.0f},{float(y2):.0f})")
 
                     elif label == 'table':
                         has_table = True
@@ -854,6 +889,9 @@ class PaddleOcrExtractor(OcrExtractor):
                                 tb.is_body_text = True
                                 text_blocks.append(tb)
                                 block_no += 1
+                                processed_pixel_bboxes.append((float(x1), float(y1), float(x2), float(y2)))
+                                logger.info(f"[FONT_DEBUG] page={page_num}, label=figure_caption, is_body=True, "
+                                            f"text={repr(caption_text.strip()[:30])}, font_size={estimated_font_size:.2f}, method=block_bbox")
                                 logger.info(f"[SUPPLEMENT] page={page_num}: 从 figure_caption 提取文本, text='{caption_text.strip()[:60]}'")
 
                     else:
@@ -892,24 +930,28 @@ class PaddleOcrExtractor(OcrExtractor):
                             tb.is_body_text = True
                             text_blocks.append(tb)
                             block_no += 1
+                            processed_pixel_bboxes.append((float(x1), float(y1), float(x2), float(y2)))
+                            logger.info(f"[FONT_DEBUG] page={page_num}, label={label}, is_body=True, "
+                                        f"text={repr(text.strip()[:30])}, font_size={estimated_font_size:.2f}, method=block_bbox")
+                        else:
+                            logger.warning(f"[TEXT_SKIP] page={page_num}, label={label}: 文本提取失败，"
+                                          f"textline_match={'成功' if textline_text else '失败'}, "
+                                          f"content={'有值' if content else '空'}, "
+                                          f"bbox=({float(x1):.0f},{float(y1):.0f},{float(x2):.0f},{float(y2):.0f})")
 
                 # === 补充捕获：检测未被 parsing_res_list 覆盖的 textline 文本 ===
                 # PP-StructureV3 可能漏检某些文本（如表格周边的标题/脚注），
                 # 通过 overall_ocr_res 的 textline 数据捕获这些漏检文本。
-                if textline_boxes is not None and len(textline_boxes) > 0 and textline_texts is not None and len(textline_texts) > 0:
-                    # 收集所有已处理 LayoutBlock 的 bbox（像素坐标）
-                    processed_bboxes = []
-                    for block in parsing_res_list:
-                        if not hasattr(block, 'bbox') or not block.bbox or len(block.bbox) < 4:
-                            continue
-                        b_label = block.label
-                        # 覆盖所有已知标签，包括 text、table、figure_caption、formula 等
-                        if b_label in self.TEXT_LABELS or b_label in self.IMAGE_LABELS or b_label in ('table', 'formula', 'formula_number'):
-                            b = block.bbox
-                            processed_bboxes.append((float(b[0]), float(b[1]), float(b[2]), float(b[3])))
+                # 注意：即使 textline_texts 为空（rec_texts 长度不匹配），仍执行补充捕获
+                # 因为 textline_boxes 可用于定位未覆盖区域
+                if textline_boxes is not None and len(textline_boxes) > 0:
+                    # 使用成功创建 TextBlock 的像素 bbox 判断覆盖
+                    # 只收集成功创建的块，避免空文本块的 bbox 阻止补充捕获
+                    processed_bboxes = processed_pixel_bboxes
 
                     # 对 textline，检查是否被任何 processed bbox 覆盖
                     uncovered_textlines = []  # list of (cy, text)
+                    has_textline_texts = textline_texts is not None and len(textline_texts) > 0
                     for i, tl_box in enumerate(textline_boxes):
                         if len(tl_box) < 4:
                             continue
@@ -926,60 +968,65 @@ class PaddleOcrExtractor(OcrExtractor):
                                 break
 
                         if not covered:
-                            txt = textline_texts[i].strip() if i < len(textline_texts) else ''
-                            if txt:
-                                uncovered_textlines.append((tl_cy, txt, (tl_x1, tl_y1, tl_x2, tl_y2)))
+                            txt = textline_texts[i].strip() if has_textline_texts and i < len(textline_texts) else ''
+                            uncovered_textlines.append((tl_cy, txt, (tl_x1, tl_y1, tl_x2, tl_y2)))
 
                     if uncovered_textlines:
-                        logger.info(f"[SUPPLEMENT] page={page_num}: 发现 {len(uncovered_textlines)} 个未被 LayoutBlock 覆盖的 textline")
-                        # 按垂直位置排序
-                        uncovered_textlines.sort(key=lambda x: x[0])
+                        uncovered_textlines = PaddleOcrExtractor._filter_uncovered_textlines(
+                            uncovered_textlines, has_textline_texts, page_num)
+                        if uncovered_textlines:
+                            # 按垂直位置排序
+                            uncovered_textlines.sort(key=lambda x: x[0])
 
-                        # 按垂直邻近关系聚合成文本块
-                        groups = []
-                        current_group = [uncovered_textlines[0]]
-                        for i in range(1, len(uncovered_textlines)):
-                            prev_cy = uncovered_textlines[i-1][0]
-                            curr_cy = uncovered_textlines[i][0]
-                            if curr_cy - prev_cy < 15:  # 垂直距离小于15px视为同一段落
-                                current_group.append(uncovered_textlines[i])
-                            else:
+                            # 按垂直邻近关系聚合成文本块
+                            groups = []
+                            current_group = [uncovered_textlines[0]]
+                            for i in range(1, len(uncovered_textlines)):
+                                prev_cy = uncovered_textlines[i-1][0]
+                                curr_cy = uncovered_textlines[i][0]
+                                if curr_cy - prev_cy < 15:  # 垂直距离小于15px视为同一段落
+                                    current_group.append(uncovered_textlines[i])
+                                else:
+                                    groups.append(current_group)
+                                    current_group = [uncovered_textlines[i]]
+                            if current_group:
                                 groups.append(current_group)
-                                current_group = [uncovered_textlines[i]]
-                        if current_group:
-                            groups.append(current_group)
 
-                        for group in groups:
-                            # 计算聚合文本和 bbox
-                            group_texts = []
-                            min_x1 = min(t[2][0] for t in group)
-                            min_y1 = min(t[2][1] for t in group)
-                            max_x2 = max(t[2][2] for t in group)
-                            max_y2 = max(t[2][3] for t in group)
-                            for t in group:
-                                group_texts.append(t[1])
-                            combined_text = ' '.join(group_texts)
-                            group_pixel_bbox = (min_x1, min_y1, max_x2, max_y2)
-                            group_pdf_bbox = self._pixel_to_pdf_coords(group_pixel_bbox, page_info)
+                            for group in groups:
+                                # 计算聚合文本和 bbox
+                                group_texts = []
+                                min_x1 = min(t[2][0] for t in group)
+                                min_y1 = min(t[2][1] for t in group)
+                                max_x2 = max(t[2][2] for t in group)
+                                max_y2 = max(t[2][3] for t in group)
+                                for t in group:
+                                    group_texts.append(t[1])
+                                combined_text = ' '.join(group_texts)
+                                group_pixel_bbox = (min_x1, min_y1, max_x2, max_y2)
+                                group_pdf_bbox = self._pixel_to_pdf_coords(group_pixel_bbox, page_info)
 
-                            # 估算字体大小
-                            group_height_pdf = group_pdf_bbox[3] - group_pdf_bbox[1]
-                            est_font_size = max(6, min(36, group_height_pdf * 0.75))
+                                # 估算字体大小
+                                group_height_pdf = group_pdf_bbox[3] - group_pdf_bbox[1]
+                                est_font_size = max(6, min(36, group_height_pdf * 0.75))
 
-                            tb = TextBlock(
-                                block_no=block_no,
-                                text=combined_text,
-                                bbox=group_pdf_bbox,
-                                block_type=0,
-                                page_num=page_num,
-                            )
-                            tb.font_size = est_font_size
-                            tb.is_body_text = True
-                            text_blocks.append(tb)
-                            block_no += 1
-                            logger.info(f"[SUPPLEMENT] page={page_num}: 创建补充 TextBlock, text='{combined_text[:60]}', pdf_bbox={group_pdf_bbox}")
+                                tb = TextBlock(
+                                    block_no=block_no,
+                                    text=combined_text,
+                                    bbox=group_pdf_bbox,
+                                    block_type=0,
+                                    page_num=page_num,
+                                )
+                                tb.font_size = est_font_size
+                                tb.is_body_text = True
+                                text_blocks.append(tb)
+                                block_no += 1
+                                logger.info(f"[FONT_DEBUG] page={page_num}, label=supplement, is_body=True, "
+                                            f"text={repr(combined_text[:30])}, font_size={est_font_size:.2f}, method=block_bbox")
+                                logger.info(f"[SUPPLEMENT] page={page_num}: 创建补充 TextBlock, text='{combined_text[:60]}', pdf_bbox={group_pdf_bbox}")
 
-                        logger.info(f"[SUPPLEMENT] page={page_num}: 共创建 {len(groups)} 个补充 TextBlock")
+                            logger.info(f"[SUPPLEMENT] page={page_num}: 共创建 {len(groups)} 个补充 TextBlock")
+                        else:
+                            logger.debug(f"[SUPPLEMENT] page={page_num}: 所有 textline 均被已处理 LayoutBlock 覆盖或无文本数据")
                     else:
                         logger.debug(f"[SUPPLEMENT] page={page_num}: 所有 textline 均被已处理 LayoutBlock 覆盖")
                 else:
@@ -1074,15 +1121,19 @@ class PaddleOcrExtractor(OcrExtractor):
             if status_callback:
                 status_callback('step_start', {'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME, 'total_pages': len(target_pages)})
             layout_pipeline = None
-            _step1_use_formula = not self._skip_formula
-            if _step1_use_formula:
+            use_formula = not self._skip_formula
+            if use_formula:
                 try:
-                    layout_pipeline = self._create_pipeline(use_table=not self._skip_table, use_formula=True, use_region_detection=False, cpu_threads=self.cpu_threads)
+                    layout_pipeline = self._create_pipeline(
+                        use_table=not self._skip_table, use_formula=True,
+                        use_region_detection=False, cpu_threads=self.cpu_threads)
                 except MemoryError as e:
                     logger.warning(f"步骤1启用公式识别时内存不足，回退到 use_formula=False: {e}")
-                    _step1_use_formula = False
+                    use_formula = False
             if layout_pipeline is None:
-                layout_pipeline = self._create_pipeline(use_table=not self._skip_table, use_formula=False, use_region_detection=False, cpu_threads=self.cpu_threads)
+                layout_pipeline = self._create_pipeline(
+                    use_table=not self._skip_table, use_formula=False,
+                    use_region_detection=False, cpu_threads=self.cpu_threads)
             self._log_memory("步骤1管线创建")
             all_layout_results = {}
             text_blocks_by_page = {}
@@ -1093,7 +1144,7 @@ class PaddleOcrExtractor(OcrExtractor):
                     img_path = page_info['img_path']
                     result = self._process_page_layout(
                         layout_pipeline, img_path, page_num, page_info,
-                        use_formula=_step1_use_formula
+                        use_formula=use_formula
                     )
                     text_blocks_by_page[page_num] = result['text_blocks']
                     all_layout_results[page_num] = result

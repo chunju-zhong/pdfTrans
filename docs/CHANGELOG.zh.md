@@ -2,6 +2,35 @@
 
 ## 2026-06-05
 
+- 修复第28页OCR文本提取丢失（标题"Aim"和段落未识别）：
+  - 修复 `paddle_extractor.py` 第599行 `rec_text` → `rec_texts` 拼写错误，导致所有 textline 文本为 None
+  - 从 `NON_BODY_LABELS` 中移除 `header` — 布局标签 `header` 现在默认作为正文处理；真正的页眉由 `text_analyzer.py` 基于多页重复模式判断
+  - 修复 `_add_similar_blocks` 短文本误判：短文本（<20字符）仅在100%相同时标记为非正文；长短文本间使用≥95%阈值；长文本间使用≥90%阈值
+  - 新增 `processed_pixel_bboxes` 仅跟踪成功创建的块，防止空文本块阻止补充捕获
+  - 放宽补充捕获前提条件：从 `len(textline_texts) > 0` 改为 `len(textline_boxes) > 0`
+  - 为文本提取失败添加 `[TEXT_SKIP]` WARNING 日志，为 `rec_texts` 长度不匹配添加 `[OCR_WARN]` 日志
+- 代码审查优化：
+  - 提取补充捕获文本过滤逻辑为 `_filter_uncovered_textlines` 静态方法，嵌套从5层降至3层
+  - 为 `else`（未知标签）分支添加 `[TEXT_SKIP]` WARNING 日志，与 TEXT_LABELS 分支保持一致
+  - 将 `SHORT_TEXT_THRESHOLD` 从局部变量提升为 `text_analyzer.py` 模块级常量
+  - 将 `rec_texts` 长度不匹配日志标签从 `[FONT_DEBUG]` 改为 `[OCR_WARN]`
+  - 清理 `_step1_use_formula` 变量命名为 `use_formula`
+- 回归测试修复：
+  - 修复 `test_system_profiler.py` 4个 tier 测试失败：添加 `total_memory_gb` 参数匹配 tier 阈值
+  - 在 `pytest.ini` 中添加 `--ignore=tests/test_simple_pdf_gen.py` 防止收集崩溃
+  - 修复6个测试文件的 PytestReturnNotNoneWarning：将 `return True/False` 替换为 `assert` 语句
+- 相关文件：
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/extractors/text_analyzer.py`
+  - `tests/test_ocr_extractor.py`
+  - `tests/test_system_profiler.py`
+  - `tests/test_chapter_identifier_cache.py`
+  - `tests/test_list_item_continuation.py`
+  - `tests/test_semantic_merge_optimization.py`
+  - `tests/test_table_text_in_glossary.py`
+  - `tests/test_two_phase_merge.py`
+  - `pytest.ini`
+
 - 修复翻译进度提示不准确和进度倒退问题：
   - 重新分配阶段百分比区间：init 0-5, extraction 5-40, semantic_merge 40-50, translation 50-85, table_translation 85-92, generation 92-98, clean 98-100
   - 修复 `models/phase_config.py` 整数截断问题：`calculate_progress` 使用 `round()` 替代 `//`

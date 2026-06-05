@@ -90,7 +90,7 @@ def test_parallel_batch_analyze():
     assert len(results) - sum(results) > 0, "应该有一些False结果"
 
     logger.info("✅ parallel_batch_analyze 测试通过")
-    return True
+
 
 
 def test_parallel_batch_analyze_empty():
@@ -106,7 +106,6 @@ def test_parallel_batch_analyze_empty():
     assert results == [], f"空输入应返回空列表，实际: {results}"
 
     logger.info("✅ 空输入测试通过")
-    return True
 
 
 def test_parallel_batch_analyze_single_batch():
@@ -131,7 +130,6 @@ def test_parallel_batch_analyze_single_batch():
     assert all(results), f"所有结果应为True，实际: {results}"
 
     logger.info("✅ 单批次测试通过")
-    return True
 
 
 def test_merge_semantic_blocks_two_phase():
@@ -166,7 +164,7 @@ def test_merge_semantic_blocks_two_phase():
     assert len(merged_blocks) <= len(text_blocks), "合并块数量不应超过原始块数量"
 
     logger.info("✅ 两阶段合并测试通过")
-    return True
+
 
 
 def test_merge_semantic_blocks_two_phase_empty():
@@ -185,7 +183,6 @@ def test_merge_semantic_blocks_two_phase_empty():
     assert block_mapping == [], "空输入应返回空映射"
 
     logger.info("✅ 空输入两阶段合并测试通过")
-    return True
 
 
 def test_merge_semantic_blocks_two_phase_single_block():
@@ -208,7 +205,6 @@ def test_merge_semantic_blocks_two_phase_single_block():
     assert merged_blocks[0].block_text == "Only one block", "文本内容应一致"
 
     logger.info("✅ 单块两阶段合并测试通过")
-    return True
 
 
 def run_all_tests():

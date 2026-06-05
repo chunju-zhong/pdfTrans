@@ -2,6 +2,35 @@
 
 ## 2026-06-05
 
+- Fixed OCR text extraction missing on page 28 (title "Aim" and paragraph not recognized):
+  - Fixed `rec_text` → `rec_texts` typo in `paddle_extractor.py` line 599, causing all textline text to be None
+  - Removed `header` from `NON_BODY_LABELS` — layout labels like `header` are now treated as body text by default; actual page headers are identified by `text_analyzer.py` based on multi-page repetition patterns
+  - Fixed `_add_similar_blocks` short text false positives: short text (<20 chars) only marked as non-body when 100% identical; long-short pairs use ≥95% threshold; long-long pairs use ≥90% threshold
+  - Added `processed_pixel_bboxes` to track only successfully created blocks, preventing empty-text blocks from blocking supplement capture
+  - Relaxed supplement capture precondition from `len(textline_texts) > 0` to `len(textline_boxes) > 0`
+  - Added `[TEXT_SKIP]` WARNING log for text extraction failures and `[OCR_WARN]` log for `rec_texts` length mismatch
+- Code review optimizations:
+  - Extracted supplement capture text filter logic into `_filter_uncovered_textlines` static method, reducing nesting from 5 to 3 levels
+  - Added `[TEXT_SKIP]` WARNING log to `else` (unknown label) branch for consistency with TEXT_LABELS branch
+  - Moved `SHORT_TEXT_THRESHOLD` from local variable to module-level constant in `text_analyzer.py`
+  - Changed `rec_texts` length mismatch log tag from `[FONT_DEBUG]` to `[OCR_WARN]`
+  - Cleaned up `_step1_use_formula` variable naming to `use_formula`
+- Regression test fixes:
+  - Fixed `test_system_profiler.py` 4 tier test failures: added `total_memory_gb` parameter matching tier thresholds
+  - Added `--ignore=tests/test_simple_pdf_gen.py` to `pytest.ini` to prevent collection crash
+  - Fixed PytestReturnNotNoneWarning in 6 test files: replaced `return True/False` with `assert` statements
+- Related files:
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/extractors/text_analyzer.py`
+  - `tests/test_ocr_extractor.py`
+  - `tests/test_system_profiler.py`
+  - `tests/test_chapter_identifier_cache.py`
+  - `tests/test_list_item_continuation.py`
+  - `tests/test_semantic_merge_optimization.py`
+  - `tests/test_table_text_in_glossary.py`
+  - `tests/test_two_phase_merge.py`
+  - `pytest.ini`
+
 - Fixed inaccurate translation progress display and progress regression:
   - Reassigned phase percentage ranges: init 0-5, extraction 5-40, semantic_merge 40-50, translation 50-85, table_translation 85-92, generation 92-98, clean 98-100
   - Fixed `models/phase_config.py` integer truncation: `calculate_progress` uses `round()` instead of `//`

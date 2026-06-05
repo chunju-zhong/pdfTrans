@@ -4,6 +4,8 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+SHORT_TEXT_THRESHOLD = 20
+
 def calculate_text_similarity(text1, text2):
     """计算两个文本的相似度
     
@@ -57,7 +59,12 @@ def _lcs_length(s1, s2):
     return dp[m][n]
 
 def _add_similar_blocks(block_list1, block_list2, processed_pairs, non_body_texts):
-    """比较两个列表中的文本块，将相似度超过90%的添加到非正文文本集合
+    """比较两个列表中的文本块，将相似度超过阈值的添加到非正文文本集合
+    
+    根据文本长度使用不同的相似度阈值：
+    - 两个文本块长度均<20字符：仅当完全相同（相似度=100%）才标记
+    - 一个<20字符另一个≥20字符：相似度≥95%才标记
+    - 两个文本块长度均≥20字符：相似度≥90%才标记
     
     Args:
         block_list1 (list): 第一个文本块列表，每个元素为 (page_num, block)
@@ -80,10 +87,26 @@ def _add_similar_blocks(block_list1, block_list2, processed_pairs, non_body_text
             # 计算文本相似度
             similarity = calculate_text_similarity(block1.block_text, block2.block_text)
             
-            if similarity >= 0.9:
+            # 根据文本长度确定相似度阈值
+            len1 = len(block1.block_text)
+            len2 = len(block2.block_text)
+            both_short = len1 < SHORT_TEXT_THRESHOLD and len2 < SHORT_TEXT_THRESHOLD
+            mixed_length = (len1 < SHORT_TEXT_THRESHOLD) != (len2 < SHORT_TEXT_THRESHOLD)
+            
+            if both_short:
+                # 短文本仅当完全相同时才标记为非正文
+                threshold = 1.0
+            elif mixed_length:
+                # 长短文本之间使用更严格的阈值
+                threshold = 0.95
+            else:
+                # 长文本之间保持当前阈值
+                threshold = 0.9
+            
+            if similarity >= threshold:
                 non_body_texts.add(block1.block_text)
                 non_body_texts.add(block2.block_text)
-                logger.debug(f"相似度识别为页眉页脚: 页面{page1} '{block1.block_text}' 与 页面{page2} '{block2.block_text}'，相似度: {similarity:.2f}")
+                logger.debug(f"相似度识别为页眉页脚: 页面{page1} '{block1.block_text}' 与 页面{page2} '{block2.block_text}'，相似度: {similarity:.2f}，阈值: {threshold}")
 
 def identify_header_footer(pages, page_sizes=None):
     """识别页眉和页脚

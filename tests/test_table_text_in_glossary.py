@@ -42,14 +42,9 @@ def test_table_text_extraction_logic():
 def test_glossary_service_import():
     """测试术语提取服务导入"""
     print("\n=== 测试术语提取服务导入 ===")
-    try:
-        from services.glossary_service import glossary_service
-        print("术语提取服务导入成功")
-        print(f"服务类型: {type(glossary_service)}")
-        return True
-    except Exception as e:
-        print(f"术语提取服务导入失败: {str(e)}")
-        return False
+    from services.glossary_service import glossary_service
+    print("术语提取服务导入成功")
+    print(f"服务类型: {type(glossary_service)}")
 
 
 def test_method_exists():

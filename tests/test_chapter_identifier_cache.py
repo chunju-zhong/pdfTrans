@@ -90,11 +90,10 @@ def test_cache_optimization():
         print(f"_chapter_mapping 已构建: {has_chapter_mapping2}")
         
         print("\n=== 测试完成 ===")
-        return True
-        
+
     except Exception as e:
         logger.error(f"测试过程中出错: {str(e)}")
-        return False
+        raise
 
 if __name__ == "__main__":
     test_cache_optimization()

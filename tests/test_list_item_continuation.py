@@ -79,20 +79,14 @@ def test_list_item_continuation():
     logger.info(f"测试结果: {results}")
     
     # 检查文本对6的结果
-    if not results[0]:
-        logger.error("❌ 测试失败：文本对6应该合并")
-        return False
-    
+    assert results[0], "文本对6应该合并"
+
     # 检查文本对7的结果
-    if results[1]:
-        logger.error("❌ 测试失败：文本对7不应该合并")
-        return False
-    
+    assert not results[1], "文本对7不应该合并"
+
     logger.info("\n✅ 所有测试用例通过：")
     logger.info("- 文本对6：块1是列表项，块2是其延续，正确判断为应该合并")
     logger.info("- 文本对7：块2是新的列表项，正确判断为不应该合并")
-    
-    return True
 
 if __name__ == "__main__":
     success = test_list_item_continuation()
