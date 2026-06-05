@@ -53,12 +53,13 @@ def _is_sentence_continuation(curr_text):
     # 因为中文句子没有大小写区分，无法通过首字母大小写判断
     return True
 
-def merge_semantic_blocks(text_blocks):
+def merge_semantic_blocks(text_blocks, progress_callback=None):
     """按语义合并文本块
 
     Args:
         text_blocks (list): 所有原始块列表（已按垂直位置排序，仅包含正文块）
                           每个元素是TextBlock对象
+        progress_callback (callable, optional): 进度回调函数，签名为 callback(current, total)
 
     Returns:
         tuple: (merged_blocks, block_mapping)
@@ -214,6 +215,9 @@ def merge_semantic_blocks(text_blocks):
             current_merged.max_height = max(current_merged.max_height, curr_height)
 
         i += 1
+        if progress_callback:
+            progress_callback(i, len(text_blocks))
+
     # 添加最后一个合并块（如果存在）
     if current_merged is not None:
         merged_blocks.append(current_merged)
@@ -672,7 +676,7 @@ def split_translated_result(merged_translation, original_blocks):
     return translated_blocks
 
 
-def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
+def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, progress_callback=None):
     """使用大模型按语义合并文本块（批量处理）
 
     Args:
@@ -680,6 +684,7 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
                           每个元素是TextBlock对象
         semantic_analyzer: 语义分析器实例，用于调用LLM进行语义分析
         source_lang (str): 源语言代码
+        progress_callback (callable, optional): 进度回调函数，签名为 progress_callback(current, total)
 
     Returns:
         tuple: (merged_blocks, block_mapping)
@@ -888,6 +893,9 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang):
                 # 重置i到批次开始位置，以便下一次循环重新尝试处理这些块
                 i = batch_start
 
+        if progress_callback:
+            progress_callback(i, total_blocks)
+
 
     # 添加最后一个合并块
     if current_merged is not None:
@@ -971,7 +979,7 @@ def parallel_batch_analyze(semantic_analyzer, text_pairs, source_lang, max_worke
     return all_results
 
 
-def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, source_lang, max_workers=5, batch_size=20):
+def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, source_lang, max_workers=5, batch_size=20, progress_callback=None):
     """使用大模型按语义合并文本块（两阶段并行版本）
 
     阶段1：并行调用LLM获取所有文本对的合并判断
@@ -984,6 +992,7 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
         source_lang (str): 源语言代码
         max_workers (int): 最大并行线程数，默认5
         batch_size (int): 每批处理的文本对数量，默认20
+        progress_callback (callable, optional): 进度回调函数，签名为 progress_callback(current, total)
 
     Returns:
         tuple: (merged_blocks, block_mapping)
@@ -1018,6 +1027,9 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
     )
 
     logger.info(f"阶段1完成：获取了 {len(merge_decisions)} 个合并判断，耗时 {time.time() - start_time:.2f}秒")
+
+    if progress_callback:
+        progress_callback(len(text_pairs), len(text_pairs) * 2)  # phase 1 = 50%
 
     first_block = text_blocks[0]
 
@@ -1108,6 +1120,9 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
 
             current_merged.max_width = max(current_merged.max_width, curr_width)
             current_merged.max_height = max(current_merged.max_height, curr_height)
+
+        if progress_callback:
+            progress_callback(len(text_pairs) + i, len(text_pairs) * 2)
 
     if current_merged is not None:
         merged_blocks.append(current_merged)

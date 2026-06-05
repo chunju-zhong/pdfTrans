@@ -42,7 +42,7 @@ class GlossaryService:
             # 2. 预先提取所有页面的文本，避免在多线程中重复打开PDF文件
             logger.info("开始预提取所有页面的文本")
             if task:
-                task.update_phase_progress('init', 100, '开始提取PDF文本...')
+                task.update_phase_progress('pdf_extraction', 0, '正在提取PDF文本...')
             page_texts = self._extract_text_from_pdf(pdf_path, pages)
             if task:
                 task.update_phase_progress('pdf_extraction', 100, 'PDF文本提取完成，开始提取术语...')
@@ -150,23 +150,21 @@ class GlossaryService:
         """
         try:
             logger.info(f"开始同步从PDF中提取术语表: {pdf_path}")
-            
-            if progress_callback:
-                progress_callback(0, '开始提取PDF文本...')
-            
+
             # 1. 创建术语提取器
             glossary_extractor = create_glossary_extractor(extractor_type)
-            
+
             # 2. 预先提取所有页面的文本
             logger.info("开始预提取所有页面的文本")
             if task:
-                task.update_phase_progress('init', 100, '开始提取PDF文本...')
+                task.update_phase_progress('pdf_extraction', 0, '正在提取PDF文本...')
+            if progress_callback:
+                progress_callback(task.progress, task.message)
             page_texts = self._extract_text_from_pdf(pdf_path, pages, tmp_dir=tmp_dir)
             if task:
                 task.update_phase_progress('pdf_extraction', 100, 'PDF文本提取完成，开始提取术语...')
-            
             if progress_callback:
-                progress_callback(20, 'PDF文本提取完成')
+                progress_callback(task.progress, task.message)
             
             # 3. 获取提取到的页码列表
             page_nums = list(page_texts.keys())
@@ -201,8 +199,7 @@ class GlossaryService:
                     if task:
                         task.update_phase_progress('term_extraction', phase_percent, f'正在处理第{page_num}页，共{total_pages}页...')
                     if progress_callback:
-                        progress_percent = 20 + int((processed_pages / total_pages) * 70)
-                        progress_callback(progress_percent, f'正在提取术语: {processed_pages}/{total_pages}页')
+                        progress_callback(task.progress, task.message)
                     
                     try:
                         result = future.result()
@@ -241,14 +238,12 @@ class GlossaryService:
             if task:
                 task.update_phase_progress('term_extraction', 100, '术语提取完成！')
             if progress_callback:
-                progress_callback(100, '术语提取完成！')
+                progress_callback(task.progress, task.message)
             
             return final_glossary
             
         except Exception as e:
             logger.error(f"从PDF中提取术语表失败: {str(e)}")
-            if progress_callback:
-                progress_callback(0, f'术语提取失败: {str(e)}')
             return ""
     
     def _extract_text_from_pdf(self, pdf_path, pages=None, tmp_dir=None):

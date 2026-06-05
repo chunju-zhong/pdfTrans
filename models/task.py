@@ -59,7 +59,7 @@ class Task(CopyableMixin):
                 return False
             start = phase_info['start']
             end = phase_info['end']
-            overall_progress = start + (end - start) * phase_percent // 100
+            overall_progress = start + round((end - start) * phase_percent / 100)
             self.progress = max(0, min(100, overall_progress))
             if message:
                 self.message = message
@@ -77,7 +77,7 @@ class Task(CopyableMixin):
             self.result_file = result_file
             self.status = TASK_STATUS['COMPLETED']
             self.progress = 100
-            self.message = '翻译完成！'
+            self.message = '术语提取完成！' if self.task_type == 'glossary' else '翻译完成！'
             self.set_end_time()
             return True
     
@@ -85,7 +85,6 @@ class Task(CopyableMixin):
         with self.lock:
             self.error = error_message
             self.status = TASK_STATUS['ERROR']
-            self.progress = 0
             self.message = error_message
             self.set_end_time()
     
@@ -97,8 +96,12 @@ class Task(CopyableMixin):
         with self.lock:
             self.canceled = True
             self.status = TASK_STATUS['ERROR']
-            self.message = '翻译已取消'
-            self.error = '用户取消了翻译任务'
+            if self.task_type == 'glossary':
+                self.message = '术语提取已取消'
+                self.error = '用户取消了术语提取任务'
+            else:
+                self.message = '翻译已取消'
+                self.error = '用户取消了翻译任务'
             self.set_end_time()
     
     def add_attachment(self, attachment_file):

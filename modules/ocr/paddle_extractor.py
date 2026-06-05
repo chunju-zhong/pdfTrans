@@ -73,6 +73,12 @@ class PaddleOcrExtractor(OcrExtractor):
     - 步骤2:   图表/印章裁剪 → PdfImage
     """
 
+    # 步骤定义常量
+    STEP_LAYOUT_OCR = 1
+    STEP_LAYOUT_OCR_NAME = '版面分析+文本+公式+表格'
+    STEP_IMAGE_CROP = 2
+    STEP_IMAGE_CROP_NAME = '图像裁剪'
+
     # 需要从parsing_res_list中提取文本的版面标签
     TEXT_LABELS = {
         'text', 'title', 'paragraph_title', 'content', 'document_title', 'doc_title', 'section_title',
@@ -234,7 +240,7 @@ class PaddleOcrExtractor(OcrExtractor):
             step_name = "公式识别"
         else:
             required = min(int(available * self._memory_factor), self._memory_cap_layout)
-            step_name = "版面分析+文本OCR"
+            step_name = self.STEP_LAYOUT_OCR_NAME
 
         if available < required:
             required_mb = required / (1024 * 1024)
@@ -1066,7 +1072,7 @@ class PaddleOcrExtractor(OcrExtractor):
             step1_start = time.time()
             self._log_memory("步骤1开始")
             if status_callback:
-                status_callback('step_start', {'step': 1, 'step_name': '版面分析+文本OCR', 'total_pages': len(target_pages)})
+                status_callback('step_start', {'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME, 'total_pages': len(target_pages)})
             layout_pipeline = None
             _step1_use_formula = not self._skip_formula
             if _step1_use_formula:
@@ -1107,7 +1113,8 @@ class PaddleOcrExtractor(OcrExtractor):
                 pages_done += 1
                 if status_callback:
                     status_callback('step_progress', {
-                        'step': 1, 'page_num': page_num,
+                        'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME,
+                        'page_num': page_num,
                         'pages_done': pages_done, 'total_pages': len(target_pages),
                     })
 
@@ -1127,14 +1134,14 @@ class PaddleOcrExtractor(OcrExtractor):
 
             step1_duration = time.time() - step1_start
             self._log_memory("步骤1完成")
-            logger.info("步骤1完成: 版面分析+文本OCR，管线已释放，布局数据已精简")
+            logger.info(f"步骤{self.STEP_LAYOUT_OCR}完成: {self.STEP_LAYOUT_OCR_NAME}，管线已释放，布局数据已精简")
             formula_detected_pages = [p for p, r in all_layout_results.items() if r.get('has_formula', False)]
             if formula_detected_pages:
                 logger.info("步骤1检测到公式的页面: %s", formula_detected_pages)
             else:
                 logger.info("步骤1未检测到公式页面")
             if status_callback:
-                status_callback('step_complete', {'step': 1, 'step_name': '版面分析+文本OCR', 'duration_sec': round(step1_duration, 1)})
+                status_callback('step_complete', {'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME, 'duration_sec': round(step1_duration, 1)})
 
             # 表格已在步骤1中提取
             tables = []
@@ -1146,6 +1153,8 @@ class PaddleOcrExtractor(OcrExtractor):
                 logger.info("步骤1未检测到表格")
 
             # 步骤2: 图表/印章图像裁剪
+            if status_callback:
+                status_callback('step_start', {'step': self.STEP_IMAGE_CROP, 'step_name': self.STEP_IMAGE_CROP_NAME})
             chart_seal_images = []
             for page_num in target_pages:
                 layout_data = all_layout_results.get(page_num, {})
@@ -1161,6 +1170,8 @@ class PaddleOcrExtractor(OcrExtractor):
                         chart_seal_images.append(img)
             logger.info(f"步骤2完成: 图表/印章裁剪，共{len(chart_seal_images)}张")
             self._log_memory("步骤2完成")
+            if status_callback:
+                status_callback('step_complete', {'step': self.STEP_IMAGE_CROP, 'step_name': self.STEP_IMAGE_CROP_NAME})
 
             # 合并结果
             pdf_pages = []

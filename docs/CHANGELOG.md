@@ -2,6 +2,39 @@
 
 ## 2026-06-05
 
+- Fixed inaccurate translation progress display and progress regression:
+  - Reassigned phase percentage ranges: init 0-5, extraction 5-40, semantic_merge 40-50, translation 50-85, table_translation 85-92, generation 92-98, clean 98-100
+  - Fixed `models/phase_config.py` integer truncation: `calculate_progress` uses `round()` instead of `//`
+  - Fixed `models/task.py` progress calculation: `update_phase_progress` uses `round()` instead of `//`, `set_error` preserves current progress instead of resetting to 0
+  - Fixed `services/translation_service.py` OCR progress callback logic:
+    - `STEP_WEIGHTS` changed from `{1: 0.45, 1.5: 0.05, 2: 0.25, 3: 0.25}` to `{1: 0.80, 2: 0.20}`, removed non-existent steps 1.5 and 3
+    - Added `_prior_weights` table, `step_start` uses cumulative weight of previous steps to prevent progress regression to 5%
+    - `step_complete` advances progress to cumulative weight upper bound
+    - Unified message format: step_start/step_progress/step_complete
+    - Removed `message` dead code and step 1.5 skip warning handling
+  - Fixed `modules/ocr/paddle_extractor.py` OCR step callbacks:
+    - Defined step constants `STEP_LAYOUT_OCR`/`STEP_LAYOUT_OCR_NAME`/`STEP_IMAGE_CROP`/`STEP_IMAGE_CROP_NAME`, eliminated hardcoding
+    - Step 1 name changed from "版面分析+文本OCR" to "版面分析+文本+公式+表格"
+    - Added `step_start`/`step_complete` callbacks for step 2 (image cropping)
+    - Added `step_name` field to `step_progress` payload
+    - Removed `total_pages` from step 2 `step_start` (step 2 doesn't process by page)
+  - Fixed `services/translation_service.py` translation flow progress:
+    - Fixed `_complete_task` flow: generation 100% after file generation, clean 0%/100% before/after cleanup
+    - `translate_tables` returns empty list directly when no tables, skipping table_translation phase
+    - `generate_output_files` updates fine-grained progress by output format
+    - `translate_content` passes `progress_callback` to merge functions
+  - Fixed `utils/text_processing.py` merge functions to support progress callback
+  - Fixed `services/glossary_service.py` glossary extraction progress: removed duplicate init setting, added pdf_extraction start progress
+  - Fixed `app.py` glossary error handling to use `set_error()`
+- Related files:
+  - `models/phase_config.py`
+  - `models/task.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `services/translation_service.py`
+  - `services/glossary_service.py`
+  - `utils/text_processing.py`
+  - `app.py`
+
 - Fixed OCR formula recognition failure across all three output formats (PDF/Word/Markdown):
   - Fixed `modules/ocr/system_profiler.py` memory tier logic: `_determine_tier` now uses physical memory (`total_memory_gb`) instead of available memory, preventing 16GB machines from being incorrectly downgraded to `minimal` tier
   - Adjusted `system_profiler.py` DPI tier parameters: `minimal` from 100 to 120, `medium` from 120 to 150, `unlimited` from 150 to 200, improving OCR recognition quality on low-memory machines

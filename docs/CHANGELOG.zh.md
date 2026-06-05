@@ -2,6 +2,39 @@
 
 ## 2026-06-05
 
+- 修复翻译进度提示不准确和进度倒退问题：
+  - 重新分配阶段百分比区间：init 0-5, extraction 5-40, semantic_merge 40-50, translation 50-85, table_translation 85-92, generation 92-98, clean 98-100
+  - 修复 `models/phase_config.py` 整数截断问题：`calculate_progress` 使用 `round()` 替代 `//`
+  - 修复 `models/task.py` 进度计算：`update_phase_progress` 使用 `round()` 替代 `//`，`set_error` 保留当前进度值不再归零
+  - 修复 `services/translation_service.py` OCR 进度回调逻辑：
+    - `STEP_WEIGHTS` 从 `{1: 0.45, 1.5: 0.05, 2: 0.25, 3: 0.25}` 改为 `{1: 0.80, 2: 0.20}`，移除不存在的步骤 1.5 和 3
+    - 新增 `_prior_weights` 表，`step_start` 时使用前面步骤的累积权重，避免进度倒退到 5%
+    - `step_complete` 时进度推进到累积权重上限
+    - 统一消息格式：step_start/step_progress/step_complete 三种格式
+    - 移除 `message` 死代码和步骤 1.5 跳过警告处理
+  - 修复 `modules/ocr/paddle_extractor.py` OCR 步骤回调：
+    - 定义步骤常量 `STEP_LAYOUT_OCR`/`STEP_LAYOUT_OCR_NAME`/`STEP_IMAGE_CROP`/`STEP_IMAGE_CROP_NAME`，消除硬编码
+    - 步骤 1 名称从"版面分析+文本OCR"改为"版面分析+文本+公式+表格"
+    - 为步骤 2（图像裁剪）添加 `step_start`/`step_complete` 回调
+    - `step_progress` payload 添加 `step_name` 字段
+    - 步骤 2 `step_start` 移除 `total_pages`（步骤 2 不按页处理）
+  - 修复 `services/translation_service.py` 翻译流程进度：
+    - `_complete_task` 流程修正：generation 100% 在文件生成后，clean 0%/100% 在清理前后
+    - `translate_tables` 无表格时直接返回空列表，不触发 table_translation 阶段
+    - `generate_output_files` 按输出格式更新细粒度进度
+    - `translate_content` 为合并函数传入 `progress_callback`
+  - 修复 `utils/text_processing.py` 合并函数支持进度回调
+  - 修复 `services/glossary_service.py` 术语提取进度：移除重复 init 设置，添加 pdf_extraction 起始进度
+  - 修复 `app.py` glossary 错误处理改用 `set_error()`
+- 相关文件：
+  - `models/phase_config.py`
+  - `models/task.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `services/translation_service.py`
+  - `services/glossary_service.py`
+  - `utils/text_processing.py`
+  - `app.py`
+
 - 修复OCR公式识别三端输出失败问题：
   - 修复 `modules/ocr/system_profiler.py` 内存分级逻辑：`_determine_tier` 改为按物理内存（`total_memory_gb`）分级，而非可用内存，避免因系统占用导致16GB机器被错误降级为 `minimal`
   - 调整 `system_profiler.py` DPI分级参数：`minimal` 从100提升至120，`medium` 从120提升至150，`unlimited` 从150提升至200，提高低内存机器的OCR识别质量

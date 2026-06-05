@@ -333,8 +333,7 @@ def process_glossary_extraction(task, input_filepath, source_lang, target_lang, 
         
     except Exception as e:
         logger.error(f"术语提取任务失败: {str(e)}")
-        task.set_status('error')
-        task.error = str(e)
+        task.set_error(f"术语提取失败: {str(e)}")
         # 清理临时文件
         if os.path.exists(input_filepath):
             os.remove(input_filepath)

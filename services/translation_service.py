@@ -11,6 +11,7 @@ from modules.pdf_generator import PdfGenerator
 from modules.docx_generator import DocxGenerator
 from modules.markdown_generator import create_markdown_generator
 from modules.semantic_analyzer_factory import SemanticAnalyzerFactory
+from modules.ocr.paddle_extractor import PaddleOcrExtractor
 
 from models.extraction import PdfPage, PdfCell
 
@@ -185,7 +186,20 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 开始提取PDF文本")
         ocr_progress_callback = None
         if ocr_mode:
-            STEP_WEIGHTS = {1: 0.45, 1.5: 0.05, 2: 0.25, 3: 0.25}
+            STEP_WEIGHTS = {PaddleOcrExtractor.STEP_LAYOUT_OCR: 0.80, PaddleOcrExtractor.STEP_IMAGE_CROP: 0.20}
+            # 累积权重表，用于 step_complete 时快速计算进度上限
+            _cumulative_weights = {}
+            _cum = 0.0
+            for _s, _w in sorted(STEP_WEIGHTS.items()):
+                _cum += _w
+                _cumulative_weights[_s] = _cum
+            # 前置累积权重表，用于 step_start 时计算进度下限
+            _prior_weights = {}
+            _prior = 0.0
+            for _s, _w in sorted(STEP_WEIGHTS.items()):
+                _prior_weights[_s] = _prior
+                _prior += _w
+
             def _ocr_progress_cb(msg_type, payload):
                 step = payload.get('step', 1)
                 step_name = payload.get('step_name', '')
@@ -193,21 +207,17 @@ class TranslationService:
                 total_pages = payload.get('total_pages', 1)
                 batch_idx = payload.get('batch_idx')
                 total_batches = payload.get('total_batches')
-                message = payload.get('message')
 
                 if msg_type == 'step_start':
-                    pages_done = 0
-
-                if msg_type == 'step_complete' and payload.get('skipped'):
-                    reason = payload.get('reason', '')
-                    if step == 1.5:
-                        warn_msg = ('公式识别因内存不足被跳过' if reason == 'memory'
-                                    else '公式识别已被配置跳过')
-                        task.add_warning(warn_msg, context={"process": "extraction", "step": step, "reason": reason})
-
-                step_weight = STEP_WEIGHTS.get(step, 0.05)
-                step_progress = pages_done / max(total_pages, 1)
-                ocr_progress = step_weight * step_progress
+                    # 步骤开始时，进度使用前面步骤的累积权重，避免倒退
+                    ocr_progress = _prior_weights.get(step, 0.0)
+                elif msg_type == 'step_complete':
+                    # 步骤完成时，进度推进到当前步骤的累积权重上限
+                    ocr_progress = _cumulative_weights.get(step, 1.0)
+                else:
+                    step_weight = STEP_WEIGHTS.get(step, 0.05)
+                    step_progress = pages_done / max(total_pages, 1)
+                    ocr_progress = _prior_weights.get(step, 0.0) + step_weight * step_progress
 
                 if batch_idx is not None and total_batches is not None and total_batches > 0:
                     batch_base = batch_idx / total_batches
@@ -218,8 +228,10 @@ class TranslationService:
 
                 phase_percent = int(overall_ocr * 100)
 
-                if message:
-                    msg = f"OCR提取: {message}"
+                if msg_type == 'step_start':
+                    msg = f"OCR提取: {step_name}开始"
+                elif msg_type == 'step_complete':
+                    msg = f"OCR提取: {step_name}完成"
                 elif batch_idx is not None and total_batches is not None:
                     msg = f"OCR提取: 第{batch_idx+1}/{total_batches}批 - {step_name} {pages_done}/{total_pages}页"
                 else:
@@ -912,22 +924,25 @@ class TranslationService:
         """
         
         translated_tables = []
+
+        if not tables:
+            return translated_tables
+
+
+        if not task.update_phase_progress('table_translation', 0, '正在翻译表格内容...'):
+            # 任务被取消，直接返回
+            logger.info(f"任务 {task.task_id} 被取消")
+            return None
         
-        if tables:
-            if not task.update_phase_progress('table_translation', 0, '正在翻译表格内容...'):
-                # 任务被取消，直接返回
-                logger.info(f"任务 {task.task_id} 被取消")
-                return None
-            
-            logger.info(f"任务 {task.task_id} 开始翻译表格内容")
-            
-            # 提交翻译任务并处理结果
-            cell_results, total_cells = self._process_table_translation(task, tables, translator, source_lang, target_lang, doc_type, glossary)
-            
-            # 构建翻译后的表格
-            translated_tables = self._build_translated_tables(task, tables, cell_results)
-            
-            logger.info(f"任务 {task.task_id} 表格翻译完成，共 {len(translated_tables)} 个表格")
+        logger.info(f"任务 {task.task_id} 开始翻译表格内容")
+        
+        # 提交翻译任务并处理结果
+        cell_results, total_cells = self._process_table_translation(task, tables, translator, source_lang, target_lang, doc_type, glossary)
+        
+        # 构建翻译后的表格
+        translated_tables = self._build_translated_tables(task, tables, cell_results)
+        
+        logger.info(f"任务 {task.task_id} 表格翻译完成，共 {len(translated_tables)} 个表格")
         
         return translated_tables
     
@@ -1350,23 +1365,40 @@ class TranslationService:
             logger.info(f"任务 {task.task_id} 传递给生成器的blocks信息: 总页数={len(translated_content['blocks'])}, 总blocks数={total_blocks}")
         
         output_files = []
-        
+
+        # 计算需要生成的格式数量，用于细粒度进度
+        format_steps = []
+        if output_format in ['pdf', 'pdf_docx', 'all']:
+            format_steps.append(('PDF', 'pdf'))
+        if output_format in ['docx', 'pdf_docx', 'all']:
+            format_steps.append(('DOCX', 'docx'))
+        if output_format in ['md', 'markdown', 'all']:
+            format_steps.append(('Markdown', 'md'))
+        total_steps = len(format_steps)
+        completed_steps = 0
+
         # 处理PDF生成
         if output_format in ['pdf', 'pdf_docx', 'all']:
+            task.update_phase_progress('generation', int(completed_steps / total_steps * 100), '正在生成输出文件: PDF...')
             pdf_filename = self.generate_pdf_output(task, input_filepath, unique_id, filename, translated_content, target_lang, output_path, output_filename, target_pages=target_pages)
             output_files.append(pdf_filename)
-        
+            completed_steps += 1
+
         # 处理Word生成
         if output_format in ['docx', 'pdf_docx', 'all']:
+            task.update_phase_progress('generation', int(completed_steps / total_steps * 100), '正在生成输出文件: DOCX...')
             docx_filename = self.generate_docx_output(task, unique_id, filename, translated_content, extracted_images, target_lang, output_path, output_filename)
             output_files.append(docx_filename)
-        
+            completed_steps += 1
+
         # 处理Markdown生成
         if output_format in ['md', 'markdown', 'all']:
+            task.update_phase_progress('generation', int(completed_steps / total_steps * 100), '正在生成输出文件: Markdown...')
             logger.info(f"任务 {task.task_id} 开始生成Markdown输出")
             try:
                 md_filename = self.generate_markdown_output(task, unique_id, filename, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir)
                 output_files.append(md_filename)
+                completed_steps += 1
             except Exception as e:
                 logger.error(f"任务 {task.task_id} Markdown文档生成失败: {str(e)}")
                 # 抛出异常，让上层处理
@@ -1460,7 +1492,12 @@ class TranslationService:
         if semantic_merge:
             task.update_phase_progress('semantic_merge', 0, '正在进行语义合并...')
             logger.info(f"任务 {task.task_id} 开始语义块合并，原始块数量: {len(text_blocks)}")
-            
+
+            def _merge_progress_cb(current, total):
+                if total > 0:
+                    percent = int(current / total * 100)
+                    task.update_phase_progress('semantic_merge', percent, f'正在合并语义块: {current}/{total}')
+
             # 根据配置选择合并方法
             if use_llm_merging:
                 logger.info(f"任务 {task.task_id} 使用大模型进行语义块合并")
@@ -1470,15 +1507,16 @@ class TranslationService:
                     merged_blocks, block_mapping = merge_semantic_blocks_with_llm_two_phase(
                         text_blocks, semantic_analyzer, source_lang,
                         max_workers=config.MERGE_MAX_WORKERS,
-                        batch_size=config.MERGE_BATCH_SIZE
+                        batch_size=config.MERGE_BATCH_SIZE,
+                        progress_callback=_merge_progress_cb
                     )
                 else:
                     logger.info(f"任务 {task.task_id} 使用原始串行合并方法")
-                    merged_blocks, block_mapping = merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang)
+                    merged_blocks, block_mapping = merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, progress_callback=_merge_progress_cb)
             else:
                 logger.info(f"任务 {task.task_id} 使用规则-based方法进行语义块合并")
                 # 使用规则-based方法进行语义块合并
-                merged_blocks, block_mapping = merge_semantic_blocks(text_blocks)
+                merged_blocks, block_mapping = merge_semantic_blocks(text_blocks, progress_callback=_merge_progress_cb)
             
             logger.info(f"任务 {task.task_id} 语义块合并完成，原始块数量: {len(text_blocks)}, 合并后块数量: {len(merged_blocks)}")
             
@@ -1494,7 +1532,6 @@ class TranslationService:
             )
         else:
             logger.info(f"任务 {task.task_id} 跳过语义块合并，直接按原始块翻译")
-            task.update_phase_progress('semantic_merge', 100, '跳过语义合并，开始翻译...')
             # 直接翻译原始块
             return self.process_original_blocks(
                 task, text_blocks, translator, source_lang, target_lang, doc_type, glossary
@@ -1524,10 +1561,7 @@ class TranslationService:
             logger.info(f"后端接收到的chapter_split值: {chapter_split}")
             # 更新任务状态为处理中
             task.set_status('processing')
-            task.update_phase_progress('init', 0, '任务开始，正在初始化...')
-            task.update_phase_progress('init', 50, '正在检查源文件...')
-            task.update_phase_progress('init', 100, '源文件检查完成，准备提取内容')
-            
+
 
             # 清理输出目录中的旧文件
             self.cleanup_output_directory()
@@ -1575,7 +1609,9 @@ class TranslationService:
             if task.is_canceled():
                 self.cleanup_on_cancel(task, input_filepath)
                 return
-            
+
+            task.update_phase_progress('generation', 100, '输出文件生成完成')
+
             # 完成任务
             self._complete_task(task, input_filepath, output_files, is_cli=False)
             
@@ -1605,7 +1641,6 @@ class TranslationService:
         Returns:
             tuple: (translator, semantic_analyzer)
         """
-        task.update_phase_progress('translation', 0, '正在创建翻译器...')
         
         # 创建翻译器实例
         logger.info(f"任务 {task.task_id} 开始创建翻译器")
@@ -1639,8 +1674,7 @@ class TranslationService:
         Returns:
             dict: 翻译后的内容
         """
-        task.update_phase_progress('translation', 5, '准备开始翻译文本内容...')
-        
+
         logger.info(f"任务 {task.task_id} 开始翻译文本内容")
         # 准备翻译内容
         translated_content = {
@@ -1726,23 +1760,19 @@ class TranslationService:
             output_files: 输出文件名列表
             is_cli: 是否为CLI模式，CLI模式下不删除源文件
         """
-        logger.info(f"任务 {task.task_id} 准备更新进度到 90%")
-        if not task.update_phase_progress('generation', 50, '正在生成输出文件...'):
-            self.cleanup_on_cancel(task, input_filepath)
-            return
-        
+        logger.info(f"任务 {task.task_id} 准备清理临时文件")
         if not task.update_phase_progress('clean', 0, '正在清理临时文件...'):
             self.cleanup_on_cancel(task, input_filepath)
             return
-        
+
         # 清理临时文件（CLI模式下不删除源文件）
         if not is_cli:
             remove_file(input_filepath)
             logger.info(f"任务 {task.task_id} 已清理临时文件")
         else:
             logger.info(f"任务 {task.task_id} 为CLI模式，保留源文件")
-        
-        if not task.update_phase_progress('generation', 100, '翻译完成！'):
+
+        if not task.update_phase_progress('clean', 100, '临时文件清理完成'):
             self.cleanup_on_cancel(task, input_filepath)
             return
         
@@ -1790,15 +1820,7 @@ class TranslationService:
             
             # 更新任务状态为处理中
             task.set_status('processing')
-            task.update_phase_progress('init', 0, '任务开始，正在初始化...')
-            if progress_callback:
-                progress_callback(0, '任务开始，正在初始化...')
-            
-            task.update_phase_progress('init', 50, '正在检查源文件...')
-            task.update_phase_progress('init', 100, '源文件检查完成，准备提取内容')
-            if progress_callback:
-                progress_callback(5, '源文件检查完成')
-            
+
 
             # 清理输出目录中的旧文件（仅当使用默认输出目录时）
             if not output_path:
@@ -1817,7 +1839,7 @@ class TranslationService:
             text_blocks, tables, extracted_images, chapters, all_page_nums = extract_result
 
             if progress_callback:
-                progress_callback(10, 'PDF内容提取完成')
+                progress_callback(task.progress, task.message)
 
             # 创建翻译器和语义分析器
             translator, semantic_analyzer = self._create_translators(task, translator_type)
@@ -1826,7 +1848,7 @@ class TranslationService:
                 return None
 
             if progress_callback:
-                progress_callback(15, '翻译器创建完成')
+                progress_callback(task.progress, task.message)
 
             # 翻译文本内容
             translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums)
@@ -1835,8 +1857,8 @@ class TranslationService:
                 return None
             
             if progress_callback:
-                progress_callback(60, '文本翻译完成')
-            
+                progress_callback(task.progress, task.message)
+
             # 翻译表格内容
             translated_tables = self.translate_tables(
                 task, tables, translator, source_lang, target_lang, doc_type, glossary
@@ -1845,10 +1867,10 @@ class TranslationService:
                 logger.error(f"任务 {task.task_id} 表格翻译失败")
                 return None
             translated_content['tables'] = translated_tables
-            
+
             if progress_callback:
-                progress_callback(70, '表格翻译完成')
-            
+                progress_callback(task.progress, task.message)
+
             if task.is_canceled():
                 self.cleanup_on_cancel(task, input_filepath)
                 return None
@@ -1856,25 +1878,27 @@ class TranslationService:
             if not task.update_phase_progress('generation', 0, '正在生成输出文件...'):
                 self.cleanup_on_cancel(task, input_filepath)
                 return None
-            
+
             if progress_callback:
-                progress_callback(75, '正在生成输出文件...')
-            
+                progress_callback(task.progress, task.message)
+
             # 生成输出文件
             output_files = self._generate_outputs(task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir, target_pages=all_page_nums)
-            
-            if progress_callback:
-                progress_callback(95, '输出文件生成完成')
-            
+
             if task.is_canceled():
                 self.cleanup_on_cancel(task, input_filepath)
                 return None
-            
+
+            task.update_phase_progress('generation', 100, '输出文件生成完成')
+
+            if progress_callback:
+                progress_callback(task.progress, task.message)
+
             # 完成任务
             self._complete_task(task, input_filepath, output_files, is_cli=is_cli)
             
             if progress_callback:
-                progress_callback(100, '翻译完成！')
+                progress_callback(task.progress, task.message)
             
             # 清理OCR临时图片目录（所有输出文件生成完成后）
             self._cleanup_ocr_temp_images(extracted_images)
