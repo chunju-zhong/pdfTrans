@@ -1,5 +1,19 @@
 # 更新日志
 
+## 2026-06-06
+
+- 修复文本框超出原文宽度和页宽度：
+  - 修复 `pdf_generator.py` 溢出重试逻辑：扩展文本框时限制右/下边界不超过页面宽高（`min(x0+width, page.width)`）
+  - 修复 `paddle_extractor.py` `_compute_tight_bbox()` 宽度容差从 30% 降低到 10%
+  - 增加 tight bbox 页面宽度限制，防止 OCR 检测噪声导致 bbox 超出页面
+- 修复 tight bbox 高度过大：
+  - 在 `_compute_tight_bbox()` 中增加高度 10% 容差限制（与宽度对称），防止行间距导致 bbox 过高
+  - 新增 `_estimate_font_size_from_textlines()` 辅助方法，使用 textline 平均高度估算 font_size
+  - 修复 5 个非 TEXT_LABELS 路径（formula、figure_caption、else、supplement、formula_res_list）的 font_size 估算，从 `bbox_height * 0.75` 改为 textline 平均高度 * 0.75
+- 相关文件：
+  - `modules/pdf_generator.py`
+  - `modules/ocr/paddle_extractor.py`
+
 ## 2026-06-05
 
 - 修复第28页OCR文本提取丢失（标题"Aim"和段落未识别）：

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-06
+
+- Fixed text box exceeding original width and page width:
+  - Fixed `pdf_generator.py` overflow retry logic: clamped right/bottom edges to page boundaries (`min(x0+width, page.width)`)
+  - Reduced `paddle_extractor.py` `_compute_tight_bbox()` width tolerance from 30% to 10%
+  - Added page width clamping to tight bbox, preventing OCR detection noise from pushing bbox beyond page
+- Fixed tight bbox height being too large:
+  - Added height 10% tolerance clamping in `_compute_tight_bbox()` (symmetric with width), preventing line spacing from inflating bbox height
+  - Added `_estimate_font_size_from_textlines()` helper method, using average textline height for font_size estimation
+  - Fixed font_size estimation in 5 non-TEXT_LABELS paths (formula, figure_caption, else, supplement, formula_res_list) from `bbox_height * 0.75` to textline average height * 0.75
+- Related files:
+  - `modules/pdf_generator.py`
+  - `modules/ocr/paddle_extractor.py`
+
 ## 2026-06-05
 
 - Fixed OCR text extraction missing on page 28 (title "Aim" and paragraph not recognized):

@@ -465,14 +465,55 @@ class PaddleOcrExtractor(OcrExtractor):
         tight_x2 = max(m[2] for m in matched)
         tight_y2 = max(m[3] for m in matched)
 
-        # 防止超出原始布局 bbox 过多（超过 30% 则截断右边界）
+        # 防止超出原始布局 bbox 过多（超过 10% 则截断右边界）
         lwidth = lx2 - lx1
         if lwidth > 0:
             twidth = tight_x2 - tight_x1
-            if twidth / lwidth > 1.3:
+            if twidth / lwidth > 1.1:
                 tight_x2 = lx2
 
+        # 防止高度超出原始布局 bbox 过多（超过 10% 则截断）
+        lheight = ly2 - ly1
+        if lheight > 0:
+            theight = tight_y2 - tight_y1
+            if theight / lheight > 1.1:
+                tight_y1 = max(tight_y1, ly1)
+                tight_y2 = min(tight_y2, ly2)
+
         return (tight_x1, tight_y1, tight_x2, tight_y2)
+
+    @staticmethod
+    def _estimate_font_size_from_textlines(layout_bbox, textline_boxes, bbox_height_pdf, pixel_bbox_height):
+        """使用 textline 高度估算字体大小，比直接用 bbox 高度更准确
+
+        Args:
+            layout_bbox: 布局区域 bbox (x1,y1,x2,y2) 像素坐标
+            textline_boxes: textline bbox 列表
+            bbox_height_pdf: bbox 在 PDF 点坐标中的高度
+            pixel_bbox_height: bbox 在像素坐标中的高度
+
+        Returns:
+            tuple: (estimated_font_size, method_description)
+        """
+        if textline_boxes is not None and len(textline_boxes) > 0:
+            lx1, ly1, lx2, ly2 = layout_bbox
+            matching_heights = []
+            for tl_box in textline_boxes:
+                if len(tl_box) >= 4:
+                    tl_y1, tl_y2 = float(tl_box[1]), float(tl_box[3])
+                    tl_cx = (float(tl_box[0]) + float(tl_box[2])) / 2
+                    tl_cy = (tl_y1 + tl_y2) / 2
+                    if lx1 <= tl_cx <= lx2 and ly1 <= tl_cy <= ly2:
+                        matching_heights.append(tl_y2 - tl_y1)
+            if matching_heights:
+                avg_textline_height_px = sum(matching_heights) / len(matching_heights)
+                scale_y = bbox_height_pdf / pixel_bbox_height if pixel_bbox_height > 0 else 1.0
+                avg_textline_height_pdf = avg_textline_height_px * scale_y
+                font_size = max(6, min(36, avg_textline_height_pdf * 0.75))
+                return font_size, f"textline({len(matching_heights)}lines,avg_h={avg_textline_height_pdf:.1f}pt)"
+        # Fallback: use bbox height
+        font_size = max(6, min(36, bbox_height_pdf * 0.75))
+        return font_size, "block_bbox"
 
     @staticmethod
     def _filter_uncovered_textlines(uncovered_textlines, has_textline_texts, page_num):
@@ -717,6 +758,11 @@ class PaddleOcrExtractor(OcrExtractor):
                             )
                             if tight_bbox:
                                 pixel_bbox = tight_bbox
+                                # 确保 tight bbox 不超出页面宽度（像素坐标）
+                                page_width_px = page_info.get('img_width_px', float('inf'))
+                                if pixel_bbox[2] > page_width_px:
+                                    pixel_bbox = (pixel_bbox[0], pixel_bbox[1], page_width_px, pixel_bbox[3])
+                                    logger.debug(f"[TIGHT_BBOX] page={page_num}: tight bbox 右边界超出页面宽度，截断到 {page_width_px}")
                                 logger.debug(f"[TIGHT_BBOX] page={page_num}, label={label}, "
                                              f"layout=({float(x1):.0f},{float(y1):.0f},{float(x2):.0f},{float(y2):.0f}), "
                                              f"tight=({tight_bbox[0]:.0f},{tight_bbox[1]:.0f},{tight_bbox[2]:.0f},{tight_bbox[3]:.0f})")
@@ -816,7 +862,11 @@ class PaddleOcrExtractor(OcrExtractor):
                                 pixel_bbox = (float(x1), float(y1), float(x2), float(y2))
                                 pdf_bbox = self._pixel_to_pdf_coords(pixel_bbox, page_info)
                                 bbox_height = pdf_bbox[3] - pdf_bbox[1]
-                                estimated_font_size = max(6, min(36, bbox_height * 0.75))
+                                pixel_bbox_height = float(y2) - float(y1)
+                                estimated_font_size, font_estimation_method = PaddleOcrExtractor._estimate_font_size_from_textlines(
+                                    (float(x1), float(y1), float(x2), float(y2)),
+                                    textline_boxes, bbox_height, pixel_bbox_height
+                                )
                                 tb = TextBlock(
                                     block_no=block_no,
                                     text=text.strip(),
@@ -853,7 +903,11 @@ class PaddleOcrExtractor(OcrExtractor):
                                     pixel_bbox = (float(x1), float(y1), float(x2), float(y2))
                                 pdf_bbox = self._pixel_to_pdf_coords(pixel_bbox, page_info)
                                 bbox_height = pdf_bbox[3] - pdf_bbox[1]
-                                estimated_font_size = max(6, min(36, bbox_height * 0.75))
+                                pixel_bbox_height = float(y2) - float(y1)
+                                estimated_font_size, font_estimation_method = PaddleOcrExtractor._estimate_font_size_from_textlines(
+                                    (float(x1), float(y1), float(x2), float(y2)),
+                                    textline_boxes, bbox_height, pixel_bbox_height
+                                )
                                 tb = TextBlock(
                                     block_no=block_no,
                                     text=caption_text.strip(),
@@ -867,7 +921,7 @@ class PaddleOcrExtractor(OcrExtractor):
                                 block_no += 1
                                 processed_pixel_bboxes.append((float(x1), float(y1), float(x2), float(y2)))
                                 logger.info(f"[FONT_DEBUG] page={page_num}, label=figure_caption, is_body=True, "
-                                            f"text={repr(caption_text.strip()[:30])}, font_size={estimated_font_size:.2f}, method=block_bbox")
+                                            f"text={repr(caption_text.strip()[:30])}, font_size={estimated_font_size:.2f}, method={font_estimation_method}")
                                 logger.info(f"[SUPPLEMENT] page={page_num}: 从 figure_caption 提取文本, text='{caption_text.strip()[:60]}'")
 
                     else:
@@ -894,7 +948,11 @@ class PaddleOcrExtractor(OcrExtractor):
                                 continue
 
                             bbox_height = pdf_bbox[3] - pdf_bbox[1]
-                            estimated_font_size = max(6, min(36, bbox_height * 0.75))
+                            pixel_bbox_height = float(y2) - float(y1)
+                            estimated_font_size, font_estimation_method = PaddleOcrExtractor._estimate_font_size_from_textlines(
+                                (float(x1), float(y1), float(x2), float(y2)),
+                                textline_boxes, bbox_height, pixel_bbox_height
+                            )
                             tb = TextBlock(
                                 block_no=block_no,
                                 text=text.strip(),
@@ -908,7 +966,7 @@ class PaddleOcrExtractor(OcrExtractor):
                             block_no += 1
                             processed_pixel_bboxes.append((float(x1), float(y1), float(x2), float(y2)))
                             logger.info(f"[FONT_DEBUG] page={page_num}, label={label}, is_body=True, "
-                                        f"text={repr(text.strip()[:30])}, font_size={estimated_font_size:.2f}, method=block_bbox")
+                                        f"text={repr(text.strip()[:30])}, font_size={estimated_font_size:.2f}, method={font_estimation_method}")
                         else:
                             logger.warning(f"[TEXT_SKIP] page={page_num}, label={label}: 文本提取失败，"
                                           f"textline_match={'成功' if textline_text else '失败'}, "
@@ -983,7 +1041,10 @@ class PaddleOcrExtractor(OcrExtractor):
 
                                 # 估算字体大小
                                 group_height_pdf = group_pdf_bbox[3] - group_pdf_bbox[1]
-                                est_font_size = max(6, min(36, group_height_pdf * 0.75))
+                                group_height_px = max_y2 - min_y1
+                                est_font_size, font_estimation_method = PaddleOcrExtractor._estimate_font_size_from_textlines(
+                                    group_pixel_bbox, textline_boxes, group_height_pdf, group_height_px
+                                )
 
                                 tb = TextBlock(
                                     block_no=block_no,
@@ -997,7 +1058,7 @@ class PaddleOcrExtractor(OcrExtractor):
                                 text_blocks.append(tb)
                                 block_no += 1
                                 logger.info(f"[FONT_DEBUG] page={page_num}, label=supplement, is_body=True, "
-                                            f"text={repr(combined_text[:30])}, font_size={est_font_size:.2f}, method=block_bbox")
+                                            f"text={repr(combined_text[:30])}, font_size={est_font_size:.2f}, method={font_estimation_method}")
                                 logger.info(f"[SUPPLEMENT] page={page_num}: 创建补充 TextBlock, text='{combined_text[:60]}', pdf_bbox={group_pdf_bbox}")
 
                             logger.info(f"[SUPPLEMENT] page={page_num}: 共创建 {len(groups)} 个补充 TextBlock")
@@ -1019,7 +1080,11 @@ class PaddleOcrExtractor(OcrExtractor):
                         x1, y1, x2, y2 = bbox
                         pdf_bbox = self._pixel_to_pdf_coords((float(x1), float(y1), float(x2), float(y2)), page_info)
                         bbox_height = pdf_bbox[3] - pdf_bbox[1]
-                        estimated_font_size = max(6, min(36, bbox_height * 0.75))
+                        pixel_bbox_height = float(y2) - float(y1)
+                        estimated_font_size, font_estimation_method = PaddleOcrExtractor._estimate_font_size_from_textlines(
+                            (float(x1), float(y1), float(x2), float(y2)),
+                            textline_boxes, bbox_height, pixel_bbox_height
+                        )
                         tb = TextBlock(
                             block_no=block_no,
                             text=latex,

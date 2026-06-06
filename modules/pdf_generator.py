@@ -269,12 +269,9 @@ class PdfGenerator:
             for attempt in range(1, max_attempts + 1):
                 try:
                     # 计算当前尝试的调整策略
-                    if attempt <= 3:  # 前3次尝试：调整文本框大小
-                        adjusted_font_size = original_font_size
-                    else:  # 后2次尝试：调整字体大小
-                        reduction_factor = (attempt - 3) * 0.1
-                        adjusted_font_size = original_font_size * (1 - reduction_factor)
-                        adjusted_font_size = max(adjusted_font_size, original_font_size * 0.7)  # 不小于原大小的70%
+                    reduction_factor = (attempt - 3) * 0.1
+                    adjusted_font_size = original_font_size * (1 - reduction_factor)
+                    adjusted_font_size = max(adjusted_font_size, original_font_size * 0.7)  # 不小于原大小的70%
                     
                     logger.debug(f"尝试绘制文本，字体: {suitable_font}, 字体大小: {adjusted_font_size}, 文本框: {current_rect}")
                     
@@ -299,20 +296,6 @@ class PdfGenerator:
                     logger.warning(f"溢出文本: '{translated_text[:100]}...' (完整长度={len(translated_text)})")
                     
                     # 调整文本框大小（仅前3次尝试）
-                    if attempt <= 3:
-                        # 同时增加高度和宽度
-                        new_width = current_rect.width * 1.1
-                        new_height = current_rect.height * 1.2
-                        logger.info(f"调整文本框大小: 宽度从 {current_rect.width} 增加到 {new_width}, 高度从 {current_rect.height} 增加到 {new_height}")
-                        
-                        # 更新文本框
-                        current_rect = fitz.Rect(
-                            current_rect.x0,
-                            current_rect.y0,
-                            current_rect.x0 + new_width,
-                            current_rect.y0 + new_height
-                        )
-                        logger.debug(f"新文本框: {current_rect}")
                 except Exception as e:
                     logger.warning(f"❌ 绘制失败: {e}")
                     break
