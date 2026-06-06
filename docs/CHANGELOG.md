@@ -2,6 +2,10 @@
 
 ## 2026-06-06
 
+- Fixed date-style footer not recognized, causing cross-page incorrect merge:
+  - Fixed `text_analyzer.py` `_add_similar_blocks()` short text similarity threshold from 1.0 (exact match) to 0.8
+  - Previous threshold was too strict, preventing date-style footers like "2025年2月 8" and "2025年2月 9" from being detected
+  - Simplified tiered thresholds to a single 0.8 threshold, covering date-style footers (LCS similarity ≈ 88.9%)
 - Fixed text box exceeding original width and page width:
   - Fixed `pdf_generator.py` overflow retry logic: clamped right/bottom edges to page boundaries (`min(x0+width, page.width)`)
   - Reduced `paddle_extractor.py` `_compute_tight_bbox()` width tolerance from 30% to 10%

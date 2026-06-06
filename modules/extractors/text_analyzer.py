@@ -85,23 +85,8 @@ def _add_similar_blocks(block_list1, block_list2, processed_pairs, non_body_text
             processed_pairs.add(pair_key)
             
             # 计算文本相似度
+            threshold = 0.8
             similarity = calculate_text_similarity(block1.block_text, block2.block_text)
-            
-            # 根据文本长度确定相似度阈值
-            len1 = len(block1.block_text)
-            len2 = len(block2.block_text)
-            both_short = len1 < SHORT_TEXT_THRESHOLD and len2 < SHORT_TEXT_THRESHOLD
-            mixed_length = (len1 < SHORT_TEXT_THRESHOLD) != (len2 < SHORT_TEXT_THRESHOLD)
-            
-            if both_short:
-                # 短文本仅当完全相同时才标记为非正文
-                threshold = 1.0
-            elif mixed_length:
-                # 长短文本之间使用更严格的阈值
-                threshold = 0.95
-            else:
-                # 长文本之间保持当前阈值
-                threshold = 0.9
             
             if similarity >= threshold:
                 non_body_texts.add(block1.block_text)
