@@ -1,9 +1,6 @@
 import fitz  # PyMuPDF
 import os
-import gc
-import time
 import logging
-import psutil
 from models.text_block import TextBlock
 from models.extraction import PdfPage, PdfImage, PdfExtraction
 from .extractors import (
@@ -17,59 +14,6 @@ from .extractors import (
 from .chapter_identifier import ChapterIdentifier
 
 logger = logging.getLogger(__name__)
-
-
-def _merge_batch_results(batch_results, all_page_nums=None):
-    """合并多批OCR处理的结果
-
-    Args:
-        batch_results (list[PdfExtraction | None]): 各批次的OCR结果列表，
-            失败批次为None
-        all_page_nums (list[int] | None): 所有应提取的页码列表
-
-    Returns:
-        tuple[PdfExtraction, list[int]]: 合并后的提取结果和缺失页码列表
-    """
-    from models.extraction import PdfExtraction
-
-    valid_results = [r for r in batch_results if r is not None]
-
-    extracted_page_nums = set()
-    for result in valid_results:
-        extracted_page_nums.update(p.page_num for p in result.pages)
-    missing_pages = sorted([p for p in (all_page_nums or []) if p not in extracted_page_nums])
-
-    if not valid_results:
-        return PdfExtraction(total_pages=0, pages=[], tables=[], images=[]), missing_pages
-
-    if len(valid_results) == 1:
-        return valid_results[0], missing_pages
-
-    merged_pages = []
-    merged_tables = []
-    merged_images = []
-    total_pages = 0
-
-    for result in valid_results:
-        merged_pages.extend(result.pages)
-        merged_tables.extend(result.tables)
-        merged_images.extend(result.images)
-        total_pages += result.total_pages
-
-    for i, table in enumerate(merged_tables):
-        table.table_idx = i
-
-    for i, image in enumerate(merged_images):
-        image.image_idx = i
-
-    merged_pages.sort(key=lambda p: p.page_num)
-
-    return PdfExtraction(
-        total_pages=total_pages,
-        pages=merged_pages,
-        tables=merged_tables,
-        images=merged_images,
-    ), missing_pages
 
 
 class PdfExtractor:
@@ -260,95 +204,16 @@ class PdfExtractor:
                 from modules.ocr.ocr_worker import run_ocr_in_subprocess
                 from config import config as app_config
 
-                batch_size = getattr(app_config, 'OCR_BATCH_SIZE', 5)
-
-                if pages is None:
-                    with fitz.open(self.pdf_path) as _doc:
-                        all_page_nums = list(range(1, len(_doc) + 1))
-                else:
-                    all_page_nums = sorted(pages)
-
-                if len(all_page_nums) <= batch_size:
-                    result = run_ocr_in_subprocess(
-                        self.pdf_path, pages=all_page_nums or None,
-                        temp_images_dir=temp_images_dir,
-                        lang=self.ocr_lang, use_gpu=app_config.OCR_USE_GPU,
-                        progress_callback=progress_callback
-                    )
-                    self.chapter_identifier.reset()
-                    if extract_chapter:
-                        self._associate_ocr_result_with_chapters(result)
-                    return result, []
-
-                all_results = []
-                total_batches = (len(all_page_nums) + batch_size - 1) // batch_size
-                for batch_idx in range(total_batches):
-                    batch_start = batch_idx * batch_size
-                    batch_end = min(batch_start + batch_size, len(all_page_nums))
-                    batch_pages = all_page_nums[batch_start:batch_end]
-                    logger.info(f"分批OCR处理: 第{batch_idx+1}/{total_batches}批, 页面 {batch_pages[0]}-{batch_pages[-1]}")
-
-                    _batch_rss_before = None
-                    _batch_avail_before = None
-                    try:
-                        _batch_rss_before = psutil.Process().memory_info().rss / (1024 * 1024)
-                        _batch_avail_before = psutil.virtual_memory().available / (1024 * 1024 * 1024)
-                        logger.info(f"批次{batch_idx+1}开始: 主进程RSS={_batch_rss_before:.0f}MB, 系统可用={_batch_avail_before:.1f}GB")
-                    except Exception:
-                        pass
-
-                    batch_progress_callback = None
-                    if progress_callback:
-                        def _make_batch_callback(bi, tb):
-                            def _cb(msg_type, payload):
-                                enriched = dict(payload)
-                                enriched['batch_idx'] = bi
-                                enriched['total_batches'] = tb
-                                progress_callback(msg_type, enriched)
-                            return _cb
-                        batch_progress_callback = _make_batch_callback(batch_idx, total_batches)
-
-                    try:
-                        batch_result = run_ocr_in_subprocess(
-                            self.pdf_path, pages=batch_pages,
-                            temp_images_dir=temp_images_dir,
-                            lang=self.ocr_lang, use_gpu=app_config.OCR_USE_GPU,
-                            progress_callback=batch_progress_callback,
-                        )
-                        all_results.append(batch_result)
-                    except Exception as e:
-                        logger.error(f"第{batch_idx+1}批OCR处理失败: {e}")
-                        all_results.append(None)
-
-                    gc.collect()
-
-                    try:
-                        _main_rss = psutil.Process().memory_info().rss / (1024 * 1024)
-                        _avail_gb = psutil.virtual_memory().available / (1024 * 1024 * 1024)
-                        _delta = ""
-                        if _batch_rss_before is not None:
-                            _delta_mb = _main_rss - _batch_rss_before
-                            _sign = "+" if _delta_mb >= 0 else ""
-                            _delta = f", 变化={_sign}{_delta_mb:.0f}MB"
-                        logger.info(f"批次{batch_idx+1}完成: 主进程RSS={_main_rss:.0f}MB, 系统可用={_avail_gb:.1f}GB{_delta}")
-                    except Exception:
-                        pass
-
-                    time.sleep(3)
-
-                    for _pn in batch_pages:
-                        _img_path = os.path.join(temp_images_dir, f"ocr_page_{_pn}.png")
-                        if os.path.exists(_img_path):
-                            try:
-                                os.remove(_img_path)
-                            except Exception:
-                                pass
-
-                result, missing_pages = _merge_batch_results(all_results, all_page_nums)
+                result = run_ocr_in_subprocess(
+                    self.pdf_path, pages=pages,
+                    temp_images_dir=temp_images_dir,
+                    lang=self.ocr_lang, use_gpu=app_config.OCR_USE_GPU,
+                    progress_callback=progress_callback
+                )
                 self.chapter_identifier.reset()
                 if extract_chapter:
                     self._associate_ocr_result_with_chapters(result)
-                return result, missing_pages
+                return result, []
 
             # 提取章节信息
             logger.info("重置章节信息")

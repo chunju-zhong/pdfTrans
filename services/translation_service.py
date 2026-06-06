@@ -11,7 +11,6 @@ from modules.pdf_generator import PdfGenerator
 from modules.docx_generator import DocxGenerator
 from modules.markdown_generator import create_markdown_generator
 from modules.semantic_analyzer_factory import SemanticAnalyzerFactory
-from modules.ocr.paddle_extractor import PaddleOcrExtractor
 
 from models.extraction import PdfPage, PdfCell
 
@@ -186,54 +185,26 @@ class TranslationService:
         logger.info(f"任务 {task.task_id} 开始提取PDF文本")
         ocr_progress_callback = None
         if ocr_mode:
-            STEP_WEIGHTS = {PaddleOcrExtractor.STEP_LAYOUT_OCR: 0.80, PaddleOcrExtractor.STEP_IMAGE_CROP: 0.20}
-            # 累积权重表，用于 step_complete 时快速计算进度上限
-            _cumulative_weights = {}
-            _cum = 0.0
-            for _s, _w in sorted(STEP_WEIGHTS.items()):
-                _cum += _w
-                _cumulative_weights[_s] = _cum
-            # 前置累积权重表，用于 step_start 时计算进度下限
-            _prior_weights = {}
-            _prior = 0.0
-            for _s, _w in sorted(STEP_WEIGHTS.items()):
-                _prior_weights[_s] = _prior
-                _prior += _w
-
+            # 步骤1+2已合并为逐页处理，进度直接按页数计算
             def _ocr_progress_cb(msg_type, payload):
                 step = payload.get('step', 1)
                 step_name = payload.get('step_name', '')
                 pages_done = payload.get('pages_done', 0)
                 total_pages = payload.get('total_pages', 1)
-                batch_idx = payload.get('batch_idx')
-                total_batches = payload.get('total_batches')
 
                 if msg_type == 'step_start':
-                    # 步骤开始时，进度使用前面步骤的累积权重，避免倒退
-                    ocr_progress = _prior_weights.get(step, 0.0)
+                    ocr_progress = 0.0
                 elif msg_type == 'step_complete':
-                    # 步骤完成时，进度推进到当前步骤的累积权重上限
-                    ocr_progress = _cumulative_weights.get(step, 1.0)
+                    ocr_progress = 1.0
                 else:
-                    step_weight = STEP_WEIGHTS.get(step, 0.05)
-                    step_progress = pages_done / max(total_pages, 1)
-                    ocr_progress = _prior_weights.get(step, 0.0) + step_weight * step_progress
+                    ocr_progress = pages_done / max(total_pages, 1)
 
-                if batch_idx is not None and total_batches is not None and total_batches > 0:
-                    batch_base = batch_idx / total_batches
-                    batch_range = 1.0 / total_batches
-                    overall_ocr = batch_base + batch_range * ocr_progress
-                else:
-                    overall_ocr = ocr_progress
-
-                phase_percent = int(overall_ocr * 100)
+                phase_percent = int(ocr_progress * 100)
 
                 if msg_type == 'step_start':
                     msg = f"OCR提取: {step_name}开始"
                 elif msg_type == 'step_complete':
                     msg = f"OCR提取: {step_name}完成"
-                elif batch_idx is not None and total_batches is not None:
-                    msg = f"OCR提取: 第{batch_idx+1}/{total_batches}批 - {step_name} {pages_done}/{total_pages}页"
                 else:
                     msg = f"OCR提取: {step_name} {pages_done}/{total_pages}页"
 
@@ -516,7 +487,7 @@ class TranslationService:
                     
                     completed_blocks += 1
                     phase_percent = int((completed_blocks / total_blocks) * 100)
-                    task.update_phase_progress('translation', phase_percent, f'正在翻译文本: {completed_blocks}/{total_blocks}')
+                    task.update_phase_progress('translation', phase_percent, f'正在翻译: {completed_blocks}/{total_blocks} 个文本块')
                     
             except Exception as e:
                 logger.error(f"任务 {task.task_id} 翻译合并块时出错: {str(e)}")
@@ -700,7 +671,7 @@ class TranslationService:
                     
                     completed_blocks += 1
                     phase_percent = int((completed_blocks / total_original_blocks) * 100)
-                    task.update_phase_progress('translation', phase_percent, f'正在翻译文本: {completed_blocks}/{total_original_blocks}')
+                    task.update_phase_progress('translation', phase_percent, f'正在翻译: {completed_blocks}/{total_original_blocks} 个文本块')
                     
             except Exception as e:
                 logger.error(f"任务 {task.task_id} 翻译原始块时出错: {str(e)}")

@@ -15,6 +15,7 @@ STATUS_HEARTBEAT = 'heartbeat'
 STATUS_STEP_START = 'step_start'
 STATUS_STEP_PROGRESS = 'step_progress'
 STATUS_STEP_COMPLETE = 'step_complete'
+STATUS_PAGE_RESULT = 'page_result'
 
 
 class OcrRetryableError(RuntimeError):
@@ -54,7 +55,7 @@ def _setup_subprocess_logger(name):
 
 
 def _ocr_worker_func(pdf_path, pages, temp_images_dir, lang, use_gpu,
-                     result_queue, status_queue, ocr_params):
+                     result_queue, status_queue, ocr_params, skip_pages=None):
     thread_params = ocr_params.get('thread_params', {}) if ocr_params else {}
     os.environ['FLAGS_fraction_of_gpu_memory_to_use'] = '0.5'
     os.environ['CPU_NUM'] = thread_params.get('CPU_NUM', '2')
@@ -116,6 +117,7 @@ def _ocr_worker_func(pdf_path, pages, temp_images_dir, lang, use_gpu,
         result = extractor.extract_from_pdf(
             pdf_path, pages=pages, temp_images_dir=temp_images_dir,
             status_callback=status_callback,
+            skip_pages=skip_pages,
         )
         result_queue.put(('success', result.to_dict()))
     except Exception as e:
@@ -188,10 +190,60 @@ def _terminate_process(process):
         process.join()
 
 
+def _assemble_extraction(completed_pages, total_pages, all_page_nums):
+    """从流式累积的页面结果组装最终 PdfExtraction
+
+    Args:
+        completed_pages: dict[int, dict] 页码 -> {text_blocks, tables, images}
+        total_pages: PDF总页数
+        all_page_nums: 所有目标页码列表
+
+    Returns:
+        PdfExtraction
+    """
+    from models.extraction import PdfPage, PdfExtraction, TextBlock, PdfTable, PdfImage
+
+    pdf_pages = []
+    all_tables = []
+    all_images = []
+
+    for page_num in all_page_nums:
+        page_data = completed_pages.get(page_num, {})
+        text_blocks = [TextBlock.from_dict(d) for d in page_data.get('text_blocks', [])]
+        for i, tb in enumerate(text_blocks):
+            tb.block_no = i
+        pdf_pages.append(PdfPage(page_num=page_num, text_blocks=text_blocks))
+
+        page_tables = [PdfTable.from_dict(d) for d in page_data.get('tables', [])]
+        all_tables.extend(page_tables)
+
+        page_images = [PdfImage.from_dict(d) for d in page_data.get('images', [])]
+        all_images.extend(page_images)
+
+    for i, table in enumerate(all_tables):
+        table.table_idx = i
+    for i, img in enumerate(all_images):
+        img.image_idx = i
+
+    return PdfExtraction(
+        total_pages=total_pages,
+        pages=pdf_pages,
+        tables=all_tables,
+        images=all_images,
+    )
+
+
 def _run_ocr_once(pdf_path, pages, temp_images_dir, lang, use_gpu,
                   heartbeat_timeout, max_total_time, ocr_params,
                   config_max_total_time=None, stall_timeout=1800,
-                  progress_callback=None):
+                  progress_callback=None, skip_pages=None):
+    """运行一次OCR子进程，支持流式结果累积和断点续传
+
+    Returns:
+        tuple[dict[int, dict], list[int]]: (completed_pages, completed_page_nums)
+            completed_pages: 页码 -> {text_blocks, tables, images} (dict格式)
+            completed_page_nums: 已完成的页码列表
+    """
     ctx = multiprocessing.get_context('spawn')
     result_queue = ctx.Queue()
     status_queue = ctx.Queue()
@@ -199,7 +251,7 @@ def _run_ocr_once(pdf_path, pages, temp_images_dir, lang, use_gpu,
     process = ctx.Process(
         target=_ocr_worker_func,
         args=(pdf_path, pages, temp_images_dir, lang, use_gpu,
-              result_queue, status_queue, ocr_params),
+              result_queue, status_queue, ocr_params, skip_pages),
         daemon=True,
     )
 
@@ -209,17 +261,80 @@ def _run_ocr_once(pdf_path, pages, temp_images_dir, lang, use_gpu,
     last_progress_time = time.time()
     last_pages_done = -1
     last_progress = None
+    completed_pages = {}
 
     while True:
         elapsed = time.time() - start_time
         if elapsed > max_total_time:
             _terminate_process(process)
+            if completed_pages:
+                logger.warning(
+                    "OCR超时但已有%d页结果，保留部分结果",
+                    len(completed_pages),
+                )
+                return completed_pages, sorted(completed_pages.keys())
             raise OcrRetryableError(
                 f"OCR处理超过最大时间（{max_total_time}秒），已终止子进程"
             )
 
+        # 非阻塞检查 result_queue
+        try:
+            status, data = result_queue.get_nowait()
+            if status == 'success':
+                # 子进程完成，合并流式结果（流式结果可能更完整）
+                logger.info("OCR子进程完成确认，已累积%d页流式结果", len(completed_pages))
+                # 等待子进程退出
+                process.join(timeout=10)
+                return completed_pages, sorted(completed_pages.keys())
+            elif status == 'error':
+                if completed_pages:
+                    logger.warning(
+                        "OCR子进程报错但已有%d页结果，保留部分结果: %s",
+                        len(completed_pages), data,
+                    )
+                    process.join(timeout=5)
+                    return completed_pages, sorted(completed_pages.keys())
+                raise OcrRetryableError(f"OCR处理失败: {data}")
+        except queue.Empty:
+            pass
+
         if not process.is_alive():
-            break
+            # 子进程已退出，再次检查 result_queue
+            try:
+                status, data = result_queue.get(timeout=5)
+                if status == 'success':
+                    logger.info("OCR子进程完成确认，已累积%d页流式结果", len(completed_pages))
+                    return completed_pages, sorted(completed_pages.keys())
+                elif status == 'error':
+                    if completed_pages:
+                        logger.warning(
+                            "OCR子进程报错但已有%d页结果，保留部分结果: %s",
+                            len(completed_pages), data,
+                        )
+                        return completed_pages, sorted(completed_pages.keys())
+                    raise OcrRetryableError(f"OCR处理失败: {data}")
+            except queue.Empty:
+                pass
+
+            # 子进程退出且无结果
+            if process.exitcode != 0:
+                if completed_pages:
+                    logger.warning(
+                        "OCR子进程异常退出(exitcode=%d)但已有%d页结果，保留部分结果",
+                        process.exitcode, len(completed_pages),
+                    )
+                    return completed_pages, sorted(completed_pages.keys())
+                raise OcrRetryableError(
+                    f"OCR子进程异常退出（exitcode={process.exitcode}），"
+                    "可能是内存不足导致段错误。建议关闭部分识别功能或增加系统内存。"
+                )
+            if completed_pages:
+                logger.warning(
+                    "OCR子进程退出但已有%d页结果，保留部分结果",
+                    len(completed_pages),
+                )
+                return completed_pages, sorted(completed_pages.keys())
+            raise OcrRetryableError("OCR子进程未返回结果，可能已崩溃")
 
         try:
             msg_type, payload = status_queue.get(timeout=5)
@@ -230,6 +345,14 @@ def _run_ocr_once(pdf_path, pages, temp_images_dir, lang, use_gpu,
                     payload.get('pid', 0),
                     payload.get('memory_mb', 0),
                 )
+            elif msg_type == STATUS_PAGE_RESULT:
+                page_num = payload.get('page_num')
+                completed_pages[page_num] = {
+                    'text_blocks': payload.get('text_blocks', []),
+                    'tables': payload.get('tables', []),
+                    'images': payload.get('images', []),
+                }
+                logger.debug("流式收到第%d页结果，已累积%d页", page_num, len(completed_pages))
             elif msg_type == STATUS_STEP_START:
                 logger.info(
                     "OCR步骤%d开始: %s, 共%d页",
@@ -280,47 +403,44 @@ def _run_ocr_once(pdf_path, pages, temp_images_dir, lang, use_gpu,
         except queue.Empty:
             pass
 
-        heartbeat_silence = time.time() - last_heartbeat_time
-        if heartbeat_timeout > 0 and heartbeat_silence > heartbeat_timeout:
-            logger.error(
-                "OCR子进程心跳中断%.0f秒(超过阈值%d秒)，判定子进程死机。最后进度: %s",
-                heartbeat_silence,
-                heartbeat_timeout,
-                last_progress,
-            )
-            _terminate_process(process)
-            raise OcrRetryableError(
-                f"OCR子进程心跳中断{heartbeat_silence:.0f}秒，判定死机已终止。"
-                f"最后进度: {last_progress}"
-            )
+        # 心跳超时和停滞超时仅在子进程存活时检查
+        if process.is_alive():
+            heartbeat_silence = time.time() - last_heartbeat_time
+            if heartbeat_timeout > 0 and heartbeat_silence > heartbeat_timeout:
+                logger.error(
+                    "OCR子进程心跳中断%.0f秒(超过阈值%d秒)，判定子进程死机。最后进度: %s",
+                    heartbeat_silence,
+                    heartbeat_timeout,
+                    last_progress,
+                )
+                _terminate_process(process)
+                if completed_pages:
+                    logger.warning(
+                        "心跳超时但已有%d页结果，保留部分结果",
+                        len(completed_pages),
+                    )
+                    return completed_pages, sorted(completed_pages.keys())
+                raise OcrRetryableError(
+                    f"OCR子进程心跳中断{heartbeat_silence:.0f}秒，判定死机已终止。"
+                    f"最后进度: {last_progress}"
+                )
 
-        stall_duration = time.time() - last_progress_time
-        if stall_duration > stall_timeout:
-            logger.error(
-                "OCR进度停滞%.0f秒(超过阈值%d秒)，判定异常已终止。最后进度: %s",
-                stall_duration, stall_timeout, last_progress,
-            )
-            _terminate_process(process)
-            raise OcrRetryableError(
-                f"OCR进度停滞{stall_duration:.0f}秒，判定异常已终止"
-            )
-
-    if process.exitcode != 0:
-        raise OcrRetryableError(
-            f"OCR子进程异常退出（exitcode={process.exitcode}），"
-            "可能是内存不足导致段错误。建议关闭部分识别功能或增加系统内存。"
-        )
-
-    try:
-        status, data = result_queue.get(timeout=10)
-    except queue.Empty:
-        raise OcrRetryableError("OCR子进程未返回结果，可能已崩溃")
-
-    if status == 'error':
-        raise OcrRetryableError(f"OCR处理失败: {data}")
-
-    from models.extraction import PdfExtraction
-    return PdfExtraction.from_dict(data)
+            stall_duration = time.time() - last_progress_time
+            if stall_duration > stall_timeout:
+                logger.error(
+                    "OCR进度停滞%.0f秒(超过阈值%d秒)，判定异常已终止。最后进度: %s",
+                    stall_duration, stall_timeout, last_progress,
+                )
+                _terminate_process(process)
+                if completed_pages:
+                    logger.warning(
+                        "进度停滞但已有%d页结果，保留部分结果",
+                        len(completed_pages),
+                    )
+                    return completed_pages, sorted(completed_pages.keys())
+                raise OcrRetryableError(
+                    f"OCR进度停滞{stall_duration:.0f}秒，判定异常已终止"
+                )
 
 
 def run_ocr_in_subprocess(pdf_path, pages=None, temp_images_dir=None,
@@ -362,29 +482,65 @@ def run_ocr_in_subprocess(pdf_path, pages=None, temp_images_dir=None,
 
     max_total_time = min(max_total_time, config_max_total_time)
 
+    # 确定所有目标页码
+    if pages:
+        all_page_nums = sorted(pages)
+    else:
+        try:
+            import fitz
+            with fitz.open(pdf_path) as doc:
+                all_page_nums = list(range(1, len(doc) + 1))
+        except Exception:
+            all_page_nums = None
+
+    total_pages = len(all_page_nums) if all_page_nums else _estimate_page_count(pdf_path)
+
     last_error = None
     current_params = ocr_params
     current_backoff = retry_backoff
+    completed_pages = {}
+    completed_page_nums = []
 
     for attempt in range(max_retries + 1):
         try:
-            result = _run_ocr_once(
-                pdf_path, pages, temp_images_dir, lang, use_gpu,
+            # 计算剩余需要处理的页面
+            remaining_pages = [p for p in (all_page_nums or []) if p not in completed_pages] if all_page_nums else None
+
+            if remaining_pages is not None and len(remaining_pages) == 0:
+                logger.info("所有页面已通过流式回传完成，无需再次处理")
+                break
+
+            new_pages, new_page_nums = _run_ocr_once(
+                pdf_path, remaining_pages, temp_images_dir, lang, use_gpu,
                 heartbeat_timeout, max_total_time, current_params,
                 config_max_total_time=config_max_total_time,
                 stall_timeout=stall_timeout,
                 progress_callback=progress_callback,
+                skip_pages=completed_page_nums if completed_page_nums else None,
             )
+
+            # 合并结果
+            completed_pages.update(new_pages)
+            completed_page_nums = sorted(completed_pages.keys())
+
             if attempt > 0:
-                logger.info("OCR第%d次重试成功", attempt)
-            return result
+                logger.info("OCR第%d次重试成功，新增%d页，累计%d页", attempt, len(new_page_nums), len(completed_page_nums))
+
+            # 检查是否所有页面都已完成
+            if all_page_nums and set(all_page_nums).issubset(set(completed_page_nums)):
+                break
+            # 如果无法确定总页数（all_page_nums is None），成功返回即视为完成
+            if all_page_nums is None and new_page_nums:
+                break
+
         except OcrRetryableError as e:
             last_error = e
             if attempt < max_retries:
                 logger.warning(
-                    "OCR第%d次尝试失败: %s，%.1f秒后重试（剩余%d次）",
+                    "OCR第%d次尝试失败: %s，已有%d页结果，%.1f秒后重试（剩余%d次）",
                     attempt + 1,
                     str(e),
+                    len(completed_page_nums),
                     current_backoff,
                     max_retries - attempt,
                 )
@@ -396,11 +552,23 @@ def run_ocr_in_subprocess(pdf_path, pages=None, temp_images_dir=None,
                 current_backoff = current_backoff * 1.5
             else:
                 logger.error(
-                    "OCR已重试%d次仍失败，最后错误: %s",
+                    "OCR已重试%d次仍失败，最后错误: %s，已保留%d页结果",
                     max_retries,
                     str(e),
+                    len(completed_page_nums),
                 )
         except OcrFatalError:
             raise
 
-    raise last_error
+    if not completed_pages:
+        raise last_error
+
+    # 从流式结果组装最终 PdfExtraction
+    if all_page_nums:
+        missing_pages = [p for p in all_page_nums if p not in completed_pages]
+        if missing_pages:
+            logger.warning("OCR完成但以下页面缺失: %s", missing_pages)
+    else:
+        all_page_nums = sorted(completed_pages.keys())
+
+    return _assemble_extraction(completed_pages, total_pages, all_page_nums)

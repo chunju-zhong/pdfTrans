@@ -9,7 +9,6 @@
 步骤2:   图表/印章裁剪（无需额外模型）
 """
 
-import gc
 import os
 import sys
 import re
@@ -150,30 +149,7 @@ class PaddleOcrExtractor(OcrExtractor):
         except Exception:
             logger.debug("Memory log failed", exc_info=True)
 
-    @staticmethod
-    def _force_release_memory():
-        try:
-            import ctypes
-            process = psutil.Process(os.getpid())
-            rss_before = process.memory_info().rss / (1024 * 1024)
 
-            if sys.platform == 'darwin':
-                try:
-                    libc = ctypes.CDLL("libc.dylib")
-                    libc.malloc_zone_pressure_relief(0, 0)
-                except Exception:
-                    pass
-            else:
-                try:
-                    ctypes.CDLL("libc.so.6").malloc_trim(0)
-                except Exception:
-                    pass
-
-            gc.collect()
-            rss_after = process.memory_info().rss / (1024 * 1024)
-            logger.info(f"强制释放内存: RSS {rss_before:.0f}MB -> {rss_after:.0f}MB (释放 {rss_before - rss_after:.0f}MB)")
-        except Exception as e:
-            logger.debug(f"强制释放内存失败: {e}")
 
     @staticmethod
     def _clean_latex(latex):
@@ -1071,15 +1047,18 @@ class PaddleOcrExtractor(OcrExtractor):
             'tables': tables,
         }
 
-    def extract_from_pdf(self, pdf_path, pages=None, temp_images_dir=None, status_callback=None):
+    def extract_from_pdf(self, pdf_path, pages=None, temp_images_dir=None, status_callback=None, skip_pages=None):
         """从PDF中提取内容（分步加载策略）
 
         按步骤依次加载模型，每步完成后释放管线，降低峰值内存占用。
+        每页完成步骤1+步骤2后，立即通过 status_callback 发送 page_result 消息，
+        实现流式回传，支持断点续传。
 
         Args:
             pdf_path (str): PDF文件路径
             pages (list[int] | None): 指定页码列表（1-based），None表示全部
             temp_images_dir (str | None): 临时图像目录
+            skip_pages (list[int] | None): 已完成的页码列表，跳过这些页面
 
         Returns:
             PdfExtraction: 提取结果
@@ -1107,7 +1086,10 @@ class PaddleOcrExtractor(OcrExtractor):
             else:
                 target_pages = list(range(1, total_pages + 1))
 
-            logger.info(f"开始OCR提取PDF: {pdf_path}, 共{len(target_pages)}页")
+            skip_pages_set = set(skip_pages) if skip_pages else set()
+            pages_to_process = [p for p in target_pages if p not in skip_pages_set]
+
+            logger.info(f"开始OCR提取PDF: {pdf_path}, 共{len(target_pages)}页, 跳过{len(skip_pages_set)}页, 需处理{len(pages_to_process)}页")
             logger.info(f"OCR内存优化配置: OCR_SKIP_TABLE={self._skip_table}, OCR_SKIP_FORMULA={self._skip_formula}, OCR_RENDER_DPI={config.OCR_RENDER_DPI}")
             if self._skip_table or self._skip_formula:
                 logger.info("提示: 部分OCR功能已跳过，若需完整功能请调整参数")
@@ -1115,142 +1097,123 @@ class PaddleOcrExtractor(OcrExtractor):
             # 渲染页面为图像（供后续OCR使用）
             page_images = self._render_pages(doc, target_pages, temp_images_dir)
 
-            # 步骤1: 版面分析 + 文本OCR
+            # 逐页处理：步骤1（版面分析+文本+公式+表格）+ 步骤2（图像裁剪）
             step1_start = time.time()
             self._log_memory("步骤1开始")
             if status_callback:
-                status_callback('step_start', {'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME, 'total_pages': len(target_pages)})
-            layout_pipeline = None
-            use_formula = not self._skip_formula
-            if use_formula:
-                try:
-                    layout_pipeline = self._create_pipeline(
-                        use_table=not self._skip_table, use_formula=True,
-                        use_region_detection=False, cpu_threads=self.cpu_threads)
-                except MemoryError as e:
-                    logger.warning(f"步骤1启用公式识别时内存不足，回退到 use_formula=False: {e}")
-                    use_formula = False
-            if layout_pipeline is None:
-                layout_pipeline = self._create_pipeline(
-                    use_table=not self._skip_table, use_formula=False,
-                    use_region_detection=False, cpu_threads=self.cpu_threads)
-            self._log_memory("步骤1管线创建")
-            all_layout_results = {}
-            text_blocks_by_page = {}
+                status_callback('step_start', {'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME, 'total_pages': len(pages_to_process)})
+
+            all_text_blocks_by_page = {}
+            all_tables = []
+            all_images = []
             pages_done = 0
-            for page_num in target_pages:
-                try:
-                    page_info = page_images[page_num]
-                    img_path = page_info['img_path']
-                    result = self._process_page_layout(
-                        layout_pipeline, img_path, page_num, page_info,
-                        use_formula=use_formula
-                    )
-                    text_blocks_by_page[page_num] = result['text_blocks']
-                    all_layout_results[page_num] = result
-                except Exception as e:
-                    logger.error(
-                        f"步骤1处理第{page_num}页时出错: {e}", exc_info=True
-                    )
-                    text_blocks_by_page[page_num] = []
-                    all_layout_results[page_num] = {
-                        'text_blocks': [],
-                        'has_table': False,
-                        'has_formula': False,
-                        'image_regions': [],
-                        'layout_bboxes': [],
-                        'tables': [],
-                    }
-                pages_done += 1
-                if status_callback:
-                    status_callback('step_progress', {
-                        'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME,
-                        'page_num': page_num,
-                        'pages_done': pages_done, 'total_pages': len(target_pages),
-                    })
 
-            del layout_pipeline
-            gc.collect()
-            self._force_release_memory()
+            if pages_to_process:
+                layout_pipeline = None
+                use_formula = not self._skip_formula
+                if use_formula:
+                    try:
+                        layout_pipeline = self._create_pipeline(
+                            use_table=not self._skip_table, use_formula=True,
+                            use_region_detection=False, cpu_threads=self.cpu_threads)
+                    except MemoryError as e:
+                        logger.warning(f"步骤1启用公式识别时内存不足，回退到 use_formula=False: {e}")
+                        use_formula = False
+                if layout_pipeline is None:
+                    layout_pipeline = self._create_pipeline(
+                        use_table=not self._skip_table, use_formula=False,
+                        use_region_detection=False, cpu_threads=self.cpu_threads)
+                self._log_memory("步骤1管线创建")
 
-            slim_layout = {}
-            for p, r in all_layout_results.items():
-                slim_layout[p] = {
-                    k: v for k, v in r.items()
-                    if k in ('has_table', 'has_formula', 'image_regions', 'layout_bboxes', 'pixel_bbox', 'tables')
-                }
-            all_layout_results = slim_layout
-            gc.collect()
-            self._force_release_memory()
+                for page_num in pages_to_process:
+                    try:
+                        page_info = page_images[page_num]
+                        img_path = page_info['img_path']
+                        result = self._process_page_layout(
+                            layout_pipeline, img_path, page_num, page_info,
+                            use_formula=use_formula
+                        )
+                        text_blocks = result['text_blocks']
+                        layout_data = result
+                    except Exception as e:
+                        logger.error(
+                            f"步骤1处理第{page_num}页时出错: {e}", exc_info=True
+                        )
+                        text_blocks = []
+                        layout_data = {
+                            'text_blocks': [],
+                            'has_table': False,
+                            'has_formula': False,
+                            'image_regions': [],
+                            'layout_bboxes': [],
+                            'tables': [],
+                        }
+
+                    # 步骤2: 该页的图像裁剪
+                    page_images_list = []
+                    for region in layout_data.get('image_regions', []):
+                        pixel_bbox = region.get('pixel_bbox', region['bbox'])
+                        img = self._extract_image_for_region(
+                            img_path, pixel_bbox, page_num,
+                            len(page_images_list), temp_images_dir, page_info
+                        )
+                        if img:
+                            page_images_list.append(img)
+
+                    # 流式回传该页完整结果
+                    all_text_blocks_by_page[page_num] = text_blocks
+                    page_tables = layout_data.get('tables', [])
+                    all_tables.extend(page_tables)
+                    all_images.extend(page_images_list)
+
+                    pages_done += 1
+                    if status_callback:
+                        status_callback('page_result', {
+                            'page_num': page_num,
+                            'text_blocks': [tb.to_dict() for tb in text_blocks],
+                            'tables': [t.to_dict() for t in page_tables],
+                            'images': [img.to_dict() for img in page_images_list],
+                        })
+                        status_callback('step_progress', {
+                            'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME,
+                            'page_num': page_num,
+                            'pages_done': pages_done, 'total_pages': len(pages_to_process),
+                        })
+
+                del layout_pipeline
 
             step1_duration = time.time() - step1_start
-            self._log_memory("步骤1完成")
-            logger.info(f"步骤{self.STEP_LAYOUT_OCR}完成: {self.STEP_LAYOUT_OCR_NAME}，管线已释放，布局数据已精简")
-            formula_detected_pages = [p for p, r in all_layout_results.items() if r.get('has_formula', False)]
-            if formula_detected_pages:
-                logger.info("步骤1检测到公式的页面: %s", formula_detected_pages)
-            else:
-                logger.info("步骤1未检测到公式页面")
+            self._log_memory("步骤1+2完成")
+            logger.info(f"OCR提取完成: {len(pages_to_process)}页已处理, 跳过{len(skip_pages_set)}页")
             if status_callback:
                 status_callback('step_complete', {'step': self.STEP_LAYOUT_OCR, 'step_name': self.STEP_LAYOUT_OCR_NAME, 'duration_sec': round(step1_duration, 1)})
-
-            # 表格已在步骤1中提取
-            tables = []
-            for p, r in all_layout_results.items():
-                tables.extend(r.get('tables', []))
-            if tables:
-                logger.info(f"步骤1提取到 {len(tables)} 个表格")
-            else:
-                logger.info("步骤1未检测到表格")
-
-            # 步骤2: 图表/印章图像裁剪
-            if status_callback:
-                status_callback('step_start', {'step': self.STEP_IMAGE_CROP, 'step_name': self.STEP_IMAGE_CROP_NAME})
-            chart_seal_images = []
-            for page_num in target_pages:
-                layout_data = all_layout_results.get(page_num, {})
-                page_info = page_images[page_num]
-                img_path = page_info['img_path']
-                for region in layout_data.get('image_regions', []):
-                    pixel_bbox = region.get('pixel_bbox', region['bbox'])
-                    img = self._extract_image_for_region(
-                        img_path, pixel_bbox, page_num,
-                        len(chart_seal_images), temp_images_dir, page_info
-                    )
-                    if img:
-                        chart_seal_images.append(img)
-            logger.info(f"步骤2完成: 图表/印章裁剪，共{len(chart_seal_images)}张")
-            self._log_memory("步骤2完成")
-            if status_callback:
-                status_callback('step_complete', {'step': self.STEP_IMAGE_CROP, 'step_name': self.STEP_IMAGE_CROP_NAME})
 
             # 合并结果
             pdf_pages = []
             for page_num in target_pages:
-                page_text_blocks = text_blocks_by_page.get(page_num, [])
+                page_text_blocks = all_text_blocks_by_page.get(page_num, [])
                 for i, tb in enumerate(page_text_blocks):
                     tb.block_no = i
                 pdf_pages.append(PdfPage(page_num=page_num, text_blocks=page_text_blocks))
 
-            all_images = chart_seal_images
             # 重新编号 image_idx
             for i, img in enumerate(all_images):
                 img.image_idx = i
 
             # 重新编号 table_idx
-            for i, table in enumerate(tables):
+            for i, table in enumerate(all_tables):
                 table.table_idx = i
 
             logger.info(
                 f"OCR提取完成: 共{len(pdf_pages)}页, "
-                f"{len(tables)}个表格, "
+                f"{len(all_tables)}个表格, "
                 f"{len(all_images)}个图像"
             )
 
             return PdfExtraction(
                 total_pages=total_pages,
                 pages=pdf_pages,
-                tables=tables,
+                tables=all_tables,
                 images=all_images,
             )
 

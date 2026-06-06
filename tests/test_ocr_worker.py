@@ -13,10 +13,12 @@ from modules.ocr.ocr_worker import (
     _degrade_params,
     _estimate_page_count,
     _heartbeat_sender,
+    _assemble_extraction,
     STATUS_HEARTBEAT,
     STATUS_STEP_START,
     STATUS_STEP_PROGRESS,
     STATUS_STEP_COMPLETE,
+    STATUS_PAGE_RESULT,
 )
 
 
@@ -199,7 +201,7 @@ class TestRunOcrInSubprocess:
         from modules.ocr.ocr_worker import run_ocr_in_subprocess
         mock_run_once.side_effect = [
             OcrRetryableError("第一次失败"),
-            MagicMock(total_pages=1),
+            ({1: {'text_blocks': [], 'tables': [], 'images': []}}, [1]),
         ]
         result = run_ocr_in_subprocess('test.pdf', max_retries=1, retry_backoff=0.1)
         assert mock_run_once.call_count == 2
@@ -242,7 +244,7 @@ class TestRunOcrInSubprocess:
         mock_degrade.return_value = degraded
         mock_run_once.side_effect = [
             OcrRetryableError("失败"),
-            MagicMock(total_pages=1),
+            ({1: {'text_blocks': [], 'tables': [], 'images': []}}, [1]),
         ]
         result = run_ocr_in_subprocess('test.pdf', max_retries=1, retry_backoff=0.1)
         mock_degrade.assert_called_once()
@@ -260,7 +262,7 @@ class TestRunOcrInSubprocess:
             'skip_table': False,
             'skip_formula': False,
         }
-        mock_run_once.return_value = MagicMock(total_pages=1)
+        mock_run_once.return_value = ({1: {'text_blocks': [], 'tables': [], 'images': []}}, [1])
         result = run_ocr_in_subprocess('test.pdf', max_retries=0)
         mock_get_params.assert_called_once()
 
@@ -268,8 +270,119 @@ class TestRunOcrInSubprocess:
     @patch('os.path.exists', return_value=True)
     def test_success_on_first_try(self, mock_exists, mock_run_once):
         from modules.ocr.ocr_worker import run_ocr_in_subprocess
-        mock_result = MagicMock(total_pages=5)
-        mock_run_once.return_value = mock_result
+        mock_return = ({1: {'text_blocks': [], 'tables': [], 'images': []}}, [1])
+        mock_run_once.return_value = mock_return
         result = run_ocr_in_subprocess('test.pdf', max_retries=2, retry_backoff=0.1)
-        assert result == mock_result
         assert mock_run_once.call_count == 1
+
+    @patch('modules.ocr.ocr_worker._run_ocr_once')
+    @patch('os.path.exists', return_value=True)
+    def test_checkpoint_resume_merges_results(self, mock_exists, mock_run_once):
+        """测试断点续传：首次返回部分结果，重试补充剩余页面"""
+        from modules.ocr.ocr_worker import run_ocr_in_subprocess
+        # 首次完成 1-3 页，重试完成 4-5 页
+        mock_run_once.side_effect = [
+            ({1: {'text_blocks': [], 'tables': [], 'images': []},
+              2: {'text_blocks': [], 'tables': [], 'images': []},
+              3: {'text_blocks': [], 'tables': [], 'images': []}}, [1, 2, 3]),
+            ({4: {'text_blocks': [], 'tables': [], 'images': []},
+              5: {'text_blocks': [], 'tables': [], 'images': []}}, [4, 5]),
+        ]
+        result = run_ocr_in_subprocess('test.pdf', pages=[1, 2, 3, 4, 5], max_retries=1, retry_backoff=0.1)
+        assert len(result.pages) == 5
+        assert mock_run_once.call_count == 2
+        # 第二次调用应传入 skip_pages
+        second_call_kwargs = mock_run_once.call_args_list[1]
+        assert second_call_kwargs[1].get('skip_pages') == [1, 2, 3] or second_call_kwargs[0][8] == [1, 2, 3]
+
+    @patch('modules.ocr.ocr_worker._run_ocr_once')
+    @patch('os.path.exists', return_value=True)
+    def test_all_pages_done_skips_retry(self, mock_exists, mock_run_once):
+        """测试所有页面已通过流式回传完成时不再重试"""
+        from modules.ocr.ocr_worker import run_ocr_in_subprocess
+        mock_run_once.return_value = (
+            {1: {'text_blocks': [], 'tables': [], 'images': []},
+             2: {'text_blocks': [], 'tables': [], 'images': []}}, [1, 2])
+        result = run_ocr_in_subprocess('test.pdf', pages=[1, 2], max_retries=2, retry_backoff=0.1)
+        assert len(result.pages) == 2
+        assert mock_run_once.call_count == 1
+
+
+class TestAssembleExtraction:
+    def test_assemble_empty_pages(self):
+        """测试无页面结果时组装"""
+        result = _assemble_extraction({}, 0, [])
+        assert len(result.pages) == 0
+        assert len(result.tables) == 0
+        assert len(result.images) == 0
+
+    def test_assemble_single_page(self):
+        """测试单页结果组装"""
+        from models.text_block import TextBlock
+        tb_dict = TextBlock(block_no=0, text="Hello", bbox=[0, 0, 100, 20], page_num=1).to_dict()
+        completed = {1: {'text_blocks': [tb_dict], 'tables': [], 'images': []}}
+        result = _assemble_extraction(completed, 1, [1])
+        assert len(result.pages) == 1
+        assert result.pages[0].page_num == 1
+        assert result.pages[0].text_blocks[0].block_text == "Hello"
+
+    def test_assemble_multiple_pages_with_tables_and_images(self):
+        """测试多页结果组装，含表格和图像"""
+        from models.extraction import PdfTable, PdfImage
+        table_dict = PdfTable(page_num=1, table_idx=0, cells=[], bbox=[0, 0, 100, 100]).to_dict()
+        image_dict = PdfImage(page_num=2, image_idx=0, image_path="/tmp/test.png", bbox=[0, 0, 50, 50]).to_dict()
+        completed = {
+            1: {'text_blocks': [], 'tables': [table_dict], 'images': []},
+            2: {'text_blocks': [], 'tables': [], 'images': [image_dict]},
+        }
+        result = _assemble_extraction(completed, 2, [1, 2])
+        assert len(result.pages) == 2
+        assert len(result.tables) == 1
+        assert result.tables[0].table_idx == 0
+        assert len(result.images) == 1
+        assert result.images[0].image_idx == 0
+
+    def test_assemble_missing_page_gets_empty_blocks(self):
+        """测试缺失页面自动填充空 text_blocks"""
+        completed = {1: {'text_blocks': [], 'tables': [], 'images': []}}
+        result = _assemble_extraction(completed, 2, [1, 2])
+        assert len(result.pages) == 2
+        assert result.pages[1].page_num == 2
+        assert len(result.pages[1].text_blocks) == 0
+
+    def test_assemble_global_indexing(self):
+        """测试全局 table_idx 和 image_idx 编号"""
+        from models.extraction import PdfTable, PdfImage
+        t1 = PdfTable(page_num=1, table_idx=0, cells=[], bbox=[0, 0, 100, 100]).to_dict()
+        t2 = PdfTable(page_num=2, table_idx=0, cells=[], bbox=[0, 0, 100, 100]).to_dict()
+        i1 = PdfImage(page_num=1, image_idx=0, image_path="/tmp/a.png", bbox=[0, 0, 50, 50]).to_dict()
+        i2 = PdfImage(page_num=2, image_idx=0, image_path="/tmp/b.png", bbox=[0, 0, 50, 50]).to_dict()
+        completed = {
+            1: {'text_blocks': [], 'tables': [t1], 'images': [i1]},
+            2: {'text_blocks': [], 'tables': [t2], 'images': [i2]},
+        }
+        result = _assemble_extraction(completed, 2, [1, 2])
+        assert result.tables[0].table_idx == 0
+        assert result.tables[1].table_idx == 1
+        assert result.images[0].image_idx == 0
+        assert result.images[1].image_idx == 1
+
+
+class TestStatusPageResult:
+    def test_page_result_constant_value(self):
+        """测试 STATUS_PAGE_RESULT 常量值"""
+        assert STATUS_PAGE_RESULT == 'page_result'
+
+    def test_page_result_message_format(self):
+        """测试 page_result 消息格式"""
+        msg_type, payload = STATUS_PAGE_RESULT, {
+            'page_num': 5,
+            'text_blocks': [],
+            'tables': [],
+            'images': [],
+        }
+        assert msg_type == 'page_result'
+        assert 'page_num' in payload
+        assert 'text_blocks' in payload
+        assert 'tables' in payload
+        assert 'images' in payload
