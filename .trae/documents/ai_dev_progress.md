@@ -1,5 +1,33 @@
 # AI 开发进度记录
 
+### 2026-06-07
+- **当前状态**：已完成非OCR模式表格精准还原和表格翻译分隔符丢失修复
+- **已完成任务**：
+  - 非 OCR 模式表格精准还原——使用 PyMuPDF 真实单元格 bbox 替代均匀分割：
+    - 新增 `_build_bbox_matrix()` 函数，将 `rows_data` 转为行×列 bbox 矩阵
+    - 新增 `calculate_row_heights_from_bboxes()` 和 `calculate_col_widths_from_bboxes()` 函数
+    - 修改 `extract_table_cells_by_bbox` 返回值新增 `rows_data`
+    - 修改 `extract_tables_by_pymupdf` 优先使用真实 bbox，均匀分割仅作 fallback
+  - 修复表格行翻译分隔符丢失导致单元格内容重复：
+    - 在 `translator.py` system prompt 新增第17条规则：保留 "|||" 分隔符
+    - 在 `translate_table_row` 中增加分隔符数量不匹配的 fallback
+  - OCR 模式表格网格布局重构：
+    - 重构 `_compute_table_grid()` 使用列边界聚类替代均匀分割
+    - 新增 `_cluster_1d()` 一维聚类函数
+- **技术实现**：
+  - 非 OCR 模式：PyMuPDF 的 `table.rows[i].cells[j]` 提供真实单元格 bbox（含合并单元格信息），之前被 `calculate_cell_bbox` 均匀分割完全替代
+  - 翻译分隔符：`translate_table_row` 用 `\n|||` 拼接同行单元格后 LLM 未保留分隔符，导致拆分后内容错位
+  - OCR 模式：列边界聚类替代均匀分割，解决 OCR textline 位置不均匀导致的列宽不准
+- **影响**：
+  - 非 OCR 模式表格还原更精准，合并单元格和不等行高列宽正确显示
+  - 表格翻译不再出现短文本单元格（如 "Output"）被长文本内容覆盖的问题
+  - OCR 模式表格行列对齐更准确
+- **遇到的问题**：
+  - 发现表格标题/脚注（如 "Table 5. An example of role prompting"）被 PyMuPDF 的 `table.rows` 最后一行单元格 bbox 覆盖，导致合并进单元格——尚未修复，已加入 TODO
+- **后续计划**：
+  - 实现表格标题/脚注后处理分离方案（`separate_table_caption_and_footnote`）
+  - 运行程序验证第20页表格 Output 单元格翻译效果
+
 ### 2026-06-06
 - **当前状态**：已修复日期型页尾未被识别导致跨页错误合并问题
 - **已完成任务**：

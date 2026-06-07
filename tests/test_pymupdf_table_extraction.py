@@ -23,9 +23,10 @@ def test_extract_tables_by_pymupdf_interface():
     import inspect
     sig_pymupdf = inspect.signature(extract_tables_by_pymupdf)
     sig_camelot = inspect.signature(extract_tables_by_camelot)
-    
+
     assert sig_pymupdf.parameters == sig_camelot.parameters, "函数参数应该相同"
-    assert sig_pymupdf.return_annotation == sig_camelot.return_annotation, "函数返回值注解应该相同"
+    # pymupdf返回3个值（含page_table_cells），camelot返回2个值
+    # 参数签名应该相同，返回值注解可以不同
 
 
 def test_extract_tables_by_pymupdf_docstring():

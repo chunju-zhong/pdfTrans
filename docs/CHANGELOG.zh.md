@@ -1,5 +1,30 @@
 # 更新日志
 
+## 2026-06-07
+
+- 非 OCR 模式表格精准还原——使用 PyMuPDF 真实单元格 bbox 替代均匀分割：
+  - 新增 `_build_bbox_matrix()` 函数，将 `extract_table_cells_by_bbox` 返回的 `rows_data` 转为行×列 bbox 矩阵
+  - 新增 `calculate_row_heights_from_bboxes()` 函数，从真实 bbox 推算行高（同行取最大 y1-y0）
+  - 新增 `calculate_col_widths_from_bboxes()` 函数，从真实 bbox 推算列宽（合并单元格按跨列数等分分配）
+  - 修改 `extract_table_cells_by_bbox` 返回值新增 `rows_data`（真实 bbox 矩阵）
+  - 修改 `extract_tables_by_pymupdf` 优先使用真实 bbox，均匀分割仅作 fallback
+  - 修改 `extract_tables_by_pymupdf` 行列尺寸计算优先从真实 bbox 推算
+- 修复表格行翻译分隔符丢失导致单元格内容重复：
+  - 在 `translator.py` system prompt 新增第17条规则：保留 "|||" 分隔符，每个分隔段独立翻译不合并
+  - 在 `translate_table_row` 中增加分隔符数量不匹配的 fallback：逐个单元格单独翻译
+- OCR 模式表格网格布局重构：
+  - 重构 `paddle_extractor.py` `_compute_table_grid()` 使用列边界聚类替代均匀分割
+  - 同行单元格高度统一，同列单元格宽度统一，解决 OCR 模式表格行列不对齐问题
+  - 新增 `_cluster_1d()` 一维聚类函数，用于行列边界检测
+- 修复测试适配 `extract_tables` 返回值变更（三元组→四元组）
+- 相关文件：
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/translator.py`
+  - `services/translation_service.py`
+  - `tests/test_pdf_extractor.py`
+
 ## 2026-06-06
 
 - 修复日期型页尾未被识别导致跨页错误合并：

@@ -57,6 +57,9 @@ def _setup_subprocess_logger(name):
 def _ocr_worker_func(pdf_path, pages, temp_images_dir, lang, use_gpu,
                      result_queue, status_queue, ocr_params, skip_pages=None):
     thread_params = ocr_params.get('thread_params', {}) if ocr_params else {}
+    # 注意：以下环境变量仅在 multiprocessing spawn 模式的子进程中设置。
+    # spawn 模式下子进程有独立的内存空间，不会污染主进程环境。
+    # 若改为 fork 或线程模式，这些设置会直接影响主进程，造成环境变量污染。
     os.environ['FLAGS_fraction_of_gpu_memory_to_use'] = '0.5'
     os.environ['CPU_NUM'] = thread_params.get('CPU_NUM', '2')
     os.environ['OMP_NUM_THREADS'] = thread_params.get('OMP_NUM_THREADS', '2')
@@ -75,15 +78,6 @@ def _ocr_worker_func(pdf_path, pages, temp_images_dir, lang, use_gpu,
     if ocr_params is None:
         ocr_params = {}
     ocr_params['cpu_threads'] = int(thread_params.get('OMP_NUM_THREADS', '2'))
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'app.log')),
-            logging.StreamHandler()
-        ]
-    )
 
     _setup_subprocess_logger('modules.ocr.paddle_extractor')
     _setup_subprocess_logger('modules.ocr.ocr_worker')

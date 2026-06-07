@@ -96,7 +96,7 @@ class Config:
 
     # OCR 超时与重试配置
     OCR_HEARTBEAT_TIMEOUT = int(os.environ.get('OCR_HEARTBEAT_TIMEOUT', '0'))  # 心跳超时(秒)，0=禁用，超过判定子进程死机
-    OCR_MAX_TOTAL_TIME = int(os.environ.get('OCR_MAX_TOTAL_TIME', '86400'))  # OCR最大总执行时间(秒)
+    OCR_MAX_TOTAL_TIME = int(os.environ.get('OCR_MAX_TOTAL_TIME', '252000'))  # OCR最大总执行时间(秒)
     OCR_STALL_TIMEOUT = int(os.environ.get('OCR_STALL_TIMEOUT', '1800'))  # OCR进度停滞超时(秒)
 
     OCR_MAX_RETRIES = int(os.environ.get('OCR_MAX_RETRIES', '2'))  # 子进程崩溃后最大重试次数

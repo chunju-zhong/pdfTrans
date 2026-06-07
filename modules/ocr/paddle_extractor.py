@@ -14,6 +14,7 @@ import sys
 import re
 import logging
 import time
+from typing import Optional, Dict, Any
 
 import cv2
 import psutil
@@ -59,8 +60,6 @@ class _TableHtmlParser(HTMLParser):
         if self.in_cell:
             self.current_cell += data
 
-
-from typing import Optional, Dict, Any
 
 class PaddleOcrExtractor(OcrExtractor):
     """基于PaddleOCR PP-StructureV3的OCR提取器（分步加载）
@@ -295,52 +294,7 @@ class PaddleOcrExtractor(OcrExtractor):
             pipeline = PPStructureV3(**kwargs)
 
             # PPStructureV3 构造可能破坏 root logger 和子 logger 配置
-            # 恢复 root logger level（被改为 WARNING 等会过滤 INFO 日志）
-            if root_logger.level > root_level_before:
-                logger.warning(
-                    f"PPStructureV3 构造修改了 root logger level "
-                    f"({logging.getLevelName(root_level_before)} -> {logging.getLevelName(root_logger.level)})，正在恢复"
-                )
-                root_logger.setLevel(root_level_before)
-
-            # 恢复 root logger handlers：直接恢复保存的 handler 引用
-            root_logger.handlers.clear()
-            for h in root_handlers_before:
-                if h not in root_logger.handlers:
-                    root_logger.addHandler(h)
-
-            # 恢复子 logger propagate（被设为 False 会阻止日志传播到 root）
-            child_logger = logging.getLogger(__name__)
-            if not child_logger.propagate:
-                if child_logger.handlers:
-                    logger.debug(
-                        "PPStructureV3 构造将子 logger propagate 设为 False，"
-                        "子 logger 有自有 handler，保持 propagate=False 避免重复输出"
-                    )
-                else:
-                    logger.warning(
-                        "PPStructureV3 构造将子 logger propagate 设为 False，正在恢复为 True"
-                    )
-                    child_logger.propagate = True
-
-            # 移除子 logger 上被添加的 NullHandler（会吞掉所有日志）
-            null_handlers = [
-                h for h in child_logger.handlers
-                if isinstance(h, logging.NullHandler)
-            ]
-            for h in null_handlers:
-                logger.warning("PPStructureV3 构造向子 logger 添加了 NullHandler，正在移除")
-                child_logger.removeHandler(h)
-
-            # 确保子 logger level 为 INFO 或更低
-            if child_logger.level > logging.INFO:
-                logger.warning(
-                    f"PPStructureV3 构造修改了子 logger level 为 {logging.getLevelName(child_logger.level)}，正在恢复为 INFO"
-                )
-                child_logger.setLevel(logging.INFO)
-
-            # 验证日志状态已恢复
-            logger.info("PPStructureV3 构造后 logger 状态已检查并恢复")
+            self._restore_logger_state(root_level_before, root_handlers_before)
 
             return pipeline
         except Exception as e:
@@ -349,6 +303,65 @@ class PaddleOcrExtractor(OcrExtractor):
                 f"OCR 引擎初始化失败: {str(e)}。"
                 "请确保已正确安装 PaddleOCR: pip install \"paddleocr[all]\""
             ) from e
+
+    def _restore_logger_state(self, root_level_before, root_handlers_before):
+        """恢复 PPStructureV3 构造后可能被破坏的 logger 配置
+
+        PPStructureV3 构造过程中可能修改 root logger 的 level 和 handlers，
+        以及子 logger 的 propagate、handlers 和 level，此方法将这些状态恢复到构造前的值。
+
+        Args:
+            root_level_before: 构造前 root logger 的 level
+            root_handlers_before: 构造前 root logger 的 handlers 列表
+        """
+        root_logger = logging.getLogger()
+
+        # 恢复 root logger level（被改为 WARNING 等会过滤 INFO 日志）
+        if root_logger.level > root_level_before:
+            logger.warning(
+                f"PPStructureV3 构造修改了 root logger level "
+                f"({logging.getLevelName(root_level_before)} -> {logging.getLevelName(root_logger.level)})，正在恢复"
+            )
+            root_logger.setLevel(root_level_before)
+
+        # 恢复 root logger handlers：直接恢复保存的 handler 引用
+        root_logger.handlers.clear()
+        for h in root_handlers_before:
+            if h not in root_logger.handlers:
+                root_logger.addHandler(h)
+
+        # 恢复子 logger propagate（被设为 False 会阻止日志传播到 root）
+        child_logger = logging.getLogger(__name__)
+        if not child_logger.propagate:
+            if child_logger.handlers:
+                logger.debug(
+                    "PPStructureV3 构造将子 logger propagate 设为 False，"
+                    "子 logger 有自有 handler，保持 propagate=False 避免重复输出"
+                )
+            else:
+                logger.warning(
+                    "PPStructureV3 构造将子 logger propagate 设为 False，正在恢复为 True"
+                )
+                child_logger.propagate = True
+
+        # 移除子 logger 上被添加的 NullHandler（会吞掉所有日志）
+        null_handlers = [
+            h for h in child_logger.handlers
+            if isinstance(h, logging.NullHandler)
+        ]
+        for h in null_handlers:
+            logger.warning("PPStructureV3 构造向子 logger 添加了 NullHandler，正在移除")
+            child_logger.removeHandler(h)
+
+        # 确保子 logger level 为 INFO 或更低
+        if child_logger.level > logging.INFO:
+            logger.warning(
+                f"PPStructureV3 构造修改了子 logger level 为 {logging.getLevelName(child_logger.level)}，正在恢复为 INFO"
+            )
+            child_logger.setLevel(logging.INFO)
+
+        # 验证日志状态已恢复
+        logger.info("PPStructureV3 构造后 logger 状态已检查并恢复")
 
     def _render_pages(self, doc, target_pages, temp_images_dir):
         """渲染PDF页面为图像
@@ -778,53 +791,11 @@ class PaddleOcrExtractor(OcrExtractor):
 
                             # Estimate font_size using textline-level bbox heights
                             bbox_height = pdf_bbox[3] - pdf_bbox[1]
-                            estimated_font_size = 10.0  # default
-                            font_estimation_method = "fallback"
-
-                            # 方法1: 使用 overall_ocr_res 中的 textline bbox
-                            if textline_boxes is not None and len(textline_boxes) > 0:
-                                # 找到落在当前 block bbox 范围内的 textline
-                                block_x1, block_y1 = float(x1), float(y1)
-                                block_x2, block_y2 = float(x2), float(y2)
-                                matching_heights = []
-                                for tl_box in textline_boxes:
-                                    if len(tl_box) >= 4:
-                                        tl_x1, tl_y1, tl_x2, tl_y2 = float(tl_box[0]), float(tl_box[1]), float(tl_box[2]), float(tl_box[3])
-                                        # textline 中心点在 block 范围内
-                                        tl_cx = (tl_x1 + tl_x2) / 2
-                                        tl_cy = (tl_y1 + tl_y2) / 2
-                                        if block_x1 <= tl_cx <= block_x2 and block_y1 <= tl_cy <= block_y2:
-                                            matching_heights.append(tl_y2 - tl_y1)
-                                
-                                if matching_heights:
-                                    avg_textline_height_px = sum(matching_heights) / len(matching_heights)
-                                    # 转换为 PDF 点坐标高度
-                                    scale_y = bbox_height / (block_y2 - block_y1) if (block_y2 - block_y1) > 0 else 1.0
-                                    avg_textline_height_pdf = avg_textline_height_px * scale_y
-                                    estimated_font_size = avg_textline_height_pdf * 0.75
-                                    font_estimation_method = f"textline({len(matching_heights)}lines,avg_h={avg_textline_height_pdf:.1f}pt)"
-                            
-                            # 方法2: 使用 LayoutBlock 的 num_of_lines 和 text_line_height
-                            if font_estimation_method == "fallback":
-                                num_of_lines = getattr(block, 'num_of_lines', None)
-                                text_line_height = getattr(block, 'text_line_height', None)
-                                if text_line_height and text_line_height > 0:
-                                    # text_line_height 是像素坐标，转换为 PDF 点
-                                    scale_y = bbox_height / (float(y2) - float(y1)) if (float(y2) - float(y1)) > 0 else 1.0
-                                    estimated_font_size = text_line_height * scale_y * 0.75
-                                    font_estimation_method = f"block_tlh({text_line_height:.1f}px)"
-                                elif num_of_lines and num_of_lines > 1:
-                                    estimated_font_size = (bbox_height / num_of_lines) * 0.75
-                                    font_estimation_method = f"block_nol({num_of_lines})"
-                            
-                            # 方法3: 最终回退 - 基于典型行高估算行数
-                            if font_estimation_method == "fallback":
-                                assumed_line_height = 12.0  # 典型文档行高（pt）
-                                estimated_lines = max(1, round(bbox_height / assumed_line_height))
-                                estimated_font_size = (bbox_height / estimated_lines) * 0.75
-                                font_estimation_method = f"block_bbox_fallback({estimated_lines}lines)"
-
-                            estimated_font_size = max(6, min(36, estimated_font_size))
+                            pixel_bbox_height = float(y2) - float(y1)
+                            estimated_font_size, font_estimation_method = PaddleOcrExtractor._estimate_font_size_from_textlines(
+                                (float(x1), float(y1), float(x2), float(y2)),
+                                textline_boxes, bbox_height, pixel_bbox_height
+                            )
                             
                             logger.info(f"[FONT_DEBUG] page={page_num}, label={label}, is_body={label not in self.NON_BODY_LABELS}, "
                                         f"text={repr(text[:30])}, font_size={estimated_font_size:.2f}, method={font_estimation_method}")

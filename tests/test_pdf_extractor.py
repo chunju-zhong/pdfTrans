@@ -61,8 +61,8 @@ class TestPdfExtractor:
         验证extract_tables方法能够正确提取PDF中的表格内容。
         """
         pdf_extractor = PdfExtractor(test_pdf_path)
-        tables, page_tables = pdf_extractor.extract_tables()
-        
+        tables, page_tables, _ = pdf_extractor.extract_tables()
+
         # 验证返回结果类型
         assert isinstance(tables, list)
         assert isinstance(page_tables, dict)
@@ -98,7 +98,7 @@ class TestPdfExtractor:
         total_pages = metadata['total_pages']
         
         # 测试提取第一页
-        tables, page_tables = pdf_extractor.extract_tables(pages=[1])
+        tables, page_tables, _ = pdf_extractor.extract_tables(pages=[1])
         assert isinstance(tables, list)
         assert isinstance(page_tables, dict)
         
@@ -127,7 +127,7 @@ class TestPdfExtractor:
             assert set(page_tables.keys()) <= valid_pages
         
         # 测试提取不存在的页面（应该忽略）
-        tables, page_tables = pdf_extractor.extract_tables(pages=[999, 1])
+        tables, page_tables, _ = pdf_extractor.extract_tables(pages=[999, 1])
         assert isinstance(tables, list)
         assert isinstance(page_tables, dict)
         

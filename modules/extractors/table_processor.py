@@ -8,6 +8,9 @@ from .coordinate_utils import (
     calculate_cell_bbox,
     calculate_row_heights,
     calculate_col_widths,
+    _build_bbox_matrix,
+    calculate_row_heights_from_bboxes,
+    calculate_col_widths_from_bboxes,
     create_cell_info,
     create_pdf_cell
 )
@@ -184,24 +187,139 @@ def extract_tables_by_camelot(pdf_path, pages=None):
         logger.error(f"提取PDF表格时出错: {str(e)}", exc_info=True)
         raise Exception(f"提取PDF表格时出错: {str(e)}")
 
+def extract_table_cells_by_bbox(page, table):
+    """使用单元格精确bbox提取表格文本，替代table.extract()
+
+    PyMuPDF的table.extract()使用字符中心点归属判断，会将表格标题/脚注
+    错误地吸附进单元格。此函数使用单元格精确bbox和50%面积重叠判断，
+    从几何位置上确保只有真正属于单元格的文本被提取。
+
+    Args:
+        page: PyMuPDF页面对象
+        table: PyMuPDF Table对象
+
+    Returns:
+        tuple: (data, cell_bboxes, rows_data)
+            - data: 二维列表，格式与table.extract()一致
+            - cell_bboxes: 单元格bbox列表 [(x0,y0,x1,y1), ...]
+            - rows_data: 行×列 bbox 矩阵，每行包含该行各单元格的 bbox tuple 或 None
+    """
+    # 1. 从table.rows获取每行的单元格bbox，构建行×列矩阵
+    rows_data = []
+    cell_bboxes = []
+
+    for row in table.rows:
+        row_cells = []
+        for cell in row.cells:
+            if cell is not None:
+                row_cells.append(tuple(cell))
+                cell_bboxes.append(tuple(cell))
+            else:
+                row_cells.append(None)
+        rows_data.append(row_cells)
+
+    if not rows_data:
+        return [], [], []
+
+    num_rows = len(rows_data)
+    num_cols = max(len(row) for row in rows_data)
+
+    # 2. 获取页面所有字符及其bbox
+    rawdict = page.get_text("rawdict", flags=fitz.TEXTFLAGS_TEXT)
+
+    # 收集所有字符
+    all_chars = []
+    for block in rawdict.get("blocks", []):
+        if block["type"] != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                for char in span.get("chars", []):
+                    char_bbox = fitz.Rect(char["bbox"])
+                    char_area = char_bbox.width * char_bbox.height
+                    if char_area > 0:
+                        all_chars.append({
+                            "char": char["c"],
+                            "bbox": char_bbox,
+                            "area": char_area,
+                            "x0": char_bbox.x0,
+                            "y0": char_bbox.y0,
+                        })
+
+    # 3. 为每个单元格分配字符
+    # 初始化单元格字符列表
+    cell_chars = {}
+    for row_idx, row in enumerate(rows_data):
+        for col_idx, cell_bbox in enumerate(row):
+            if cell_bbox is not None:
+                cell_chars[(row_idx, col_idx)] = []
+
+    # 对每个字符，检查与各单元格的重叠
+    for char_info in all_chars:
+        char_rect = char_info["bbox"]
+        char_area = char_info["area"]
+        best_overlap_ratio = 0
+        best_cell = None
+
+        for row_idx, row in enumerate(rows_data):
+            for col_idx, cell_bbox in enumerate(row):
+                if cell_bbox is None:
+                    continue
+                cell_rect = fitz.Rect(cell_bbox)
+                try:
+                    intersection = char_rect & cell_rect
+                    if intersection.is_empty:
+                        continue
+                    overlap_area = intersection.width * intersection.height
+                    overlap_ratio = overlap_area / char_area
+                    if overlap_ratio > best_overlap_ratio:
+                        best_overlap_ratio = overlap_ratio
+                        best_cell = (row_idx, col_idx)
+                except Exception:
+                    continue
+
+        # 重叠超过50%才分配
+        if best_overlap_ratio > 0.5 and best_cell is not None:
+            cell_chars[best_cell].append(char_info)
+
+    # 4. 将每个单元格的字符按阅读顺序排序并拼接为文本
+    data = []
+    for row_idx in range(num_rows):
+        row_data = []
+        for col_idx in range(num_cols):
+            key = (row_idx, col_idx)
+            if key in cell_chars and cell_chars[key]:
+                # 按y坐标再按x坐标排序
+                sorted_chars = sorted(cell_chars[key], key=lambda c: (c["y0"], c["x0"]))
+                text = "".join(c["char"] for c in sorted_chars)
+                row_data.append(text)
+            else:
+                row_data.append(None)
+        data.append(row_data)
+
+    return data, cell_bboxes, rows_data
+
+
 def extract_tables_by_pymupdf(pdf_path, pages=None):
     """提取PDF中的表格内容，可以指定页面
-    
+
     Args:
         pdf_path (str): PDF文件路径
         pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
-        
+
     Returns:
-        tuple[list[PdfTable], dict]: 包含提取的表格列表和按页码组织的表格边界框字典
+        tuple[list[PdfTable], dict, dict]: 包含提取的表格列表、按页码组织的表格边界框字典和按页码组织的单元格边界框字典
             - list[PdfTable]: 提取的表格列表
             - dict: 按页码组织的表格边界框字典，键为页码，值为边界框列表
+            - dict: 按页码组织的单元格边界框字典，键为页码，值为单元格bbox列表的列表
     """
     if not pdf_path:
         raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
     
     pdf_tables = []
     page_tables = {}
-    
+    page_table_cells = {}
+
     try:
         logger.info(f"开始使用PyMuPDF提取PDF表格: {pdf_path}")
         
@@ -238,22 +356,47 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                         
                         bbox_tuple = bbox
                         
-                        # 获取表格内容
-                        data = table.extract()
-                        logger.info(f"表格{table_idx}内容: {data}")
+                        # 获取表格内容（使用单元格精确bbox提取，避免标题/脚注被错误包含）
+                        rows_data = []
+                        try:
+                            data, table_cell_bboxes, rows_data = extract_table_cells_by_bbox(page, table)
+                            logger.info(f"表格{table_idx}内容(精确bbox提取): {data}")
+                        except Exception as e:
+                            logger.warning(f"精确bbox提取失败，回退到table.extract(): {e}")
+                            data = table.extract()
+                            table_cell_bboxes = []
+                            rows_data = []
+                            logger.info(f"表格{table_idx}内容(回退): {data}")
                         
                         # 构建单元格信息
                         cell_info_list = []
+                        use_real_bbox = bool(rows_data and table_cell_bboxes)
+
+                        if use_real_bbox:
+                            # 使用 PyMuPDF 真实单元格 bbox
+                            num_rows = len(data)
+                            num_cols = max(len(row) for row in data) if data else 0
+                            bbox_matrix = _build_bbox_matrix(rows_data, num_rows, num_cols)
+                            logger.info(f"表格{table_idx}使用真实单元格bbox，矩阵大小: {num_rows}×{num_cols}")
+
                         for row_idx, row in enumerate(data):
                             for col_idx, text in enumerate(row):
-                                # 估算单元格边界框
-                                if bbox:
-                                    cell_bbox = calculate_cell_bbox(
-                                        bbox_tuple, row_idx, col_idx, len(data), len(row)
-                                    )
+                                if use_real_bbox and row_idx < len(bbox_matrix) and col_idx < len(bbox_matrix[row_idx]):
+                                    cell_bbox = bbox_matrix[row_idx][col_idx]
+                                    if cell_bbox is None:
+                                        # 合并单元格的被合并位置，使用均匀分割作为 fallback
+                                        cell_bbox = calculate_cell_bbox(
+                                            bbox_tuple, row_idx, col_idx, len(data), len(row)
+                                        )
                                 else:
-                                    cell_bbox = (0, 0, 100, 30)  # 默认值
-                                
+                                    # 回退：均匀分割
+                                    if bbox:
+                                        cell_bbox = calculate_cell_bbox(
+                                            bbox_tuple, row_idx, col_idx, len(data), len(row)
+                                        )
+                                    else:
+                                        cell_bbox = (0, 0, 100, 30)  # 默认值
+
                                 cell_info = create_cell_info(text, cell_bbox, row_idx, col_idx)
                                 cell_info_list.append(cell_info)
                                 logger.debug(f"创建单元格信息: 行={row_idx}, 列={col_idx}, 文本='{text}', 边界框={cell_bbox}")
@@ -287,11 +430,16 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                         has_content = any(cell and cell.text.strip() for row in cell_matrix for cell in row)
                         if has_content:
                             # 计算行高和列宽
-                            row_heights_list = calculate_row_heights(cell_matrix)
-                            col_widths_list = calculate_col_widths(cell_matrix, bbox_tuple)
-                            
-                            logger.info(f"计算的行高: {row_heights_list}")
-                            logger.info(f"计算的列宽: {col_widths_list}")
+                            if use_real_bbox:
+                                row_heights_list = calculate_row_heights_from_bboxes(bbox_matrix)
+                                col_widths_list = calculate_col_widths_from_bboxes(bbox_matrix, bbox_tuple)
+                                logger.info(f"从真实bbox计算的行高: {row_heights_list}")
+                                logger.info(f"从真实bbox计算的列宽: {col_widths_list}")
+                            else:
+                                row_heights_list = calculate_row_heights(cell_matrix)
+                                col_widths_list = calculate_col_widths(cell_matrix, bbox_tuple)
+                                logger.info(f"计算的行高: {row_heights_list}")
+                                logger.info(f"计算的列宽: {col_widths_list}")
                             
                             # 创建PdfTable对象并添加到pdf_tables列表
                             pdf_table = PdfTable(
@@ -310,13 +458,18 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                                 page_tables[page_num] = []
                             if bbox_tuple:
                                 page_tables[page_num].append(bbox_tuple)
+
+                            # 按页码组织单元格bbox数据
+                            if page_num not in page_table_cells:
+                                page_table_cells[page_num] = []
+                            page_table_cells[page_num].append(table_cell_bboxes)
                 except Exception as e:
                     logger.warning(f"页面{page_num}提取表格失败: {e}")
                     continue
-        
+
         logger.info(f"表格提取完成: 总表格={len(pdf_tables)}")
-        return pdf_tables, page_tables
-        
+        return pdf_tables, page_tables, page_table_cells
+
     except FileNotFoundError:
         # 直接重新抛出FileNotFoundError
         raise

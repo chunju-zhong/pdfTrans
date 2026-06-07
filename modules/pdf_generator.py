@@ -286,18 +286,18 @@ class PdfGenerator:
                     )
                     
                     if result >= 0:
-                        logger.info(f"✅ 文本渲染成功，插入了 {result} 个字符，使用字体大小: {adjusted_font_size}，文本框大小: {current_rect}")
+                        logger.info(f"[OK] 文本渲染成功，插入了 {result} 个字符，使用字体大小: {adjusted_font_size}，文本框大小: {current_rect}")
                         logger.debug(f"渲染文本内容: '{translated_text[:100]}...' (完整长度={len(translated_text)})")
                         success = True
                         break
                     
                     # 文本溢出，需要调整
-                    logger.warning(f"⚠️  文本溢出，返回值: {result}，当前字体大小: {adjusted_font_size}，文本框: {current_rect}")
+                    logger.warning(f"[WARN] 文本溢出，返回值: {result}，当前字体大小: {adjusted_font_size}，文本框: {current_rect}")
                     logger.warning(f"溢出文本: '{translated_text[:100]}...' (完整长度={len(translated_text)})")
                     
                     # 调整文本框大小（仅前3次尝试）
                 except Exception as e:
-                    logger.warning(f"❌ 绘制失败: {e}")
+                    logger.warning(f"[FAIL] 绘制失败: {e}")
                     break
             
             if not success:
@@ -314,7 +314,7 @@ class PdfGenerator:
                             align=alignment
                         )
                         if result >= 0:
-                            logger.info(f"✅ 缩小字体到{font_ratio*100:.0f}%后渲染成功，字体大小: {adjusted_font_size}")
+                            logger.info(f"[OK] 缩小字体到{font_ratio*100:.0f}%后渲染成功，字体大小: {adjusted_font_size}")
                             success = True
                             break
                         logger.warning(f"缩小字体到{font_ratio*100:.0f}%仍溢出，继续尝试")
@@ -526,9 +526,9 @@ class PdfGenerator:
                         has_english = any(c.isalpha() and ord(c) < 128 for c in cell_text)
                         has_chinese = any('\u4e00' <= c <= '\u9fff' for c in cell_text)
                         if has_english and not has_chinese and target_lang == 'zh':
-                            logger.warning(f"[表格绘制] ⚠️ 单元格 ({i},{j}) 可能包含原文(英文)而非译文: '{text_preview}'")
+                            logger.warning(f"[表格绘制] [WARN] 单元格 ({i},{j}) 可能包含原文(英文)而非译文: '{text_preview}'")
                         elif has_chinese and target_lang == 'zh':
-                            logger.info(f"[表格绘制] ✅ 单元格 ({i},{j}) 包含中文译文: '{text_preview}'")
+                            logger.info(f"[表格绘制] [OK] 单元格 ({i},{j}) 包含中文译文: '{text_preview}'")
                 else:
                     cell_text = str(cell)
                     cell_bbox = None
@@ -658,9 +658,9 @@ class PdfGenerator:
                     
                     # 记录单元格绘制状态
                     if success:
-                        logger.info(f"✅ 单元格 ({i+1},{j+1}) 绘制完成: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
+                        logger.info(f"[OK] 单元格 ({i+1},{j+1}) 绘制完成: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
                     else:
-                        logger.warning(f"❌ 单元格 ({i+1},{j+1}) 绘制失败: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
+                        logger.warning(f"[FAIL] 单元格 ({i+1},{j+1}) 绘制失败: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
                 else:
                     logger.info(f"单元格 ({i+1},{j+1}) 无文本，但已绘制背景")
         
@@ -773,7 +773,7 @@ class PdfGenerator:
             'hi': 'नमस्ते',
             'he': 'שלום',
         }
-        test_chars.get(target_lang, test_chars['en'])
+        test_char = test_chars.get(target_lang, test_chars['en'])
 
         # 拉丁语言（en/fr/de/es/pt/it/nl）的内嵌字体通常支持拉丁字符
         latin_langs = {'en', 'fr', 'de', 'es', 'pt', 'it', 'nl'}
@@ -837,7 +837,7 @@ class PdfGenerator:
                 'hi': 'नमस्ते',
                 'he': 'שלום',
             }
-            test_chars.get(target_lang, test_chars['en'])
+            test_char = test_chars.get(target_lang, test_chars['en'])
             
             # 检查字体是否包含测试字符的字形
             # 使用getbbox检查每个字符的宽度，替换字符宽度通常为0或固定值

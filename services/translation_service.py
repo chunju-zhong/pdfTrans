@@ -798,6 +798,35 @@ class TranslationService:
                 })
 
             parts = translated.split(SEPARATOR)
+
+            # 检查分隔符数量是否匹配
+            if len(parts) != len(non_empty_cells):
+                logger.warning(f"任务 {task.task_id} 表格行翻译分隔符不匹配: 期望{len(non_empty_cells)}段, 实际{len(parts)}段, 回退到逐个翻译")
+                # 逐个单元格翻译作为 fallback
+                result = {}
+                for col_idx, text in non_empty_cells:
+                    cell = row_cells[col_idx]
+                    try:
+                        single_result = translator.translate(
+                            text, source_lang, target_lang,
+                            doc_type=doc_type, glossary=glossary
+                        )
+                        result[col_idx] = PdfCell(
+                            text=single_result.content.strip(),
+                            bbox=cell.bbox,
+                            row_idx=cell.row_idx,
+                            col_idx=cell.col_idx
+                        )
+                    except Exception as e:
+                        logger.warning(f"任务 {task.task_id} 单个单元格翻译失败: {e}, 使用原文")
+                        result[col_idx] = PdfCell(
+                            text=text,
+                            bbox=cell.bbox,
+                            row_idx=cell.row_idx,
+                            col_idx=cell.col_idx
+                        )
+                return table_idx, row_idx, result, table_pages.get(table_idx, 0)
+
             result = {}
             for i, (col_idx, original) in enumerate(non_empty_cells):
                 cell = row_cells[col_idx]

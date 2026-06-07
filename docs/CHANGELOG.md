@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-06-07
+
+- Non-OCR mode table precise restoration — use PyMuPDF real cell bbox instead of uniform splitting:
+  - Added `_build_bbox_matrix()` function to convert `rows_data` from `extract_table_cells_by_bbox` into row×col bbox matrix
+  - Added `calculate_row_heights_from_bboxes()` function to calculate row heights from real bboxes (max y1-y0 per row)
+  - Added `calculate_col_widths_from_bboxes()` function to calculate column widths from real bboxes (merged cells distributed equally across spanned columns)
+  - Modified `extract_table_cells_by_bbox` to return `rows_data` (real bbox matrix) as third return value
+  - Modified `extract_tables_by_pymupdf` to prefer real bbox, with uniform splitting as fallback
+  - Modified `extract_tables_by_pymupdf` to prefer row/col size calculation from real bboxes
+- Fixed table row translation separator loss causing cell content duplication:
+  - Added rule 17 to `translator.py` system prompt: preserve "|||" separators, translate each segment independently without merging
+  - Added fallback in `translate_table_row` for separator count mismatch: translate each cell individually
+- OCR mode table grid layout refactoring:
+  - Refactored `paddle_extractor.py` `_compute_table_grid()` to use column boundary clustering instead of uniform splitting
+  - Unified cell heights within same row and cell widths within same column, fixing OCR mode table misalignment
+  - Added `_cluster_1d()` 1D clustering function for row/column boundary detection
+- Fixed tests to adapt to `extract_tables` return value change (3-tuple to 4-tuple)
+- Related files:
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/translator.py`
+  - `services/translation_service.py`
+  - `tests/test_pdf_extractor.py`
+
 ## 2026-06-06
 
 - Fixed date-style footer not recognized, causing cross-page incorrect merge:

@@ -54,9 +54,10 @@ class PdfExtractor:
             pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
             
         Returns:
-            tuple[list[PdfTable], dict]: 包含提取的表格列表和按页码组织的表格边界框字典
+            tuple[list[PdfTable], dict, dict]: 包含提取的表格列表、按页码组织的表格边界框字典和单元格bbox字典
                 - list[PdfTable]: 提取的表格列表
                 - dict: 按页码组织的表格边界框字典，键为页码，值为边界框列表
+                - dict: 按页码组织的单元格bbox字典，键为页码，值为单元格bbox列表的列表
         """
         if not self.pdf_path:
             raise ValueError("PDF文件路径不能为空")
@@ -64,7 +65,8 @@ class PdfExtractor:
         # 根据table_extractor选择使用哪种表格提取方法
         if self.table_extractor == 'camelot':
             logger.info("使用Camelot提取表格")
-            return extract_tables_by_camelot(self.pdf_path, pages)
+            pdf_tables, page_tables = extract_tables_by_camelot(self.pdf_path, pages)
+            return pdf_tables, page_tables, {}
         else:
             logger.info("使用PyMuPDF提取表格")
             return extract_tables_by_pymupdf(self.pdf_path, pages)
@@ -223,7 +225,7 @@ class PdfExtractor:
                 logger.info("已提取章节信息")
             
             # 先提取表格
-            pdf_tables, page_tables = self.extract_tables(pages)
+            pdf_tables, page_tables, page_table_cells = self.extract_tables(pages)
             
             # 使用PyMuPDF提取普通文本和页面尺寸
             with fitz.open(self.pdf_path) as doc:
@@ -245,6 +247,7 @@ class PdfExtractor:
                         page=page,
                         current_page_num=current_page_num,
                         page_tables=page_tables,
+                        page_table_cells=page_table_cells,
                         temp_images_dir=temp_images_dir
                     )
                     
@@ -282,15 +285,16 @@ class PdfExtractor:
             logger.error(f"提取PDF文本时出错: {str(e)}", exc_info=True)
             raise Exception(f"提取PDF文本时出错: {str(e)}")
     
-    def _process_page(self, page, current_page_num, page_tables, temp_images_dir):
+    def _process_page(self, page, current_page_num, page_tables, page_table_cells, temp_images_dir):
         """处理单个页面
-        
+
         Args:
             page: PyMuPDF页面对象
             current_page_num (int): 当前页码（1-based）
             page_tables (dict): 按页码组织的表格边界框字典
+            page_table_cells (dict): 按页码组织的单元格bbox字典
             temp_images_dir (str): 临时图像目录路径
-            
+
         Returns:
             tuple: (PdfPage, list[PdfImage], tuple) 或 None
         """
@@ -299,15 +303,17 @@ class PdfExtractor:
             page_rect = page.rect
             page_size = (page_rect.width, page_rect.height)
             logger.debug(f"页面{current_page_num} 实际尺寸: {page_rect}")
-            
-            # 获取当前页的表格边界框
+
+            # 获取当前页的表格边界框和单元格bbox
             current_page_tables = page_tables.get(current_page_num, [])
-            
+            current_page_table_cells = page_table_cells.get(current_page_num, [])
+
             # 提取文本块
             text_block_objects = self._extract_text_blocks(
                 page=page,
                 current_page_num=current_page_num,
-                current_page_tables=current_page_tables
+                current_page_tables=current_page_tables,
+                current_page_table_cells=current_page_table_cells
             )
             
             # 提取图像
@@ -328,41 +334,61 @@ class PdfExtractor:
             logger.error(f"处理页面{current_page_num}时出错: {str(e)}")
             return None
     
-    def _extract_text_blocks(self, page, current_page_num, current_page_tables):
+    def _extract_text_blocks(self, page, current_page_num, current_page_tables, current_page_table_cells=None):
         """从页面中提取文本块
-        
+
         Args:
             page: PyMuPDF页面对象
             current_page_num (int): 当前页码（1-based）
             current_page_tables (list): 当前页的表格边界框列表
-            
+            current_page_table_cells (list | None): 当前页的单元格bbox列表的列表
+
         Returns:
             dict: 文本块对象字典
         """
+        if current_page_table_cells is None:
+            current_page_table_cells = []
+
         # 1. 提取完整文本块（blocks级别，适合翻译）
         # 先提取blocks级别，以便后续为dicts添加block_no
         # 提取blocks级别的文本块信息，flags=1保持原始顺序
         blocks = page.get_text("blocks", flags=1)
-        
+
         # 创建TextBlock对象字典，用于存储每个块的完整信息
         text_block_objects = {}
-        
+
         # 过滤非文本块，仅保留有效文本块并创建TextBlock对象
         for block in blocks:
             x0, y0, x1, y1, text, block_no, block_type = block
             if block_type == 0 and text.strip():
-                # 检查文本块是否与表格边界框重叠
+                # 检查文本块是否与表格单元格重叠
                 is_table_text = False
                 block_rect = fitz.Rect(x0, y0, x1, y1)
                 block_area = block_rect.width * block_rect.height
-                
-                if current_page_tables:
+
+                # 优先使用单元格bbox判断（更精确），回退到表格整体bbox
+                if current_page_table_cells:
+                    for table_cell_bboxes in current_page_table_cells:
+                        for cell_bbox in table_cell_bboxes:
+                            cell_rect = fitz.Rect(cell_bbox)
+                            try:
+                                intersection = block_rect.intersect(cell_rect)
+                                overlap_area = intersection.width * intersection.height
+                                if overlap_area > block_area * 0.5:
+                                    is_table_text = True
+                                    logger.debug(f"页面{current_page_num} 文本块 {block_no} 与单元格重叠，视为表格文本，跳过")
+                                    break
+                            except Exception:
+                                continue
+                        if is_table_text:
+                            break
+                elif current_page_tables:
                     for table_bbox in current_page_tables:
                         table_rect = fitz.Rect(table_bbox)
                         # 计算重叠面积
                         intersection = block_rect.intersect(table_rect)
                         overlap_area = intersection.width * intersection.height
-                        
+
                         # 如果重叠面积超过文本块面积的50%，则视为表格文本
                         if overlap_area > block_area * 0.5:
                             is_table_text = True

@@ -22,8 +22,9 @@
 - [x] 安全修复（SECRET_KEY硬编码移除、文件名验证、页码范围限制）
 - [x] 代码质量提升（翻译回退、字体估算修正、资源释放保护）
 - [x] 修复OCR公式识别三端输出失败（内存分级改用物理内存、DPI/推理参数提升、日志修正）
-- [ ] 进一步优化术语提取的准确性和效率
+- [x] 进一步优化术语提取的准确性和效率
 - [ ] 优化LaTeX公式语法修复能力，处理模型输出的语法错误
+- [ ] 修复表格标题/脚注被错误合并进单元格（后处理分离方案）
 
 ## 中优先级
 - [x] 修复 test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages
