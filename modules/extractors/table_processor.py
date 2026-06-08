@@ -12,7 +12,8 @@ from .coordinate_utils import (
     calculate_row_heights_from_bboxes,
     calculate_col_widths_from_bboxes,
     create_cell_info,
-    create_pdf_cell
+    create_pdf_cell,
+    compute_span_from_none_positions
 )
 from .page_utils import process_page_numbers, create_pages_param
 
@@ -379,15 +380,28 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                             bbox_matrix = _build_bbox_matrix(rows_data, num_rows, num_cols)
                             logger.info(f"表格{table_idx}使用真实单元格bbox，矩阵大小: {num_rows}×{num_cols}")
 
+                        # 基于 bbox_matrix 中 None 的位置推断合并单元格的 span
+                        span_map = {}
+                        if use_real_bbox:
+                            num_rows_span = len(data)
+                            num_cols_span = max(len(row) for row in data) if data else 0
+                            # 记录 bbox_matrix 的 None 分布
+                            for r_idx, r_data in enumerate(bbox_matrix):
+                                none_cols = [c for c, v in enumerate(r_data) if v is None]
+                                if none_cols:
+                                    logger.debug(f"表格{table_idx} bbox_matrix 行{r_idx}: None位置={none_cols}")
+                            span_map = compute_span_from_none_positions(bbox_matrix, num_rows_span, num_cols_span)
+                            if span_map:
+                                logger.debug(f"表格{table_idx}检测到合并单元格: {span_map}")
+
                         for row_idx, row in enumerate(data):
                             for col_idx, text in enumerate(row):
                                 if use_real_bbox and row_idx < len(bbox_matrix) and col_idx < len(bbox_matrix[row_idx]):
                                     cell_bbox = bbox_matrix[row_idx][col_idx]
                                     if cell_bbox is None:
-                                        # 合并单元格的被合并位置，使用均匀分割作为 fallback
-                                        cell_bbox = calculate_cell_bbox(
-                                            bbox_tuple, row_idx, col_idx, len(data), len(row)
-                                        )
+                                        # 合并单元格的被合并位置，跳过不创建 cell_info
+                                        logger.debug(f"合并覆盖位置: 行={row_idx}, 列={col_idx}, 设为None")
+                                        continue
                                 else:
                                     # 回退：均匀分割
                                     if bbox:
@@ -400,7 +414,7 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                                 cell_info = create_cell_info(text, cell_bbox, row_idx, col_idx)
                                 cell_info_list.append(cell_info)
                                 logger.debug(f"创建单元格信息: 行={row_idx}, 列={col_idx}, 文本='{text}', 边界框={cell_bbox}")
-                        
+
                         # 构建单元格二维列表
                         # 首先确定表格的行数和列数
                         if cell_info_list:
@@ -411,20 +425,34 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                             max_row = 0
                             max_col = 0
                             logger.info("表格无内容")
-                        
+
                         # 创建空的单元格二维列表
                         cell_matrix = [[None for _ in range(max_col + 1)] for _ in range(max_row + 1)]
-                        
+
                         # 填充单元格信息
                         for cell_info in cell_info_list:
                             row_idx = cell_info['top']
                             col_idx = cell_info['left']
-                            
+
+                            # 从 span_map 获取合并单元格的 row_span / col_span
+                            row_span, col_span = span_map.get((row_idx, col_idx), (1, 1))
+
                             # 创建PdfCell对象
-                            pdf_cell = create_pdf_cell(cell_info)
+                            pdf_cell = create_pdf_cell(cell_info, row_span=row_span, col_span=col_span)
                             if pdf_cell:
                                 cell_matrix[row_idx][col_idx] = pdf_cell
-                                logger.debug(f"填充单元格: 行={row_idx}, 列={col_idx}, 文本='{cell_info['text']}', 边界框={cell_info['bbox']}")
+                                logger.debug(f"填充单元格: 行={row_idx}, 列={col_idx}, row_span={row_span}, col_span={col_span}, 文本='{cell_info['text']}', 边界框={cell_info['bbox']}")
+                                # 将合并覆盖的位置设为 None
+                                if row_span > 1 or col_span > 1:
+                                    for dr in range(row_span):
+                                        for dc in range(col_span):
+                                            if dr == 0 and dc == 0:
+                                                continue  # 起始位置已设置
+                                            overlap_row = row_idx + dr
+                                            overlap_col = col_idx + dc
+                                            if overlap_row < len(cell_matrix) and overlap_col < len(cell_matrix[overlap_row]):
+                                                cell_matrix[overlap_row][overlap_col] = None
+                                                logger.debug(f"合并覆盖位置: 行={overlap_row}, 列={overlap_col}, 设为None")
                         
                         # 过滤掉空表格
                         has_content = any(cell and cell.text.strip() for row in cell_matrix for cell in row)

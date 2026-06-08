@@ -1,5 +1,29 @@
 # 更新日志
 
+## 2026-06-08
+
+- 合并单元格渲染优化——解决文字显示不全和线条分隔问题：
+  - `PdfCell` 新增 `row_span` 和 `col_span` 字段（默认值 1），`from_dict`/`to_dict` 支持序列化
+  - OCR 模式：`_TableHtmlParser` 解析 `rowspan`/`colspan` 属性，`_expand_html_table` 展开为完整二维矩阵（起始位置 PdfCell，被合并位置 None）
+  - PyMuPDF 模式：新增 `compute_span_from_none_positions()` 函数，从 bbox_matrix 中 None 的分布推断合并单元格的 row_span/col_span
+  - PDF 生成：合并单元格使用跨行跨列完整 bbox 渲染文本，网格线按可见段绘制（跳过合并单元格内部）
+  - 列宽计算：新增按比例缩放，确保 `sum(col_widths) == table_width`，修复横线超出表格边界
+- 合并单元格遮挡逻辑精确化：
+  - 水平线遮挡：只排除 col_span>1 单元格的上/下边框（跨多列边框应完整绘制）
+  - 垂直线遮挡：只排除 row_span>1 单元格的左/右边框（跨多行边框应完整绘制）
+  - row_span 内部横线和 col_span 内部竖线正确被遮挡
+- 代码审查优化：
+  - 简化 `compute_span_from_none_positions` 第三步验证逻辑，移除与 `covered_by_col_span` 的冲突检查
+  - 提取 `_get_cell_span()` 辅助函数，替代 9 处重复的 `getattr(cell, 'row_span', 1)` 调用
+  - 7 处合并单元格相关调试日志从 `logger.info` 降级为 `logger.debug`
+- 相关文件：
+  - `models/extraction.py`
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_generator.py`
+  - `services/translation_service.py`
+
 ## 2026-06-07
 
 - 非 OCR 模式表格精准还原——使用 PyMuPDF 真实单元格 bbox 替代均匀分割：

@@ -886,7 +886,7 @@ class DocxGenerator:
 
             for i, row in enumerate(table_data):
                 for j, cell in enumerate(row):
-                    cell_text = cell.text
+                    cell_text = cell.text if cell is not None else ''
                     cleaned_text = self._clean_xml_compatible_text(str(cell_text))
                     cell_paragraph = word_table.cell(i, j).paragraphs[0]
                     cell_run = cell_paragraph.add_run(cleaned_text)

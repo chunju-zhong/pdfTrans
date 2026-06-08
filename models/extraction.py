@@ -56,19 +56,23 @@ class PdfCell(CopyableMixin):
     表示PDF表格中的单个单元格，包含文本、边界框和大小信息
     """
     
-    def __init__(self, text, bbox, row_idx, col_idx):
+    def __init__(self, text, bbox, row_idx, col_idx, row_span=1, col_span=1):
         """初始化PdfCell对象
-        
+
         Args:
             text (str): 单元格文本
             bbox (tuple): 单元格边界框 (x0, y0, x1, y1)
             row_idx (int): 行索引
             col_idx (int): 列索引
+            row_span (int): 跨行数，默认1
+            col_span (int): 跨列数，默认1
         """
         self.text = text
         self.bbox = bbox
         self.row_idx = row_idx
         self.col_idx = col_idx
+        self.row_span = row_span
+        self.col_span = col_span
         # 计算单元格大小
         self.width = bbox[2] - bbox[0]
         self.height = bbox[3] - bbox[1]
@@ -91,6 +95,8 @@ class PdfCell(CopyableMixin):
         )
         obj.width = data.get('width', 0)
         obj.height = data.get('height', 0)
+        obj.row_span = data.get('row_span', 1)
+        obj.col_span = data.get('col_span', 1)
         return obj
 
     def to_dict(self):
@@ -105,7 +111,9 @@ class PdfCell(CopyableMixin):
             'row_idx': self.row_idx,
             'col_idx': self.col_idx,
             'width': self.width,
-            'height': self.height
+            'height': self.height,
+            'row_span': self.row_span,
+            'col_span': self.col_span
         }
 
 
@@ -150,7 +158,7 @@ class PdfTable(CopyableMixin):
         """
         cells = []
         for row_data in data['cells']:
-            row = [PdfCell.from_dict(c) for c in row_data]
+            row = [PdfCell.from_dict(c) if c is not None else None for c in row_data]
             cells.append(row)
         obj = cls(
             page_num=data['page_num'],
@@ -177,7 +185,7 @@ class PdfTable(CopyableMixin):
         for row in self.cells:
             row_dict = []
             for cell in row:
-                row_dict.append(cell.to_dict())
+                row_dict.append(cell.to_dict() if cell is not None else None)
             cells_dict.append(row_dict)
 
         return {

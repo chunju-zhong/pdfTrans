@@ -22,6 +22,12 @@ from config import config
 
 logger = get_logger(__name__)
 
+
+def _get_cell_span(cell):
+    """获取单元格的 row_span 和 col_span，默认值为 1"""
+    return getattr(cell, 'row_span', 1), getattr(cell, 'col_span', 1)
+
+
 # 翻译业务服务
 class TranslationService:
     """翻译业务服务类，负责处理PDF文档的翻译流程"""
@@ -755,11 +761,14 @@ class TranslationService:
                 "finish_reason": translation_result.finish_reason
             })
         # 创建翻译后的PdfCell对象
+        rs, cs = _get_cell_span(cell)
         translated_cell = PdfCell(
             text=translated_text,
             bbox=cell.bbox,
             row_idx=cell.row_idx,
-            col_idx=cell.col_idx
+            col_idx=cell.col_idx,
+            row_span=rs,
+            col_span=cs
         )
         return table_idx, row_idx, col_idx, translated_cell, table_pages.get(table_idx, 0)
 
@@ -806,6 +815,7 @@ class TranslationService:
                 result = {}
                 for col_idx, text in non_empty_cells:
                     cell = row_cells[col_idx]
+                    rs, cs = _get_cell_span(cell)
                     try:
                         single_result = translator.translate(
                             text, source_lang, target_lang,
@@ -815,7 +825,9 @@ class TranslationService:
                             text=single_result.content.strip(),
                             bbox=cell.bbox,
                             row_idx=cell.row_idx,
-                            col_idx=cell.col_idx
+                            col_idx=cell.col_idx,
+                            row_span=rs,
+                            col_span=cs
                         )
                     except Exception as e:
                         logger.warning(f"任务 {task.task_id} 单个单元格翻译失败: {e}, 使用原文")
@@ -823,26 +835,33 @@ class TranslationService:
                             text=text,
                             bbox=cell.bbox,
                             row_idx=cell.row_idx,
-                            col_idx=cell.col_idx
+                            col_idx=cell.col_idx,
+                            row_span=rs,
+                            col_span=cs
                         )
                 return table_idx, row_idx, result, table_pages.get(table_idx, 0)
 
             result = {}
             for i, (col_idx, original) in enumerate(non_empty_cells):
                 cell = row_cells[col_idx]
+                rs, cs = _get_cell_span(cell)
                 if i < len(parts) and parts[i].strip():
                     result[col_idx] = PdfCell(
                         text=parts[i].strip(),
                         bbox=cell.bbox,
                         row_idx=cell.row_idx,
-                        col_idx=cell.col_idx
+                        col_idx=cell.col_idx,
+                        row_span=rs,
+                        col_span=cs
                     )
                 else:
                     result[col_idx] = PdfCell(
                         text=original,
                         bbox=cell.bbox,
                         row_idx=cell.row_idx,
-                        col_idx=cell.col_idx
+                        col_idx=cell.col_idx,
+                        row_span=rs,
+                        col_span=cs
                     )
             return table_idx, row_idx, result, table_pages.get(table_idx, 0)
         except Exception as e:
@@ -850,11 +869,14 @@ class TranslationService:
             result = {}
             for col_idx, text in non_empty_cells:
                 cell = row_cells[col_idx]
+                rs, cs = _get_cell_span(cell)
                 result[col_idx] = PdfCell(
                     text=text,
                     bbox=cell.bbox,
                     row_idx=cell.row_idx,
-                    col_idx=cell.col_idx
+                    col_idx=cell.col_idx,
+                    row_span=rs,
+                    col_span=cs
                 )
             return table_idx, row_idx, result, table_pages.get(table_idx, 0)
 
@@ -886,24 +908,34 @@ class TranslationService:
                     logger.info(f"任务 {task.task_id} 使用翻译结果: 表格={table_idx}, 行={row_idx}, 列={col_idx}, 内容='{cell_preview}'")
                 else:
                     # 如果没有翻译结果，使用原文
+                    rs, cs = _get_cell_span(cell)
                     text_preview = cell.text[:50] + '...' if len(cell.text) > 50 else cell.text
                     logger.warning(f"任务 {task.task_id} 未找到翻译结果，使用原文: 表格={table_idx}, 行={row_idx}, 列={col_idx}, 原文='{text_preview}'")
                     translated_cell = PdfCell(
                         text=cell.text,
                         bbox=cell.bbox,
                         row_idx=cell.row_idx,
-                        col_idx=cell.col_idx
+                        col_idx=cell.col_idx,
+                        row_span=rs,
+                        col_span=cs
                     )
                 translated_row.append(translated_cell)
             else:
-                # 空单元格
-                translated_cell = PdfCell(
-                    text='',
-                    bbox=cell.bbox if cell else None,
-                    row_idx=cell.row_idx if cell else 0,
-                    col_idx=cell.col_idx if cell else 0
-                )
-                translated_row.append(translated_cell)
+                # 空单元格或合并覆盖位置
+                if cell is None:
+                    # 合并覆盖位置，保持 None
+                    translated_row.append(None)
+                else:
+                    rs, cs = _get_cell_span(cell)
+                    translated_cell = PdfCell(
+                        text='',
+                        bbox=cell.bbox if cell.bbox else (0, 0, 0, 0),
+                        row_idx=cell.row_idx,
+                        col_idx=cell.col_idx,
+                        row_span=rs,
+                        col_span=cs
+                    )
+                    translated_row.append(translated_cell)
         
         return translated_row
 
@@ -1002,11 +1034,14 @@ class TranslationService:
                 fallback_result = {}
                 for col_idx, cell in enumerate(row):
                     if cell and cell.text:
+                        rs, cs = _get_cell_span(cell)
                         fallback_result[col_idx] = PdfCell(
                             text=cell.text,
                             bbox=cell.bbox,
                             row_idx=cell.row_idx,
-                            col_idx=cell.col_idx
+                            col_idx=cell.col_idx,
+                            row_span=rs,
+                            col_span=cs
                         )
                 cell_results[table_idx][row_idx] = fallback_result
 

@@ -24,6 +24,7 @@
 - [x] Fix OCR formula recognition failure across all output formats (memory tier uses physical memory, DPI/inference params raised, log corrected)
 - [x] Further optimize glossary extraction accuracy and efficiency
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
+- [x] Merged cell rendering optimization (text truncation, line separation, horizontal lines exceeding table boundary)
 - [ ] Fix table caption/footnote incorrectly merged into cells (post-processing separation)
 
 ## Medium Priority

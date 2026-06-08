@@ -288,6 +288,8 @@ class MarkdownGenerator:
         
         def _is_header_row(row):
             for cell in row:
+                if cell is None:
+                    continue
                 text = cell.text.strip() if hasattr(cell, 'text') else str(cell).strip()
                 if text and not text.replace('.', '').replace('-', '').replace(',', '').isdigit():
                     return True
@@ -295,7 +297,7 @@ class MarkdownGenerator:
 
         first_row = cells[0]
         if _is_header_row(first_row):
-            header_texts = [cell.text if hasattr(cell, 'text') else str(cell) for cell in first_row]
+            header_texts = [cell.text if cell is not None and hasattr(cell, 'text') else '' for cell in first_row]
             markdown_table.append("|" + "|".join(header_texts) + "| ")
             data_rows = cells[1:]
         else:
@@ -308,7 +310,7 @@ class MarkdownGenerator:
         for i, row in enumerate(data_rows):
             row_cells = []
             for cell in row:
-                cell_text = cell.text if hasattr(cell, 'text') else str(cell)
+                cell_text = cell.text if cell is not None and hasattr(cell, 'text') else ''
                 row_cells.append(cell_text)
             if i == len(data_rows) - 1:
                 # 最后一行 - 无尾部空格

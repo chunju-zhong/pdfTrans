@@ -138,6 +138,120 @@ def _build_bbox_matrix(rows_data, num_rows, num_cols):
             bbox_matrix.append([None] * num_cols)
     return bbox_matrix
 
+
+def compute_span_from_none_positions(bbox_matrix, num_rows, num_cols):
+    """从 bbox_matrix 中 None 的位置推断合并单元格的 row_span/col_span
+
+    PyMuPDF 在合并单元格的被合并位置返回 None。此函数扫描 None 的分布，
+    推断每个有效位置跨越的行列数。
+
+    算法：
+    1. 先确定每个单元格的 col_span（向右扫描连续 None）
+    2. 标记被 col_span 覆盖的 None 位置
+    3. 向下扫描 row_span 时，跳过已被 col_span 覆盖的 None
+    4. 基于 row_span 重新验证 col_span
+
+    Args:
+        bbox_matrix (list[list[tuple | None]]): 行×列 bbox 矩阵
+        num_rows (int): 总行数
+        num_cols (int): 总列数
+
+    Returns:
+        dict: {(row_idx, col_idx): (row_span, col_span)}
+    """
+    span_map = {}
+
+    # 第一步：确定每个单元格的 col_span（向右扫描同行连续 None）
+    # 同时标记被 col_span 覆盖的 None 位置
+    col_span_map = {}  # {(row_idx, col_idx): col_span}
+    covered_by_col_span = set()  # 被 col_span 覆盖的 None 位置集合
+
+    for row_idx in range(num_rows):
+        for col_idx in range(num_cols):
+            if row_idx >= len(bbox_matrix) or col_idx >= len(bbox_matrix[row_idx]):
+                continue
+            if bbox_matrix[row_idx][col_idx] is None:
+                continue
+
+            # 向右扫描连续 None，确定 col_span
+            col_span = 1
+            c = col_idx + 1
+            while c < num_cols and c < len(bbox_matrix[row_idx]) and bbox_matrix[row_idx][c] is None:
+                col_span += 1
+                covered_by_col_span.add((row_idx, c))
+                c += 1
+
+            if col_span > 1:
+                col_span_map[(row_idx, col_idx)] = col_span
+
+    # 第二步：确定 row_span（向下扫描，跳过已被 col_span 覆盖的 None）
+    for row_idx in range(num_rows):
+        for col_idx in range(num_cols):
+            if row_idx >= len(bbox_matrix) or col_idx >= len(bbox_matrix[row_idx]):
+                continue
+            if bbox_matrix[row_idx][col_idx] is None:
+                continue
+
+            # 向下扫描，跳过已被 col_span 覆盖的 None
+            row_span = 1
+            r = row_idx + 1
+            while r < num_rows:
+                if r >= len(bbox_matrix) or col_idx >= len(bbox_matrix[r]):
+                    break
+                if bbox_matrix[r][col_idx] is not None:
+                    break
+                # 如果这个 None 已被同行左侧的 col_span 覆盖，则不算入 row_span
+                if (r, col_idx) in covered_by_col_span:
+                    break
+                row_span += 1
+                r += 1
+
+            # 获取 col_span
+            col_span = col_span_map.get((row_idx, col_idx), 1)
+
+            # 第三步：基于 row_span 重新验证 col_span
+            # 如果 row_span > 1，向右扫描时需要验证整列段均为 None（且不被 col_span 覆盖）
+            if row_span > 1:
+                new_col_span = 1
+                c = col_idx + 1
+                while c < num_cols:
+                    all_none = True
+                    for dr in range(row_span):
+                        r = row_idx + dr
+                        if r >= len(bbox_matrix) or c >= len(bbox_matrix[r]):
+                            all_none = False
+                            break
+                        if bbox_matrix[r][c] is not None:
+                            all_none = False
+                            break
+                    if not all_none:
+                        break
+                    new_col_span += 1
+                    c += 1
+                col_span = new_col_span
+
+                # 重新验证 row_span
+                while row_span > 1:
+                    all_none = True
+                    for dc in range(col_span):
+                        c = col_idx + dc
+                        r = row_idx + row_span - 1
+                        if r >= len(bbox_matrix) or c >= len(bbox_matrix[r]):
+                            all_none = False
+                            break
+                        if bbox_matrix[r][c] is not None:
+                            all_none = False
+                            break
+                    if all_none:
+                        break
+                    row_span -= 1
+
+            if row_span > 1 or col_span > 1:
+                span_map[(row_idx, col_idx)] = (row_span, col_span)
+
+    return span_map
+
+
 def calculate_row_heights_from_bboxes(bbox_matrix):
     """从真实单元格 bbox 推算行高
 
@@ -228,6 +342,12 @@ def calculate_col_widths_from_bboxes(bbox_matrix, table_bbox):
         else:
             col_widths.append(col_width_avg)
 
+    # 按比例缩放列宽，使总和等于表格实际宽度
+    total_width = sum(col_widths)
+    if total_width > 0 and abs(total_width - table_width) > 0.1:
+        scale = table_width / total_width
+        col_widths = [w * scale for w in col_widths]
+
     return col_widths
 
 def create_cell_info(text, bbox, row_idx, col_idx):
@@ -255,12 +375,14 @@ def create_cell_info(text, bbox, row_idx, col_idx):
         'height': bbox[3] - bbox[1]
     }
 
-def create_pdf_cell(cell_info):
+def create_pdf_cell(cell_info, row_span=1, col_span=1):
     """创建PdfCell对象
-    
+
     Args:
         cell_info (dict): 单元格信息字典
-        
+        row_span (int): 跨行数，默认1
+        col_span (int): 跨列数，默认1
+
     Returns:
         PdfCell: PdfCell对象
     """
@@ -270,12 +392,14 @@ def create_pdf_cell(cell_info):
                (cell_info['x0'], cell_info['y0'], cell_info['x1'], cell_info['y1'])
         row_idx = cell_info['top']
         col_idx = cell_info['left']
-        
+
         return PdfCell(
             text=text,
             bbox=bbox,
             row_idx=row_idx,
-            col_idx=col_idx
+            col_idx=col_idx,
+            row_span=row_span,
+            col_span=col_span
         )
     except Exception as e:
         logger.warning(f"创建PdfCell对象失败: {e}")

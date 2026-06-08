@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-06-08
+
+- Merged cell rendering optimization — fix text truncation and line separation issues:
+  - Added `row_span` and `col_span` fields to `PdfCell` (default 1), with `from_dict`/`to_dict` serialization support
+  - OCR mode: `_TableHtmlParser` parses `rowspan`/`colspan` attributes, `_expand_html_table` expands to full 2D matrix (start position PdfCell, merged positions None)
+  - PyMuPDF mode: Added `compute_span_from_none_positions()` function to infer row_span/col_span from None distribution in bbox_matrix
+  - PDF generation: Merged cells use full spanning bbox for text rendering, grid lines drawn by visible segments (skipping merged cell interiors)
+  - Column width calculation: Added proportional scaling to ensure `sum(col_widths) == table_width`, fixing horizontal lines exceeding table boundary
+- Merged cell occlusion logic refinement:
+  - Horizontal line occlusion: only exclude top/bottom borders of col_span>1 cells (multi-column borders should be fully drawn)
+  - Vertical line occlusion: only exclude left/right borders of row_span>1 cells (multi-row borders should be fully drawn)
+  - row_span interior horizontal lines and col_span interior vertical lines are correctly occluded
+- Code review optimizations:
+  - Simplified `compute_span_from_none_positions` step 3 validation logic, removed conflicting `covered_by_col_span` checks
+  - Extracted `_get_cell_span()` helper function, replacing 9 duplicate `getattr(cell, 'row_span', 1)` calls
+  - Downgraded 7 merged cell debug logs from `logger.info` to `logger.debug`
+- Related files:
+  - `models/extraction.py`
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_generator.py`
+  - `services/translation_service.py`
+
 ## 2026-06-07
 
 - Non-OCR mode table precise restoration — use PyMuPDF real cell bbox instead of uniform splitting:

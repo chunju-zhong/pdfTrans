@@ -41,16 +41,31 @@ class _TableHtmlParser(HTMLParser):
         self.current_row = []
         self.current_cell = ''
         self.in_cell = False
+        self.current_rowspan = 1
+        self.current_colspan = 1
 
     def handle_starttag(self, tag, attrs):
         if tag in ('td', 'th'):
             self.in_cell = True
             self.current_cell = ''
+            self.current_rowspan = 1
+            self.current_colspan = 1
+            for attr_name, attr_value in attrs:
+                if attr_name == 'rowspan':
+                    try:
+                        self.current_rowspan = int(attr_value)
+                    except (ValueError, TypeError):
+                        pass
+                elif attr_name == 'colspan':
+                    try:
+                        self.current_colspan = int(attr_value)
+                    except (ValueError, TypeError):
+                        pass
 
     def handle_endtag(self, tag):
         if tag in ('td', 'th'):
             self.in_cell = False
-            self.current_row.append(self.current_cell.strip())
+            self.current_row.append((self.current_cell.strip(), self.current_rowspan, self.current_colspan))
         elif tag == 'tr':
             if self.current_row:
                 self.rows.append(self.current_row)
@@ -709,6 +724,8 @@ class PaddleOcrExtractor(OcrExtractor):
                         # 将单元格 bbox 从像素坐标转换为 PDF 坐标
                         for row in cells:
                             for cell in row:
+                                if cell is None:
+                                    continue
                                 if cell.bbox and cell.bbox != (0, 0, 0, 0):
                                     cell.bbox = self._pixel_to_pdf_coords(cell.bbox, page_info)
                                     cell.width = cell.bbox[2] - cell.bbox[0]
@@ -1357,17 +1374,97 @@ class PaddleOcrExtractor(OcrExtractor):
         # 为每个单元格计算网格 bbox（累积行列尺寸）
         for row_idx, row in enumerate(cells):
             grid_y1 = ty1 + sum(row_heights[:row_idx])
-            grid_y2 = grid_y1 + row_heights[row_idx]
 
             for col_idx, cell in enumerate(row):
+                if cell is None:
+                    continue
                 grid_x1 = tx1 + sum(col_widths[:col_idx])
-                grid_x2 = grid_x1 + col_widths[col_idx]
 
-                cell.bbox = (grid_x1, grid_y1, grid_x2, grid_y2)
-                cell.width = grid_x2 - grid_x1
-                cell.height = grid_y2 - grid_y1
+                row_span = getattr(cell, 'row_span', 1)
+                col_span = getattr(cell, 'col_span', 1)
+
+                if row_span > 1 or col_span > 1:
+                    # 合并单元格：bbox 覆盖多行多列
+                    span_y2 = grid_y1 + sum(row_heights[row_idx:row_idx + row_span])
+                    span_x2 = grid_x1 + sum(col_widths[col_idx:col_idx + col_span])
+                    cell.bbox = (grid_x1, grid_y1, span_x2, span_y2)
+                    cell.width = span_x2 - grid_x1
+                    cell.height = span_y2 - grid_y1
+                else:
+                    grid_y2 = grid_y1 + row_heights[row_idx]
+                    grid_x2 = grid_x1 + col_widths[col_idx]
+                    cell.bbox = (grid_x1, grid_y1, grid_x2, grid_y2)
+                    cell.width = grid_x2 - grid_x1
+                    cell.height = grid_y2 - grid_y1
 
         return cells, row_heights, col_widths
+
+    @staticmethod
+    def _expand_html_table(parsed_rows):
+        """将带 rowspan/colspan 的解析行展开为完整二维矩阵
+
+        合并单元格的起始位置放置 PdfCell 对象（含 row_span/col_span），
+        被合并覆盖的位置放置 None。
+
+        Args:
+            parsed_rows: list[list[tuple(str, int, int)]]
+                每个元素为 (text, rowspan, colspan) 元组
+
+        Returns:
+            list[list[PdfCell | None]]: 展开后的二维矩阵
+        """
+        if not parsed_rows:
+            return []
+
+        # 先确定总列数：扫描所有行，考虑 colspan 和 occupied 占位
+        # 第一遍：计算最大列数
+        max_cols = 0
+        for row in parsed_rows:
+            col_count = 0
+            for _, _, colspan in row:
+                col_count += colspan
+            max_cols = max(max_cols, col_count)
+
+        n_rows = len(parsed_rows)
+        n_cols = max_cols
+
+        # occupied 矩阵：标记哪些位置已被合并单元格占据
+        occupied = [[False] * n_cols for _ in range(n_rows)]
+
+        # 结果矩阵
+        matrix = [[None] * n_cols for _ in range(n_rows)]
+
+        for row_idx, row in enumerate(parsed_rows):
+            col_idx = 0
+            for text, rowspan, colspan in row:
+                # 跳过已被上方合并占据的位置
+                while col_idx < n_cols and occupied[row_idx][col_idx]:
+                    col_idx += 1
+                if col_idx >= n_cols:
+                    break
+
+                # 在起始位置放置 PdfCell
+                cell = PdfCell(
+                    text=text,
+                    bbox=(0, 0, 0, 0),
+                    row_idx=row_idx,
+                    col_idx=col_idx,
+                    row_span=rowspan,
+                    col_span=colspan,
+                )
+                matrix[row_idx][col_idx] = cell
+
+                # 标记所有被此合并占据的位置
+                for dr in range(rowspan):
+                    for dc in range(colspan):
+                        r = row_idx + dr
+                        c = col_idx + dc
+                        if r < n_rows and c < n_cols:
+                            occupied[r][c] = True
+
+                col_idx += colspan
+
+        return matrix
 
     def _parse_html_table(self, html):
         """解析HTML表格为PdfCell二维列表
@@ -1376,7 +1473,7 @@ class PaddleOcrExtractor(OcrExtractor):
             html (str): HTML表格字符串
 
         Returns:
-            list[list[PdfCell]] | None: 二维单元格列表
+            list[list[PdfCell | None]] | None: 二维单元格列表（合并覆盖位置为None）
         """
         parser = _TableHtmlParser()
         parser.feed(html)
@@ -1384,20 +1481,18 @@ class PaddleOcrExtractor(OcrExtractor):
         if not parser.rows:
             return None
 
-        cells = []
-        for row_idx, row in enumerate(parser.rows):
-            cell_row = [
-                PdfCell(
-                    text=cell_text,
-                    bbox=(0, 0, 0, 0),  # OCR模式无单元格级精确bbox
-                    row_idx=row_idx,
-                    col_idx=col_idx
-                )
-                for col_idx, cell_text in enumerate(row)
-            ]
-            cells.append(cell_row)
+        logger.debug(f"[表格HTML解析] 原始解析行: {parser.rows}")
 
-        return cells
+        result = self._expand_html_table(parser.rows)
+
+        # 记录合并单元格信息
+        if result:
+            for row_idx, row in enumerate(result):
+                for col_idx, cell in enumerate(row):
+                    if cell is not None and (getattr(cell, 'row_span', 1) > 1 or getattr(cell, 'col_span', 1) > 1):
+                        logger.debug(f"[表格HTML解析] 合并单元格 ({row_idx},{col_idx}): row_span={cell.row_span}, col_span={cell.col_span}, text='{cell.text[:30] if cell.text else ''}'")
+
+        return result
 
     def _extract_image_for_region(self, src_img_path, bbox, page_num,
                                   image_idx, temp_images_dir, page_info=None):

@@ -455,9 +455,45 @@ class PdfGenerator:
     
 
     
+    @staticmethod
+    def _compute_visible_segments(full_start, full_end, blocked_ranges):
+        """计算 [full_start, full_end] 中未被 blocked_ranges 遮挡的连续段
+
+        Args:
+            full_start: 完整范围起点（含）
+            full_end: 完整范围终点（含）
+            blocked_ranges: list of (start, end) 被遮挡的范围
+
+        Returns:
+            list of (seg_start, seg_end) 可见段
+        """
+        if not blocked_ranges:
+            return [(full_start, full_end)]
+
+        # 合并重叠的遮挡范围
+        sorted_blocks = sorted(blocked_ranges, key=lambda x: x[0])
+        merged = [sorted_blocks[0]]
+        for start, end in sorted_blocks[1:]:
+            if start <= merged[-1][1] + 1:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+
+        # 计算可见段
+        segments = []
+        current = full_start
+        for block_start, block_end in merged:
+            if current < block_start:
+                segments.append((current, block_start - 1))
+            current = max(current, block_end + 1)
+        if current <= full_end:
+            segments.append((current, full_end))
+
+        return segments
+
     def _draw_translated_table(self, page, table, target_lang="zh"):
         """在页面上绘制翻译后的表格
-        
+
         Args:
             page (fitz.Page): PDF页面对象
             table: PdfTable对象
@@ -466,11 +502,11 @@ class PdfGenerator:
         # 使用cells属性
         table_cells = table.cells
         logger.info(f"[表格绘制] 接收到表格数据: 页码={table.page_num}, 表格索引={table.table_idx}, cells行数={len(table_cells) if table_cells else 0}")
-        
+
         if not table_cells:
             logger.warning("[表格绘制] 表格数据为空，跳过绘制")
             return
-        
+
         # 记录表格所有单元格的内容，用于诊断
         logger.info("[表格绘制] 表格所有单元格内容预览:")
         for row_idx, row in enumerate(table_cells):
@@ -478,13 +514,15 @@ class PdfGenerator:
                 if cell and hasattr(cell, 'text') and cell.text:
                     text_preview = cell.text[:30] + '...' if len(cell.text) > 30 else cell.text
                     logger.info(f"[表格绘制] 单元格 ({row_idx},{col_idx}): '{text_preview}'")
-        
-        logger.info(f"[表格绘制] 开始绘制表格，共 {len(table_cells)} 行 {len(table_cells[0])} 列")
-        
+
+        n_rows = len(table_cells)
+        n_cols = max(len(row) for row in table_cells) if table_cells else 0
+        logger.info(f"[表格绘制] 开始绘制表格，共 {n_rows} 行 {n_cols} 列")
+
         # 获取表格边界框信息
         table_bbox = table.bbox
-        logger.warning(f"[TABLE_DIAG] 表格边界框: {table_bbox}, 类型: {type(table_bbox)}")
-        
+        logger.info(f"[TABLE_DIAG] 表格边界框: {table_bbox}")
+
         # 获取行高和列宽信息
         row_heights = table.row_heights
         col_widths = table.col_widths
@@ -493,95 +531,62 @@ class PdfGenerator:
 
         if table_bbox:
             table_x0, table_y0, table_x1, table_y1 = table_bbox
-        
-        # 获取适合目标语言的字体，使用与文本块相同的逻辑
+
+        # 获取适合目标语言的字体
         suitable_font = self._get_suitable_font(page, 'GoogleSansText-Regular', target_lang)
         logger.info(f"适合的字体: 目标语言='{target_lang}', 选择='{suitable_font}'")
-        
-        # 绘制表格边框和文本
-        logger.info(f"开始绘制表格单元格，共 {len(table_cells)} 行 {len(table_cells[0])} 列")
-        
+
+        # 绘制单元格背景和文本
         for i, row in enumerate(table_cells):
             for j, cell in enumerate(row):
-                # 记录单元格位置信息
-                is_corner_cell = (i == 0 and j == 0) or (i == 0 and j == len(row) - 1) or (i == len(table_cells) - 1 and j == 0) or (i == len(table_cells) - 1 and j == len(row) - 1)
-                cell_position = "角落" if is_corner_cell else "中间"
-                logger.info(f"处理{cell_position}单元格: 行={i+1}, 列={j+1}")
-                
-                # 检查cell类型
-                logger.info(f"单元格类型: {type(cell)}, 内容: {cell}")
-                
+                # 跳过被合并覆盖的位置
+                if cell is None:
+                    logger.debug(f"[表格绘制] 单元格 ({i},{j}) 为 None（合并覆盖位置），跳过")
+                    continue
+
+                # 获取单元格文本和 bbox
                 if isinstance(cell, dict):
                     cell_text = cell.get('text', '')
                     cell_bbox = cell.get('bbox')
-                    logger.info(f"[表格绘制] 单元格 ({i},{j}) 是字典，文本: '{cell_text}', 边界框: {cell_bbox}")
                 elif hasattr(cell, 'text') and hasattr(cell, 'bbox'):
                     cell_text = cell.text
                     cell_bbox = cell.bbox
-                    text_preview = cell_text[:50] + '...' if len(cell_text) > 50 else cell_text
-                    logger.info(f"[表格绘制] 单元格 ({i},{j}) 是对象，文本: '{text_preview}', 边界框: {cell_bbox}")
-                    # 增加关键日志：判断是否为原文
-                    if cell_text and len(cell_text) > 0:
-                        # 简单判断：如果包含英文字母且没有中文字符，可能是原文
-                        has_english = any(c.isalpha() and ord(c) < 128 for c in cell_text)
-                        has_chinese = any('\u4e00' <= c <= '\u9fff' for c in cell_text)
-                        if has_english and not has_chinese and target_lang == 'zh':
-                            logger.warning(f"[表格绘制] [WARN] 单元格 ({i},{j}) 可能包含原文(英文)而非译文: '{text_preview}'")
-                        elif has_chinese and target_lang == 'zh':
-                            logger.info(f"[表格绘制] [OK] 单元格 ({i},{j}) 包含中文译文: '{text_preview}'")
                 else:
                     cell_text = str(cell)
                     cell_bbox = None
-                    logger.info(f"[表格绘制] 单元格 ({i},{j}) 是其他类型，转换为文本: '{cell_text}', 无边界框")
-                
-                # 如果有单元格边界框信息，使用它（跳过零大小bbox）
+
+                # 计算单元格矩形区域
                 if cell_bbox and not (cell_bbox[0] == 0 and cell_bbox[1] == 0 and cell_bbox[2] == 0 and cell_bbox[3] == 0):
                     x0, y0, x1, y1 = cell_bbox
                     cell_width = x1 - x0
                     cell_height = y1 - y0
-                    if cell_width > 0 and cell_height > 0:
-                        logger.info(f"使用单元格边界框: 位置=({x0:.2f}, {y0:.2f}), 大小=({cell_width:.2f}x{cell_height:.2f})")
-                    else:
-                        logger.info("单元格边界框大小为零，使用计算位置")
+                    if cell_width <= 0 or cell_height <= 0:
                         cell_bbox = None
-                else:
-                    # 没有边界框信息，使用表格边界框和行列信息计算
+
+                if cell_bbox is None:
+                    # 没有有效 bbox，使用行列信息计算
                     if table_bbox and row_heights and col_widths:
-                        current_x = table_x0
-                        for k in range(j):
-                            if k < len(col_widths):
-                                current_x += col_widths[k]
-                        
-                        current_y = table_y0
-                        for k in range(i):
-                            if k < len(row_heights):
-                                current_y += row_heights[k]
-                        
-                        # 计算单元格大小
-                        cell_width = col_widths[j] if j < len(col_widths) else (table_x1 - table_x0) / len(row)
-                        cell_height = row_heights[i] if i < len(row_heights) else (table_y1 - table_y0) / len(table_cells)
-                        
-                        x0 = current_x
-                        y0 = current_y
-                        x1 = current_x + cell_width
-                        y1 = current_y + cell_height
-                        logger.info(f"计算单元格位置: 位置=({x0:.2f}, {y0:.2f}), 大小=({cell_width:.2f}x{cell_height:.2f})")
-                        logger.info(f"使用的行高: {row_heights[i] if i < len(row_heights) else '计算值'}")
-                        logger.info(f"使用的列宽: {col_widths[j] if j < len(col_widths) else '计算值'}")
+                        x0 = table_x0 + sum(col_widths[:j])
+                        y0 = table_y0 + sum(row_heights[:i])
+                        row_span = getattr(cell, 'row_span', 1) if hasattr(cell, 'row_span') else 1
+                        col_span = getattr(cell, 'col_span', 1) if hasattr(cell, 'col_span') else 1
+                        cell_width = sum(col_widths[j:j + col_span]) if j + col_span <= len(col_widths) else col_widths[j] if j < len(col_widths) else 100
+                        cell_height = sum(row_heights[i:i + row_span]) if i + row_span <= len(row_heights) else row_heights[i] if i < len(row_heights) else 30
+                        x1 = x0 + cell_width
+                        y1 = y0 + cell_height
                     else:
-                        num_rows = len(table_cells)
-                        num_cols = len(table_cells[0]) if num_rows > 0 else 1
-                        cell_width = (table_x1 - table_x0) / num_cols if num_cols > 0 else 100
-                        cell_height = (table_y1 - table_y0) / num_rows if num_rows > 0 else 30
+                        cell_width = (table_x1 - table_x0) / n_cols if n_cols > 0 else 100
+                        cell_height = (table_y1 - table_y0) / n_rows if n_rows > 0 else 30
                         x0 = table_x0 + j * cell_width
                         y0 = table_y0 + i * cell_height
                         x1 = x0 + cell_width
                         y1 = y0 + cell_height
-                
-                rect = fitz.Rect(x0, y0, x1, y1)
-                logger.info(f"单元格矩形: {rect}")
 
-                # 绘制单元格背景，无论是否有文本
+                rect = fitz.Rect(x0, y0, x1, y1)
+                cell_height = y1 - y0
+                cell_width = x1 - x0
+
+                # 绘制单元格背景
                 try:
                     cell_bg_rect = fitz.Rect(
                         max(rect.x0 - 2, 0),
@@ -590,106 +595,203 @@ class PdfGenerator:
                         rect.y1
                     )
                     page.draw_rect(cell_bg_rect, color=(1, 1, 1), fill=True, width=0)
-                    logger.debug(f"成功绘制单元格 ({i+1},{j+1}) 背景, 区域: {cell_bg_rect}")
                 except Exception as e:
                     logger.error(f"绘制单元格 ({i+1},{j+1}) 背景异常: {str(e)}")
-                
+
                 # 绘制单元格文本
                 if cell_text:
-                    logger.info(f"开始绘制单元格 ({i+1},{j+1}) 文本: '{cell_text}'")
-                    
-                    # 动态计算字体大小
-                    base_font_size = min(cell_height * 0.8, 12)  # 不超过单元格高度的80%，最大12
-                    logger.info(f"计算字体大小: 基础大小={base_font_size:.2f}")
-                    
-                    # 尝试绘制文本，支持字体大小调整
+                    # 动态计算字体大小（基于完整单元格高度，合并单元格高度更大）
+                    base_font_size = min(cell_height * 0.8, 12)
+                    logger.debug(f"单元格 ({i},{j}) 字体大小: {base_font_size:.2f}, 单元格高度: {cell_height:.2f}")
+
                     max_attempts = 5
                     success = False
-                    
+
                     for attempt in range(1, max_attempts + 1):
-                        # 计算当前尝试的字体大小
                         if attempt == 1:
                             current_font_size = base_font_size
                         else:
                             current_font_size = base_font_size * (1 - (attempt - 1) * 0.1)
-                            current_font_size = max(current_font_size, base_font_size * 0.5)  # 不小于原大小的50%
-                        
-                        logger.info(f"尝试 {attempt}/{max_attempts}: 字体大小={current_font_size:.2f}")
-                        
+                            current_font_size = max(current_font_size, base_font_size * 0.5)
+
                         try:
-                            # 尝试绘制文本
                             result = page.insert_textbox(
                                 rect,
                                 cell_text,
                                 fontname=suitable_font,
                                 fontsize=current_font_size,
                                 color=(0, 0, 0),
-                                align=1  # 居中对齐
+                                align=1
                             )
-                            
-                            logger.info(f"文本绘制结果: {result}, 字体: {suitable_font}")
-                            
+
                             if result >= 0:
-                                logger.info(f"单元格 ({i+1},{j+1}) 文本绘制成功，插入了 {result} 个字符，使用字体大小: {current_font_size:.2f}")
                                 success = True
                                 break
-                            
-                            # 文本溢出，需要调整
-                            logger.info(f"单元格 ({i+1},{j+1}) 文本溢出，返回值: {result}，尝试调整字体大小")
-                            
                         except Exception as e:
                             logger.error(f"单元格 ({i+1},{j+1}) 文本绘制异常: {str(e)}")
-                    
+
                     if not success:
-                        logger.warning(f"单元格 ({i+1},{j+1}) 文本绘制失败，使用最小字体大小")
-                        # 使用最小字体大小尝试最后一次
                         try:
-                            result = page.insert_textbox(
+                            page.insert_textbox(
                                 rect,
                                 cell_text,
                                 fontname=suitable_font,
                                 fontsize=base_font_size * 0.5,
                                 color=(0, 0, 0),
-                                align=1  # 居中对齐
+                                align=1
                             )
-                            logger.info(f"单元格 ({i+1},{j+1}) 最后尝试绘制，返回值: {result}")
                         except Exception as e:
                             logger.error(f"单元格 ({i+1},{j+1}) 最后尝试绘制异常: {str(e)}")
-                    
-                    # 记录单元格绘制状态
-                    if success:
-                        logger.info(f"[OK] 单元格 ({i+1},{j+1}) 绘制完成: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
-                    else:
-                        logger.warning(f"[FAIL] 单元格 ({i+1},{j+1}) 绘制失败: '{cell_text[:30]}{'...' if len(cell_text) > 30 else ''}'")
-                else:
-                    logger.info(f"单元格 ({i+1},{j+1}) 无文本，但已绘制背景")
-        
-        # 统一绘制表格网格线（外框 + 内部线条）
+
+        # 统一绘制表格网格线（外框 + 内部线条，跳过合并单元格内部）
         try:
             if table_bbox:
                 table_rect = fitz.Rect(table_x0, table_y0, table_x1, table_y1)
                 # 外框
                 page.draw_rect(table_rect, color=(0, 0, 0), width=1)
-                # 内部水平线（每行的底部边界）
+
+                # 构建遮挡信息：合并单元格内部的线段不绘制
+                h_line_blocked = {}  # {row_boundary_idx: [(col_start, col_end), ...]}
+                v_line_blocked = {}  # {col_boundary_idx: [(row_start, row_end), ...]}
+
+                # 收集所有合并单元格信息
+                merged_cells = []
+                for row_idx, row in enumerate(table_cells):
+                    for col_idx, cell in enumerate(row):
+                        if cell is None:
+                            continue
+                        row_span = getattr(cell, 'row_span', 1)
+                        col_span = getattr(cell, 'col_span', 1)
+                        if row_span > 1 or col_span > 1:
+                            merged_cells.append((row_idx, col_idx, row_span, col_span))
+                            logger.debug(f"[网格线遮挡] 合并单元格 ({row_idx},{col_idx}): row_span={row_span}, col_span={col_span}")
+                        if row_span > 1:
+                            # 遮挡 row_idx 到 row_idx+row_span-1 之间的水平线
+                            for r in range(row_idx, row_idx + row_span - 1):
+                                if r not in h_line_blocked:
+                                    h_line_blocked[r] = []
+                                h_line_blocked[r].append((col_idx, col_idx + col_span - 1))
+                        if col_span > 1:
+                            # 遮挡 col_idx 到 col_idx+col_span-1 之间的垂直线
+                            for c in range(col_idx, col_idx + col_span - 1):
+                                if c not in v_line_blocked:
+                                    v_line_blocked[c] = []
+                                v_line_blocked[c].append((row_idx, row_idx + row_span - 1))
+
+                # 排除其他合并单元格的边界线：如果一条线段是某个合并单元格的边界，
+                # 则不应该被遮挡（画线优先于不画线）
+                # 收集合并单元格的边界位置，但区分水平/垂直方向：
+                # - 水平边界（用于 h_blocked 排除）：只有 col_span > 1 的单元格才添加其上/下边框，
+                #   因为 col_span 跨多列，上/下边框应完整绘制；row_span > 1 的上/下边框是合并内部，应被遮挡
+                # - 垂直边界（用于 v_blocked 排除）：只有 row_span > 1 的单元格才添加其左/右边框，
+                #   因为 row_span 跨多行，左/右边框应完整绘制；col_span > 1 的左/右边框是合并内部，应被遮挡
+                h_boundaries = {}  # {row_boundary_idx: set of col indices that are boundaries}
+                v_boundaries = {}  # {col_boundary_idx: set of row indices that are boundaries}
+                for row_idx, col_idx, row_span, col_span in merged_cells:
+                    # 水平边界：只有 col_span > 1 的单元格，其上/下边框才排除遮挡
+                    if col_span > 1:
+                        # 上边框：row_boundary = row_idx - 1（如果存在）
+                        if row_idx > 0:
+                            if row_idx - 1 not in h_boundaries:
+                                h_boundaries[row_idx - 1] = set()
+                            for c in range(col_idx, col_idx + col_span):
+                                h_boundaries[row_idx - 1].add(c)
+                        # 下边框：row_boundary = row_idx + row_span - 1
+                        bottom_boundary = row_idx + row_span - 1
+                        if bottom_boundary not in h_boundaries:
+                            h_boundaries[bottom_boundary] = set()
+                        for c in range(col_idx, col_idx + col_span):
+                            h_boundaries[bottom_boundary].add(c)
+
+                    # 垂直边界：只有 row_span > 1 的单元格，其左/右边框才排除遮挡
+                    if row_span > 1:
+                        # 左边框：col_boundary = col_idx - 1（如果存在）
+                        if col_idx > 0:
+                            if col_idx - 1 not in v_boundaries:
+                                v_boundaries[col_idx - 1] = set()
+                            for r in range(row_idx, row_idx + row_span):
+                                v_boundaries[col_idx - 1].add(r)
+                        # 右边框：col_boundary = col_idx + col_span - 1
+                        right_boundary = col_idx + col_span - 1
+                        if right_boundary not in v_boundaries:
+                            v_boundaries[right_boundary] = set()
+                        for r in range(row_idx, row_idx + row_span):
+                            v_boundaries[right_boundary].add(r)
+
+                # 从遮挡信息中排除边界位置
+                # 将遮挡范围拆分为更小的段，排除边界列/行
+                def subtract_boundary_from_blocked(blocked_ranges, boundary_set):
+                    """从遮挡范围中排除边界位置"""
+                    if not boundary_set:
+                        return blocked_ranges
+                    result = []
+                    for start, end in blocked_ranges:
+                        # 将 (start, end) 拆分为不包含 boundary_set 中位置的段
+                        current = start
+                        for pos in sorted(boundary_set):
+                            if pos < current:
+                                continue
+                            if pos > end:
+                                break
+                            if pos > current:
+                                result.append((current, pos - 1))
+                            current = pos + 1
+                        if current <= end:
+                            result.append((current, end))
+                    return result
+
+                for r in list(h_line_blocked.keys()):
+                    h_line_blocked[r] = subtract_boundary_from_blocked(
+                        h_line_blocked[r], h_boundaries.get(r, set())
+                    )
+                    # 清理空的遮挡范围
+                    h_line_blocked[r] = [(s, e) for s, e in h_line_blocked[r] if s <= e]
+                    if not h_line_blocked[r]:
+                        del h_line_blocked[r]
+
+                for c in list(v_line_blocked.keys()):
+                    v_line_blocked[c] = subtract_boundary_from_blocked(
+                        v_line_blocked[c], v_boundaries.get(c, set())
+                    )
+                    v_line_blocked[c] = [(s, e) for s, e in v_line_blocked[c] if s <= e]
+                    if not v_line_blocked[c]:
+                        del v_line_blocked[c]
+
+                logger.debug(f"[网格线遮挡] h_line_blocked={h_line_blocked}")
+                logger.debug(f"[网格线遮挡] v_line_blocked={v_line_blocked}")
+
+                # 绘制水平线（跳过被遮挡的段）
                 for row_i in range(len(row_heights) - 1):
                     line_y = table_y0 + sum(row_heights[:row_i + 1])
-                    page.draw_line(
-                        fitz.Point(table_x0, line_y),
-                        fitz.Point(table_x1, line_y),
-                        color=(0, 0, 0), width=0.5
-                    )
-                # 内部垂直线（每列的右侧边界）
+                    blocked_ranges = h_line_blocked.get(row_i, [])
+                    segments = self._compute_visible_segments(0, len(col_widths) - 1, blocked_ranges)
+                    for seg_start, seg_end in segments:
+                        x_start = table_x0 + sum(col_widths[:seg_start])
+                        x_end = table_x0 + sum(col_widths[:seg_end + 1])
+                        page.draw_line(
+                            fitz.Point(x_start, line_y),
+                            fitz.Point(x_end, line_y),
+                            color=(0, 0, 0), width=0.5
+                        )
+
+                # 绘制垂直线（跳过被遮挡的段）
                 for col_j in range(len(col_widths) - 1):
                     line_x = table_x0 + sum(col_widths[:col_j + 1])
-                    page.draw_line(
-                        fitz.Point(line_x, table_y0),
-                        fitz.Point(line_x, table_y1),
-                        color=(0, 0, 0), width=0.5
-                    )
-                logger.info("表格网格线绘制完成")
+                    blocked_ranges = v_line_blocked.get(col_j, [])
+                    segments = self._compute_visible_segments(0, len(row_heights) - 1, blocked_ranges)
+                    for seg_start, seg_end in segments:
+                        y_start = table_y0 + sum(row_heights[:seg_start])
+                        y_end = table_y0 + sum(row_heights[:seg_end + 1])
+                        page.draw_line(
+                            fitz.Point(line_x, y_start),
+                            fitz.Point(line_x, y_end),
+                            color=(0, 0, 0), width=0.5
+                        )
+
+                logger.info("表格网格线绘制完成（已跳过合并单元格内部）")
         except Exception as e:
             logger.error(f"绘制表格网格线异常: {e}")
-        
+
         logger.info("表格绘制完成")
     
     def _get_system_fonts(self):
