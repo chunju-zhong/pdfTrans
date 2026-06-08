@@ -4,7 +4,8 @@ import logging
 from lxml import etree
 from docx import Document
 from models.merged_block import MergedBlock
-from docx.shared import Inches, RGBColor, Pt
+from docx.shared import Inches, RGBColor, Pt, Emu
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
 logger = logging.getLogger(__name__)
 
