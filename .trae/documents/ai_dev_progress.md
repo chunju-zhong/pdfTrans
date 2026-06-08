@@ -1,5 +1,36 @@
 # AI 开发进度记录
 
+### 2026-06-09
+- **当前状态**：已修复 Rect.intersect() 原地修改 bug，Word 合并单元格已支持，Markdown 合并单元格暂未启用
+- **已完成任务**：
+  - 修复 `Rect.intersect()` 原地修改导致表格文本重叠检测失效：
+    - PyMuPDF 的 `Rect.intersect()` 会原地修改调用者矩形，循环中累积重叠面积计算全部错误
+    - 3 个文件 5 处 `.intersect()` 改为 `&` 运算符
+    - 新增累积重叠面积检测和空列表回退
+    - 新增 `table_bbox` 参数过滤表外字符
+  - Word 合并单元格支持：
+    - `docx_generator.py` `_add_table()` 对 `row_span > 1` 或 `col_span > 1` 的单元格调用 `cell.merge()`
+    - 跳过 None 位置，合并单元格字号按 span 缩放
+  - Markdown 合并单元格诊断：
+    - 发现 `_format_with_layout_model` 会将 HTML 表格发给 LLM 重新格式化，LLM 将 HTML 转回 pipe 格式
+    - 需要实现占位符保护机制后再启用
+  - 修复 `markdown_generator.py` 中 `\$` 无效转义序列的 SyntaxWarning
+  - 新增 `tests/test_rect_intersect_fix.py`：13 个测试用例
+- **技术实现**：
+  - `Rect.intersect()` vs `&` 运算符：`r1.intersect(r2)` 原地修改 r1 并返回 r1，`r1 & r2` 返回新矩形不修改 r1
+  - 累积重叠面积：遍历所有单元格计算交集面积总和，超过文本块面积 50% 才标记为表格文本
+  - 表外字符过滤：`extract_table_cells_by_bbox` 新增 `table_bbox` 参数，过滤中心点超出表格 bbox 的字符
+- **影响**：
+  - PDF 第22页表格最后一列不再有重复文字
+  - Word 输出正确合并单元格
+  - Markdown 合并单元格暂未生效（仍为 pipe 格式）
+- **遇到的问题**：
+  - 多次尝试修改重叠检测逻辑无效，最终通过诊断日志发现 `Rect.intersect()` 原地修改是根因
+  - Markdown HTML 表格被 LLM 覆盖，需要占位符保护机制（类似公式保护），暂未实现
+- **后续计划**：
+  - 实现 Markdown 合并单元格占位符保护机制
+  - 修复表格标题/脚注被错误合并进单元格
+
 ### 2026-06-08
 - **当前状态**：已完成合并单元格渲染优化和代码审查优化
 - **已完成任务**：

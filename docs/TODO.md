@@ -25,6 +25,9 @@
 - [x] Further optimize glossary extraction accuracy and efficiency
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
 - [x] Merged cell rendering optimization (text truncation, line separation, horizontal lines exceeding table boundary)
+- [x] Fix Rect.intersect() in-place mutation causing table text overlap detection failure
+- [x] Word merged cell support (cell.merge + font size scaling)
+- [ ] Markdown merged cell support (needs placeholder protection to prevent LLM from overwriting HTML tables)
 - [ ] Fix table caption/footnote incorrectly merged into cells (post-processing separation)
 
 ## Medium Priority

@@ -1,5 +1,30 @@
 # 更新日志
 
+## 2026-06-09
+
+- 修复 `Rect.intersect()` 原地修改导致表格文本重叠检测失效：
+  - PyMuPDF 的 `Rect.intersect()` 会原地修改调用者矩形，导致 `_extract_text_blocks` 循环中累积重叠面积计算全部错误
+  - 修复：3 个文件中 5 处 `.intersect()` 改为 `&` 运算符（返回新矩形，不修改原矩形）
+  - 新增累积重叠面积检测：文本块与所有单元格重叠面积总和超过 50% 才标记为表格文本
+  - 新增空列表回退：`table_cell_bboxes` 为空时回退到表格整体 bbox 检测
+  - 新增 `table_bbox` 参数过滤表外字符：`extract_table_cells_by_bbox` 过滤中心点超出表格 bbox 的字符
+- Word 合并单元格支持：
+  - `docx_generator.py` `_add_table()` 新增合并遍历：对 `row_span > 1` 或 `col_span > 1` 的单元格调用 `cell.merge()`
+  - 跳过 `None` 位置（被合并覆盖的单元格）
+  - 合并单元格字号按 span 缩放
+- Markdown 合并单元格（暂未启用）：
+  - 发现 `_format_with_layout_model` 会将 HTML 表格发给 LLM 重新格式化，LLM 将 HTML 转回 pipe 格式丢失 `colspan`/`rowspan`
+  - 需要实现占位符保护机制（类似公式保护）后再启用
+- 修复 `markdown_generator.py` 中 `\$` 无效转义序列的 SyntaxWarning
+- 新增 `tests/test_rect_intersect_fix.py`：13 个测试用例覆盖 Rect 行为、重叠检测、字符过滤
+- 相关文件：
+  - `modules/pdf_extractor.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/extractors/style_analyzer.py`
+  - `modules/docx_generator.py`
+  - `modules/markdown_generator.py`
+  - `tests/test_rect_intersect_fix.py`
+
 ## 2026-06-08
 
 - 合并单元格渲染优化——解决文字显示不全和线条分隔问题：

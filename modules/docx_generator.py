@@ -884,14 +884,35 @@ class DocxGenerator:
                 borders.append(border)
             tblPr.append(borders)
 
+            # 合并单元格：遍历所有非None单元格，对row_span或col_span大于1的执行merge
             for i, row in enumerate(table_data):
                 for j, cell in enumerate(row):
-                    cell_text = cell.text if cell is not None else ''
+                    if cell is None:
+                        continue
+                    row_span = getattr(cell, 'row_span', 1)
+                    col_span = getattr(cell, 'col_span', 1)
+                    if row_span > 1 or col_span > 1:
+                        word_table.cell(i, j).merge(
+                            word_table.cell(i + row_span - 1, j + col_span - 1)
+                        )
+
+            # 写入文本：仅对非None单元格（合并区域的左上角）写入
+            for i, row in enumerate(table_data):
+                for j, cell in enumerate(row):
+                    if cell is None:
+                        continue
+                    row_span = getattr(cell, 'row_span', 1)
+                    col_span = getattr(cell, 'col_span', 1)
+                    cell_text = cell.text
                     cleaned_text = self._clean_xml_compatible_text(str(cell_text))
                     cell_paragraph = word_table.cell(i, j).paragraphs[0]
                     cell_run = cell_paragraph.add_run(cleaned_text)
-                    cell_run.font.size = Pt(9)
-            
+                    # 根据合并区域大小调整字号
+                    font_size = 9
+                    if row_span > 1 or col_span > 1:
+                        font_size = min(9 + (row_span - 1) * 2 + (col_span - 1), 16)
+                    cell_run.font.size = Pt(font_size)
+
             logger.info(f"添加表格成功，{num_rows}行{num_cols}列")
         else:
             logger.warning("表格数据格式不正确，跳过")

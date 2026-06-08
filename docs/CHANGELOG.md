@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-06-09
+
+- Fixed `Rect.intersect()` in-place mutation causing table text overlap detection failure:
+  - PyMuPDF's `Rect.intersect()` mutates the caller rectangle, causing all cumulative overlap area calculations in `_extract_text_blocks` to be incorrect
+  - Fix: Changed 5 occurrences of `.intersect()` to `&` operator across 3 files (returns new rect, doesn't mutate original)
+  - Added cumulative overlap area detection: text block marked as table text only when total overlap with all cells exceeds 50%
+  - Added empty list fallback: when `table_cell_bboxes` is empty, fall back to table overall bbox detection
+  - Added `table_bbox` parameter to filter out-of-table characters: `extract_table_cells_by_bbox` filters characters whose center is outside table bbox
+- Word merged cell support:
+  - `docx_generator.py` `_add_table()` added merge traversal: calls `cell.merge()` for cells with `row_span > 1` or `col_span > 1`
+  - Skips `None` positions (cells covered by merge)
+  - Merged cell font size scaled by span
+- Markdown merged cells (not yet enabled):
+  - Discovered `_format_with_layout_model` sends HTML tables to LLM for reformatting, LLM converts HTML back to pipe format losing `colspan`/`rowspan`
+  - Needs placeholder protection mechanism (similar to formula protection) before enabling
+- Fixed `\$` invalid escape sequence SyntaxWarning in `markdown_generator.py`
+- Added `tests/test_rect_intersect_fix.py`: 13 test cases covering Rect behavior, overlap detection, character filtering
+- Related files:
+  - `modules/pdf_extractor.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/extractors/style_analyzer.py`
+  - `modules/docx_generator.py`
+  - `modules/markdown_generator.py`
+  - `tests/test_rect_intersect_fix.py`
+
 ## 2026-06-08
 
 - Merged cell rendering optimization — fix text truncation and line separation issues:
