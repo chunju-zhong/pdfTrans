@@ -60,23 +60,23 @@ def find_matching_block(block, text_dict):
             # 检查中心点是否在dict块内
             if dict_rect.contains(current_point):
                 # 计算重叠面积
-                intersection = dict_rect.intersect(current_rect)
+                intersection = dict_rect & current_rect
                 overlap_area = intersection.width * intersection.height
-                
+
                 if overlap_area > max_overlap:
                     max_overlap = overlap_area
                     matched_block = dict_block
-        
+
         # 如果没有找到包含中心点的块，尝试使用重叠面积最大的块
         if matched_block is None:
             for dict_block in text_dict.get("blocks", []):
                 if dict_block["type"] != 0:
                     continue
-                
+
                 dict_x0, dict_y0, dict_x1, dict_y1 = dict_block["bbox"]
                 dict_rect = fitz.Rect(dict_x0, dict_y0, dict_x1, dict_y1)
-                
-                intersection = dict_rect.intersect(current_rect)
+
+                intersection = dict_rect & current_rect
                 overlap_area = intersection.width * intersection.height
                 
                 if overlap_area > max_overlap:

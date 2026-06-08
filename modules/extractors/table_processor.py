@@ -188,7 +188,7 @@ def extract_tables_by_camelot(pdf_path, pages=None):
         logger.error(f"提取PDF表格时出错: {str(e)}", exc_info=True)
         raise Exception(f"提取PDF表格时出错: {str(e)}")
 
-def extract_table_cells_by_bbox(page, table):
+def extract_table_cells_by_bbox(page, table, table_bbox=None):
     """使用单元格精确bbox提取表格文本，替代table.extract()
 
     PyMuPDF的table.extract()使用字符中心点归属判断，会将表格标题/脚注
@@ -198,6 +198,8 @@ def extract_table_cells_by_bbox(page, table):
     Args:
         page: PyMuPDF页面对象
         table: PyMuPDF Table对象
+        table_bbox: 表格边界框，用于过滤超出表格范围的字符。
+                    如果为None，则使用table.bbox。
 
     Returns:
         tuple: (data, cell_bboxes, rows_data)
@@ -246,6 +248,29 @@ def extract_table_cells_by_bbox(page, table):
                             "x0": char_bbox.x0,
                             "y0": char_bbox.y0,
                         })
+
+    # 2.5 过滤超出表格bbox范围的字符
+    if table_bbox is None:
+        table_bbox = table.bbox
+    if table_bbox:
+        table_rect = fitz.Rect(table_bbox)
+        # 允许少量容差（2像素），避免边界字符被误排除
+        table_rect_expanded = fitz.Rect(
+            table_rect.x0 - 2,
+            table_rect.y0 - 2,
+            table_rect.x1 + 2,
+            table_rect.y1 + 2
+        )
+        original_count = len(all_chars)
+        filtered_chars = []
+        for char_info in all_chars:
+            char_center_x = (char_info["x0"] + char_info["bbox"].x1) / 2
+            char_center_y = (char_info["y0"] + char_info["bbox"].y1) / 2
+            if table_rect_expanded.contains(fitz.Point(char_center_x, char_center_y)):
+                filtered_chars.append(char_info)
+        if original_count != len(filtered_chars):
+            logger.debug(f"表格bbox过滤字符: 原始{original_count}个, 保留{len(filtered_chars)}个, 过滤掉{original_count - len(filtered_chars)}个表外字符")
+        all_chars = filtered_chars
 
     # 3. 为每个单元格分配字符
     # 初始化单元格字符列表
@@ -360,7 +385,7 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                         # 获取表格内容（使用单元格精确bbox提取，避免标题/脚注被错误包含）
                         rows_data = []
                         try:
-                            data, table_cell_bboxes, rows_data = extract_table_cells_by_bbox(page, table)
+                            data, table_cell_bboxes, rows_data = extract_table_cells_by_bbox(page, table, table_bbox=bbox)
                             logger.info(f"表格{table_idx}内容(精确bbox提取): {data}")
                         except Exception as e:
                             logger.warning(f"精确bbox提取失败，回退到table.extract(): {e}")

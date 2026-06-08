@@ -368,25 +368,43 @@ class PdfExtractor:
 
                 # 优先使用单元格bbox判断（更精确），回退到表格整体bbox
                 if current_page_table_cells:
+                    total_overlap_area = 0
+                    has_valid_cells = False
                     for table_cell_bboxes in current_page_table_cells:
+                        if not table_cell_bboxes:
+                            continue
+                        has_valid_cells = True
                         for cell_bbox in table_cell_bboxes:
                             cell_rect = fitz.Rect(cell_bbox)
                             try:
-                                intersection = block_rect.intersect(cell_rect)
+                                intersection = block_rect & cell_rect
+                                overlap_area = intersection.width * intersection.height
+                                total_overlap_area += overlap_area
+                            except Exception:
+                                continue
+                        if total_overlap_area > block_area * 0.5:
+                            break
+                    if has_valid_cells and total_overlap_area > block_area * 0.5:
+                        is_table_text = True
+                        logger.debug(f"页面{current_page_num} 文本块 {block_no} 与单元格累积重叠{total_overlap_area:.0f}/{block_area:.0f}，视为表格文本，跳过")
+                    elif not has_valid_cells and current_page_tables:
+                        # 单元格bbox列表为空，回退到表格整体bbox检测
+                        for table_bbox in current_page_tables:
+                            table_rect = fitz.Rect(table_bbox)
+                            try:
+                                intersection = block_rect & table_rect
                                 overlap_area = intersection.width * intersection.height
                                 if overlap_area > block_area * 0.5:
                                     is_table_text = True
-                                    logger.debug(f"页面{current_page_num} 文本块 {block_no} 与单元格重叠，视为表格文本，跳过")
+                                    logger.debug(f"页面{current_page_num} 文本块 {block_no} 与表格整体重叠，视为表格文本，跳过")
                                     break
                             except Exception:
                                 continue
-                        if is_table_text:
-                            break
                 elif current_page_tables:
                     for table_bbox in current_page_tables:
                         table_rect = fitz.Rect(table_bbox)
                         # 计算重叠面积
-                        intersection = block_rect.intersect(table_rect)
+                        intersection = block_rect & table_rect
                         overlap_area = intersection.width * intersection.height
 
                         # 如果重叠面积超过文本块面积的50%，则视为表格文本
@@ -427,22 +445,22 @@ class PdfExtractor:
                 
                 for block_no, text_block in text_block_objects.items():
                     block_info_rect = fitz.Rect(text_block.block_bbox)
-                    
+
                     # 检查当前块是否包含在blocks级别块中
                     if block_info_rect.contains(fitz.Point(current_center_x, current_center_y)):
                         # 计算重叠面积
-                        intersection = block_info_rect.intersect(fitz.Rect(block_x0, block_y0, block_x1, block_y1))
+                        intersection = block_info_rect & fitz.Rect(block_x0, block_y0, block_x1, block_y1)
                         overlap_area = intersection.width * intersection.height
-                        
+
                         if overlap_area > max_overlap:
                             max_overlap = overlap_area
                             matched_block_no = block_no
-                
+
                 # 如果没有找到包含中心点的块，尝试使用重叠面积最大的块
                 if matched_block_no is None:
                     for block_no, text_block in text_block_objects.items():
                         block_info_rect = fitz.Rect(text_block.block_bbox)
-                        intersection = block_info_rect.intersect(fitz.Rect(block_x0, block_y0, block_x1, block_y1))
+                        intersection = block_info_rect & fitz.Rect(block_x0, block_y0, block_x1, block_y1)
                         overlap_area = intersection.width * intersection.height
                         
                         if overlap_area > max_overlap:
