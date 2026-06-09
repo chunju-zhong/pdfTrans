@@ -397,9 +397,8 @@ class TranslationService:
         translated_block_texts = split_translated_result(merged_translation, original_blocks)
         logger.info(f"任务 {task.task_id} 合并块 {index+1} 拆分结果: {translated_block_texts}")
         
-        # 获取合并块的最大宽度和高度
+        # 获取合并块的最大宽度（高度不再使用最大值，各块保留原始高度）
         max_width = merged_block.max_width
-        max_height = merged_block.max_height
         
         # 准备拆分后的结果
         block_results = []
@@ -408,13 +407,14 @@ class TranslationService:
             text_block = original_block_info  # 获取TextBlock对象
             page_num = original_block_info.page_num
             
-            # 更新原始文本框为合并时得到的最大文本框
+            # 更新原始文本框：宽度使用合并块最大宽度，高度使用原始块自身高度
             original_bbox = text_block.block_bbox
-            if max_width > 0 and max_height > 0:
-                # 计算新的边界框，保持左上角坐标不变，使用最大宽度和高度
+            if max_width > 0:
+                # 计算新的边界框，保持左上角坐标不变
+                # 宽度使用最大宽度（避免窄块文字换行过多），高度使用原始块自身高度（避免向下扩展遮挡下一块）
                 new_bbox = (original_bbox[0], original_bbox[1], 
                             original_bbox[0] + max_width, 
-                            original_bbox[1] + max_height)
+                            original_bbox[3])
             else:
                 new_bbox = original_bbox
             

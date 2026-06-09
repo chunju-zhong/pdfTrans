@@ -399,8 +399,81 @@ def create_pdf_cell(cell_info, row_span=1, col_span=1):
             row_idx=row_idx,
             col_idx=col_idx,
             row_span=row_span,
-            col_span=col_span
+            col_span=col_span,
+            alignment=cell_info.get('alignment', 0)
         )
     except Exception as e:
         logger.warning(f"创建PdfCell对象失败: {e}")
         return None
+
+
+def extract_cell_alignment(text_bbox, cell_bbox):
+    """从字符 bbox 与单元格 bbox 的位置关系提取对齐方式
+
+    Args:
+        text_bbox: 文本整体边界框 (x0, y0, x1, y1)
+        cell_bbox: 单元格边界框 (x0, y0, x1, y1)
+
+    Returns:
+        int: 对齐方式，0=左对齐, 1=居中, 2=右对齐
+    """
+    if not text_bbox or not cell_bbox:
+        return 0
+
+    cell_width = cell_bbox[2] - cell_bbox[0]
+    if cell_width <= 0:
+        return 0
+
+    text_center_x = (text_bbox[0] + text_bbox[2]) / 2
+    cell_center_x = (cell_bbox[0] + cell_bbox[2]) / 2
+    center_offset = abs(text_center_x - cell_center_x) / cell_width
+
+    # 居中：文本中心与单元格中心偏移 < 15%
+    if center_offset < 0.15:
+        return 1
+
+    # 左对齐：文本左边缘接近单元格左边缘
+    left_offset = (text_bbox[0] - cell_bbox[0]) / cell_width
+    if left_offset < 0.10:
+        return 0
+
+    # 右对齐：文本右边缘接近单元格右边缘
+    right_offset = (cell_bbox[2] - text_bbox[2]) / cell_width
+    if right_offset < 0.10:
+        return 2
+
+    # 默认左对齐
+    return 0
+
+
+def extract_table_alignment(table_bbox, page_width):
+    """从表格 bbox 与页面宽度的位置关系提取表格整体对齐方式
+
+    Args:
+        table_bbox: 表格边界框 (x0, y0, x1, y1)
+        page_width: 页面宽度
+
+    Returns:
+        int: 对齐方式，0=左对齐, 1=居中, 2=右对齐
+    """
+    if not table_bbox or page_width <= 0:
+        return 1  # 默认居中
+
+    table_center_x = (table_bbox[0] + table_bbox[2]) / 2
+    page_center_x = page_width / 2
+    center_offset = abs(table_center_x - page_center_x) / page_width
+
+    # 居中：偏移 < 5%
+    if center_offset < 0.05:
+        return 1
+
+    # 左对齐：表格左边缘接近页面左边缘
+    if table_bbox[0] / page_width < 0.10:
+        return 0
+
+    # 右对齐：表格右边缘接近页面右边缘
+    if (page_width - table_bbox[2]) / page_width < 0.10:
+        return 2
+
+    # 默认居中
+    return 1

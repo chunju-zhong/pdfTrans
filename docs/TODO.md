@@ -26,7 +26,14 @@
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
 - [x] Merged cell rendering optimization (text truncation, line separation, horizontal lines exceeding table boundary)
 - [x] Fix Rect.intersect() in-place mutation causing table text overlap detection failure
+- [x] Fix Roman numeral page numbers not recognized as footers, causing cross-page text merging errors
+- [x] Fix merged block split bbox height too large causing text overflow and paragraph occlusion
+- [x] Fix CJK font line height larger than Latin font causing translated text to overflow bbox
+- [x] Fix PDF generator first render using enlarged font causing text overflow
+- [x] Fix merged block split equal distribution causing second block to be empty and translated text loss
 - [x] Word merged cell support (cell.merge + font size scaling)
+- [x] Word table size matching original PDF (column widths/row heights/overall width from original)
+- [x] PDF and Word table alignment matching original PDF (alignment inferred from character positions at extraction layer)
 - [ ] Markdown merged cell support (needs placeholder protection to prevent LLM from overwriting HTML tables)
 - [ ] Fix table caption/footnote incorrectly merged into cells (post-processing separation)
 

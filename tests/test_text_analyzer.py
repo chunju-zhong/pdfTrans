@@ -11,6 +11,8 @@ from modules.extractors.text_analyzer import (
     identify_header_footer,
     identify_page_numbers,
     mark_non_body_text,
+    roman_to_int,
+    ROMAN_NUMERAL_PATTERN,
 )
 from models.text_block import TextBlock
 from models.extraction import PdfPage
@@ -255,3 +257,152 @@ class TestMarkNonBodyText:
         for page in pages:
             for block in page.text_blocks:
                 assert block.is_body_text is True
+
+
+# ============================================================
+# roman_to_int 测试
+# ============================================================
+
+class TestRomanToInt:
+    def test_simple_numerals(self):
+        assert roman_to_int("ii") == 2
+        assert roman_to_int("iii") == 3
+        assert roman_to_int("v") == 5
+        assert roman_to_int("x") == 10
+
+    def test_subtractive_notation(self):
+        assert roman_to_int("iv") == 4
+        assert roman_to_int("ix") == 9
+        assert roman_to_int("xiv") == 14
+        assert roman_to_int("xv") == 15
+        assert roman_to_int("xix") == 19
+
+    def test_larger_numerals(self):
+        assert roman_to_int("xx") == 20
+        assert roman_to_int("xl") == 40
+        assert roman_to_int("xlix") == 49
+
+    def test_case_insensitive(self):
+        assert roman_to_int("XV") == 15
+        assert roman_to_int("Xii") == 12
+        assert roman_to_int("III") == 3
+
+    def test_invalid_input(self):
+        assert roman_to_int("abc") is None
+        assert roman_to_int("") is None
+
+    def test_whitespace_stripped(self):
+        assert roman_to_int("  xv  ") == 15
+
+
+# ============================================================
+# ROMAN_NUMERAL_PATTERN 测试
+# ============================================================
+
+class TestRomanNumeralPattern:
+    def test_matches_roman_numerals(self):
+        assert ROMAN_NUMERAL_PATTERN.match("xv")
+        assert ROMAN_NUMERAL_PATTERN.match("XII")
+        assert ROMAN_NUMERAL_PATTERN.match("iii")
+        assert ROMAN_NUMERAL_PATTERN.match("xlix")
+
+    def test_rejects_non_roman(self):
+        assert not ROMAN_NUMERAL_PATTERN.match("Part III")
+        assert not ROMAN_NUMERAL_PATTERN.match("Chapter IV")
+        assert not ROMAN_NUMERAL_PATTERN.match("I am")
+        assert not ROMAN_NUMERAL_PATTERN.match("xv2")
+        assert not ROMAN_NUMERAL_PATTERN.match("hello")
+
+
+# ============================================================
+# 罗马数字页码识别测试
+# ============================================================
+
+class TestIdentifyRomanPageNumbers:
+    def test_roman_numeral_in_bottom_detected(self):
+        """底部区域的罗马数字页码应被识别"""
+        page_height = 792
+        # 底部 15% 区域：y0 > 792 * 0.85 = 673.2
+        blocks_14 = [make_block("xiv", bbox=(0, 700, 30, 720), page_num=14, block_no=1, font_size=8.0)]
+        blocks_15 = [make_block("xv", bbox=(0, 700, 30, 720), page_num=15, block_no=1, font_size=8.0)]
+        pages = [
+            PdfPage(page_num=14, text_blocks=blocks_14),
+            PdfPage(page_num=15, text_blocks=blocks_15),
+        ]
+        page_sizes = {14: (612, page_height), 15: (612, page_height)}
+
+        result = identify_page_numbers(pages, page_sizes)
+        assert "xiv" in result
+        assert "xv" in result
+
+    def test_roman_numeral_in_top_detected(self):
+        """顶部区域的罗马数字页码应被识别"""
+        page_height = 792
+        # 顶部 15% 区域：y1 < 792 * 0.15 = 118.8
+        blocks_12 = [make_block("xii", bbox=(0, 50, 30, 70), page_num=12, block_no=1, font_size=8.0)]
+        blocks_13 = [make_block("xiii", bbox=(0, 50, 30, 70), page_num=13, block_no=1, font_size=8.0)]
+        pages = [
+            PdfPage(page_num=12, text_blocks=blocks_12),
+            PdfPage(page_num=13, text_blocks=blocks_13),
+        ]
+        page_sizes = {12: (612, page_height), 13: (612, page_height)}
+
+        result = identify_page_numbers(pages, page_sizes)
+        assert "xii" in result
+        assert "xiii" in result
+
+    def test_roman_numeral_middle_area_not_detected(self):
+        """中间区域的罗马数字不应被识别为页码"""
+        page_height = 792
+        # 中间区域
+        blocks = [make_block("xv", bbox=(0, 400, 30, 420), page_num=15, block_no=1, font_size=8.0)]
+        pages = [PdfPage(page_num=15, text_blocks=blocks)]
+        page_sizes = {15: (612, page_height)}
+
+        result = identify_page_numbers(pages, page_sizes)
+        assert "xv" not in result
+
+    def test_roman_numeral_large_font_not_detected(self):
+        """大字体的罗马数字不应被识别为页码"""
+        page_height = 792
+        blocks = [make_block("xv", bbox=(0, 700, 30, 720), page_num=15, block_no=1, font_size=14.0)]
+        pages = [PdfPage(page_num=15, text_blocks=blocks)]
+        page_sizes = {15: (612, page_height)}
+
+        result = identify_page_numbers(pages, page_sizes)
+        assert "xv" not in result
+
+    def test_roman_numeral_i_not_detected(self):
+        """单个 'i' 不应被识别为页码（太常见，可能是代词）"""
+        page_height = 792
+        blocks = [make_block("i", bbox=(0, 700, 10, 720), page_num=1, block_no=1, font_size=8.0)]
+        blocks2 = [make_block("ii", bbox=(0, 700, 10, 720), page_num=2, block_no=1, font_size=8.0)]
+        pages = [
+            PdfPage(page_num=1, text_blocks=blocks),
+            PdfPage(page_num=2, text_blocks=blocks2),
+        ]
+        page_sizes = {1: (612, page_height), 2: (612, page_height)}
+
+        result = identify_page_numbers(pages, page_sizes)
+        assert "i" not in result
+        assert "ii" in result
+
+    def test_mixed_roman_and_arabic_page_numbers(self):
+        """罗马数字和阿拉伯数字混合编号应都被识别"""
+        page_height = 792
+        # 前置部分使用罗马数字
+        blocks_14 = [make_block("xiv", bbox=(0, 700, 30, 720), page_num=14, block_no=1, font_size=8.0)]
+        blocks_15 = [make_block("xv", bbox=(0, 700, 30, 720), page_num=15, block_no=1, font_size=8.0)]
+        # 正文部分使用阿拉伯数字
+        blocks_16 = [make_block("16", bbox=(0, 700, 20, 720), page_num=16, block_no=1, font_size=8.0)]
+        pages = [
+            PdfPage(page_num=14, text_blocks=blocks_14),
+            PdfPage(page_num=15, text_blocks=blocks_15),
+            PdfPage(page_num=16, text_blocks=blocks_16),
+        ]
+        page_sizes = {14: (612, page_height), 15: (612, page_height), 16: (612, page_height)}
+
+        result = identify_page_numbers(pages, page_sizes)
+        assert "xiv" in result
+        assert "xv" in result
+        assert "16" in result

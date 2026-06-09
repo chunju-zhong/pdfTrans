@@ -1,6 +1,73 @@
 # AI 开发进度记录
 
+### 2026-06-09（续2）
+- **当前状态**：已修复罗马数字页码识别、合并块 bbox 高度、CJK 行高、PDF 字体放大、翻译文本按比例分配等5个问题
+- **已完成任务**：
+  - 修复罗马数字页码未被识别为页脚导致跨页文本错误合并：
+    - `text_analyzer.py` 新增 `roman_to_int()` 函数和 `ROMAN_NUMERAL_PATTERN` 正则
+    - `identify_page_numbers()` 新增罗马数字页码识别（位置/字体/递增模式/值匹配）
+    - 新增14个单元测试，全部35个测试通过
+  - 修复合并块拆分后 bbox 高度过大导致文本溢出和段落遮挡：
+    - `translation_service.py` 拆分块 bbox 高度改为使用各块自身的 `original_bbox[3]`
+  - 修复 CJK 字体行高大于拉丁字体导致翻译文本溢出 bbox：
+    - `pdf_generator.py` 新增原文行高倍率计算，所有 `insert_textbox()` 添加 `lineheight` 参数
+  - 修复 PDF 生成器首次渲染使用放大字体导致文本溢出：
+    - `pdf_generator.py` 首次尝试使用原始字体大小，溢出时逐步缩小
+  - 修复合并块拆分时均等分配导致第二个块为空、翻译文本丢失：
+    - `split_translated_result()` 分配策略从均等分配改为按原始文本长度比例分配
+    - 新增保护：非最后一个块不消耗全部剩余文本
+- **技术实现**：
+  - 罗马数字识别：位置（顶部/底部15%）+ 字体（<10.0）+ 递增模式 + 值匹配
+  - 行高倍率计算：`bbox高度 / (字体大小 × 估算行数)`，下限1.0，默认1.2
+  - 按比例分配：`target_len = round(remaining_len × original_lengths[i] / remaining_original_len)`
+  - 保护机制：`actual_end ≤ translation_len - min_chars × remaining_blocks`
+- **影响**：
+  - 罗马数字页码不再被误认为正文，跨页文本不再错误合并
+  - 翻译文本行高与原文一致，不再溢出 bbox
+  - 合并块拆分后各块分到与其原始长度相当的翻译文本，不再出现空块
+- **遇到的问题**：
+  - 最初认为文本丢失是 `adjust_split_position` 推进过多导致，实际根因是均等分配策略
+  - CJK 行高问题最初用固定 `lineheight=1.2` 修复，后改为基于原文行高计算
+- **后续计划**：
+  - 验证300+页文档翻译质量
+  - 修复表格标题/脚注被错误合并进单元格
+
+### 2026-06-09（续）
+
 ### 2026-06-09
+- **当前状态**：已完成 Word 表格尺寸匹配原文、PDF/Word 表格对齐方式匹配原文
+- **已完成任务**：
+  - Word 表格尺寸匹配原文：
+    - `docx_generator.py` `_add_table()` 重写：使用 `PdfTable.col_widths`/`row_heights`/`bbox` 设置表格尺寸
+    - 新增 `_resolve_col_widths()` 和 `_resolve_row_heights()` 辅助方法
+    - 合并单元格宽度/高度按跨列/行数等分分配
+    - 表格布局 `tblLayout=fixed`，通过 `tblGrid`/`gridCol` 精确控制列宽
+  - PDF 和 Word 表格对齐方式匹配原文：
+    - `PdfCell` 新增 `alignment` 参数，`PdfTable` 新增 `alignment` 参数
+    - 新增 `extract_cell_alignment()` 从字符 bbox 位置推断单元格对齐
+    - 新增 `extract_table_alignment()` 从表格 bbox 位置推断表格整体对齐
+    - `table_processor.py` 提取时从字符级 bbox 计算文本 bbox 并推断对齐
+    - `paddle_extractor.py` OCR 模式新增对齐提取
+    - `pdf_generator.py` 和 `docx_generator.py` 使用提取的对齐信息
+    - 确认 PyMuPDF 无原生对齐属性，对齐完全由字符位置推断
+- **技术实现**：
+  - 单位转换：1 PDF point = 12700 EMU, 1 inch = 1440 twips, 1 twip = 635 EMU
+  - 对齐推断阈值：中心偏移 < 15% → 居中，左偏移 < 10% → 左对齐，右偏移 < 10% → 右对齐
+  - 表格对齐推断：表格中心与页面中心偏移 < 5% → 居中
+  - 合并单元格宽度分配：`cell_width / col_span` 等分到各列
+- **影响**：
+  - Word 表格列宽/行高/整体宽度与原文 PDF 一致
+  - PDF 和 Word 表格单元格对齐方式与原文一致
+  - 表格整体对齐方式与原文一致
+- **遇到的问题**：
+  - 代码审查发现合并单元格宽度/高度未分配到跨列/行，已修复
+  - 子代理未正确应用 docx_generator 对齐变更，手动修复
+- **后续计划**：
+  - 实现 Markdown 合并单元格占位符保护机制
+  - 修复表格标题/脚注被错误合并进单元格
+  - 修复 `test_parse_simple_table` 预存测试失败（`_TableHtmlParser` 返回元组但测试期望字符串）
+
+### 2026-06-09（前序）
 - **当前状态**：已修复 Rect.intersect() 原地修改 bug，Word 合并单元格已支持，Markdown 合并单元格暂未启用
 - **已完成任务**：
   - 修复 `Rect.intersect()` 原地修改导致表格文本重叠检测失效：

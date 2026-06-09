@@ -56,7 +56,7 @@ class PdfCell(CopyableMixin):
     表示PDF表格中的单个单元格，包含文本、边界框和大小信息
     """
     
-    def __init__(self, text, bbox, row_idx, col_idx, row_span=1, col_span=1):
+    def __init__(self, text, bbox, row_idx, col_idx, row_span=1, col_span=1, alignment=0):
         """初始化PdfCell对象
 
         Args:
@@ -66,6 +66,7 @@ class PdfCell(CopyableMixin):
             col_idx (int): 列索引
             row_span (int): 跨行数，默认1
             col_span (int): 跨列数，默认1
+            alignment (int): 对齐方式，0=左对齐, 1=居中, 2=右对齐，默认0
         """
         self.text = text
         self.bbox = bbox
@@ -73,6 +74,7 @@ class PdfCell(CopyableMixin):
         self.col_idx = col_idx
         self.row_span = row_span
         self.col_span = col_span
+        self.alignment = alignment
         # 计算单元格大小
         self.width = bbox[2] - bbox[0]
         self.height = bbox[3] - bbox[1]
@@ -97,6 +99,7 @@ class PdfCell(CopyableMixin):
         obj.height = data.get('height', 0)
         obj.row_span = data.get('row_span', 1)
         obj.col_span = data.get('col_span', 1)
+        obj.alignment = data.get('alignment', 0)
         return obj
 
     def to_dict(self):
@@ -113,7 +116,8 @@ class PdfCell(CopyableMixin):
             'width': self.width,
             'height': self.height,
             'row_span': self.row_span,
-            'col_span': self.col_span
+            'col_span': self.col_span,
+            'alignment': self.alignment
         }
 
 
@@ -123,9 +127,9 @@ class PdfTable(CopyableMixin):
     表示PDF单表的提取结果，包含页码、表格索引、单元格信息和边界框信息
     """
     
-    def __init__(self, page_num, table_idx, cells, bbox=None, row_heights=None, col_widths=None):
+    def __init__(self, page_num, table_idx, cells, bbox=None, row_heights=None, col_widths=None, alignment=1):
         """初始化PdfTable对象
-        
+
         Args:
             page_num (int): 页码
             table_idx (int): 表格索引
@@ -133,6 +137,7 @@ class PdfTable(CopyableMixin):
             bbox (tuple): 表格边界框 (x0, y0, x1, y1)
             row_heights (list[float]): 行高列表
             col_widths (list[float]): 列宽列表
+            alignment (int): 表格整体对齐方式，0=左对齐, 1=居中, 2=右对齐，默认1
         """
         self.page_num = page_num
         self.table_idx = table_idx
@@ -140,6 +145,7 @@ class PdfTable(CopyableMixin):
         self.bbox = bbox
         self.row_heights = row_heights or []
         self.col_widths = col_widths or []
+        self.alignment = alignment
         # 章节信息
         self.chapter_id = None  # 章节ID
         self.chapter_title = None  # 章节标题
@@ -167,6 +173,7 @@ class PdfTable(CopyableMixin):
             bbox=tuple(data['bbox']) if data.get('bbox') else None,
             row_heights=data.get('row_heights', []),
             col_widths=data.get('col_widths', []),
+            alignment=data.get('alignment', 1),
         )
         obj.chapter_id = data.get('chapter_id')
         obj.chapter_title = data.get('chapter_title')
@@ -195,6 +202,7 @@ class PdfTable(CopyableMixin):
             'bbox': self.bbox,
             'row_heights': self.row_heights,
             'col_widths': self.col_widths,
+            'alignment': self.alignment,
             'chapter_id': self.chapter_id,
             'chapter_title': self.chapter_title,
             'chapter_level': self.chapter_level,

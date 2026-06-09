@@ -394,6 +394,28 @@ def fix_block_start_punctuation(translated_blocks):
     
     return translated_blocks
 
+def _get_original_text_len(block):
+    """获取原始块的文本长度，兼容 TextBlock 对象和字典两种格式
+    
+    Args:
+        block: TextBlock 对象 或 包含 'text_block'/'block_text' 键的字典
+        
+    Returns:
+        int: 原始文本长度
+    """
+    if isinstance(block, dict):
+        # 优先检查嵌套的 text_block 对象
+        text_block = block.get('text_block')
+        if text_block and hasattr(text_block, 'block_text'):
+            return len(text_block.block_text)
+        # 其次检查字典中直接的 block_text 键
+        block_text = block.get('block_text')
+        if block_text:
+            return len(block_text)
+        return 0
+    return len(getattr(block, 'block_text', ''))
+
+
 # 结果拆分映射逻辑
 
 def split_translated_result(merged_translation, original_blocks):
@@ -429,6 +451,12 @@ def split_translated_result(merged_translation, original_blocks):
     translation_len = len(merged_translation)
     logger.info(f"合并翻译长度: {translation_len}")
 
+    # 计算各原始块的文本长度，用于按比例分配翻译文本
+    original_lengths = [_get_original_text_len(block) for block in original_blocks]
+    total_original_len = sum(original_lengths) if original_lengths else 0
+    remaining_original_len = total_original_len  # 递减变量，替代 sum(original_lengths[i:])
+    logger.info(f"原始块文本长度: {original_lengths}, 总长度={total_original_len}")
+
     # 处理空翻译结果
     if translation_len == 0:
         logger.info("翻译结果为空，返回空字符串列表")
@@ -451,10 +479,13 @@ def split_translated_result(merged_translation, original_blocks):
     remaining_blocks = num_blocks
 
     for i in range(num_blocks):
-        # 动态计算当前块的目标长度：向上取整(剩余长度 / 剩余块数)
-        # 这样可以确保后面的块也能获得合理的长度
-        target_len = -(-remaining_len // remaining_blocks)
-        logger.debug(f"块 {i+1}: 目标长度={target_len}, 剩余长度={remaining_len}, 剩余块数={remaining_blocks}")
+        # 按原始文本长度比例分配翻译文本
+        if remaining_original_len > 0:
+            proportion = original_lengths[i] / remaining_original_len
+            target_len = max(min_characters_per_block, round(remaining_len * proportion))
+        else:
+            target_len = max(min_characters_per_block, -(-remaining_len // remaining_blocks))
+        logger.debug(f"块 {i+1}: 按比例分配目标长度={target_len}")
 
         # 计算当前块的结束位置
         end_pos = start_pos + target_len
@@ -468,6 +499,15 @@ def split_translated_result(merged_translation, original_blocks):
         # 这里会优先充分利用分块长度
         adjusted_end = adjust_split_position(available_text, end_pos)
         actual_end = adjusted_end
+
+        # 保护：非最后一个块不消耗全部剩余文本，确保后续块至少各分到 min_characters_per_block 字符
+        if i < num_blocks - 1:
+            max_allowed_end = translation_len - min_characters_per_block * remaining_blocks
+            max_allowed_end = max(start_pos, max_allowed_end)  # 确保不小于 start_pos，避免负值
+            if actual_end > max_allowed_end:
+                logger.debug(f"块 {i+1}: 调整后结束位置 {actual_end} 超过最大允许值 {max_allowed_end}，限制调整范围")
+                actual_end = max_allowed_end
+
         logger.debug(f"块 {i+1}: 调整后结束位置={actual_end}")
 
         # 确保至少分配min_characters_per_block个字符
@@ -526,6 +566,7 @@ def split_translated_result(merged_translation, original_blocks):
         used_len = actual_end - start_pos
         remaining_len -= used_len
         remaining_blocks -= 1
+        remaining_original_len -= original_lengths[i]
 
         # 更新起始位置
         start_pos = actual_end

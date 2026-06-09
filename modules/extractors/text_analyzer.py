@@ -6,6 +6,8 @@ logger = logging.getLogger(__name__)
 
 SHORT_TEXT_THRESHOLD = 20
 
+ROMAN_NUMERAL_PATTERN = re.compile(r'^[ivxlcdm]+$', re.IGNORECASE)
+
 def calculate_text_similarity(text1, text2):
     """计算两个文本的相似度
     
@@ -57,6 +59,34 @@ def _lcs_length(s1, s2):
                 dp[i][j] = max(dp[i-1][j], dp[i][j-1])
     
     return dp[m][n]
+
+def roman_to_int(s):
+    """将罗马数字转换为整数
+
+    注意：此函数不验证罗马数字的语法规则（如减法表示法限制），
+    例如 'IIII' 会被计算为 4 而非拒绝。这在页码检测场景下是可接受的，
+    因为PDF中的罗马数字页码通常由排版系统生成，格式正确。
+
+    Args:
+        s (str): 罗马数字字符串（如 'xv', 'xii', 'iii'）
+
+    Returns:
+        int: 对应的整数值，如果无法转换返回 None
+    """
+    s = s.upper().strip()
+    roman_values = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
+
+    # 空字符串或无效输入
+    if not s or not all(c in roman_values for c in s):
+        return None
+
+    total = 0
+    for i in range(len(s)):
+        if i + 1 < len(s) and roman_values[s[i]] < roman_values[s[i + 1]]:
+            total -= roman_values[s[i]]
+        else:
+            total += roman_values[s[i]]
+    return total
 
 def _add_similar_blocks(block_list1, block_list2, processed_pairs, non_body_texts):
     """比较两个列表中的文本块，将相似度超过阈值的添加到非正文文本集合
@@ -302,7 +332,73 @@ def identify_page_numbers(pages, page_sizes=None):
                     for text in continuous_numbers:
                         page_number_set.add(text)
                         logger.debug(f"根据连续递增模式识别页码: '{text}'")
-    
+
+    # 识别罗马数字页码
+    roman_page_numbers = []
+    roman_pattern = re.compile(r'^[ivxlcdm]+$', re.IGNORECASE)
+
+    for pdf_page in pages:
+        page_num = pdf_page.page_num
+        page_size = page_sizes.get(page_num, (0, 0))
+        page_height = page_size[1] if page_size else 0
+
+        for block in pdf_page.text_blocks:
+            block_text = block.block_text.strip()
+            block_font_size = getattr(block, 'font_size', 0)
+            block_bbox = block.block_bbox
+
+            # 检查是否为独立罗马数字
+            if not roman_pattern.match(block_text):
+                continue
+
+            # 跳过单个字符 "i"（太常见，如 "I" 可能是代词）
+            roman_value = roman_to_int(block_text)
+            if roman_value is None or roman_value < 2:
+                continue
+
+            # 检查位置：顶部或底部15%区域
+            block_y0, block_y1 = block_bbox[1], block_bbox[3]
+            is_top_or_bottom = False
+            if page_height > 0:
+                if block_y1 < page_height * 0.15:
+                    is_top_or_bottom = True
+                elif block_y0 > page_height * 0.85:
+                    is_top_or_bottom = True
+
+            # 检查字体大小
+            is_small_font = block_font_size < 10.0
+
+            if is_top_or_bottom and is_small_font:
+                roman_page_numbers.append((pdf_page.page_num, roman_value, block_text, block_font_size))
+                logger.debug(f"页面{pdf_page.page_num} 发现罗马数字页码: '{block_text}' (值={roman_value}), 字体大小: {block_font_size}, 位置: {'顶部/底部' if is_top_or_bottom else '中间'}")
+
+    # 将罗马数字页码添加到结果集
+    if roman_page_numbers:
+        # 检查罗马数字是否形成递增序列（与页码对应）
+        # 对于多页PDF，检查是否有连续递增的罗马数字
+        if len(pages) > 1 and len(roman_page_numbers) >= 2:
+            roman_page_numbers.sort(key=lambda x: x[0])
+            for i in range(len(roman_page_numbers) - 1):
+                curr_page, curr_value, curr_text, _ = roman_page_numbers[i]
+                next_page, next_value, next_text, _ = roman_page_numbers[i + 1]
+
+                # 连续递增：值递增且页码也递增
+                if next_value == curr_value + 1 and next_page == curr_page + 1:
+                    page_number_set.add(curr_text)
+                    page_number_set.add(next_text)
+                    logger.debug(f"根据连续递增模式识别罗马数字页码: '{curr_text}'({curr_value}) 和 '{next_text}'({next_value})")
+
+            # 也检查罗马数字值是否与PDF页码匹配
+            for page_num, roman_value, block_text, _ in roman_page_numbers:
+                if roman_value == page_num:
+                    page_number_set.add(block_text)
+                    logger.debug(f"罗马数字值与页码匹配: '{block_text}' (值={roman_value}, 页码={page_num})")
+        else:
+            # 单页或少量罗马数字，只要满足位置和字体条件就识别
+            for _, _, block_text, _ in roman_page_numbers:
+                page_number_set.add(block_text)
+                logger.debug(f"单页/少量罗马数字页码识别: '{block_text}'")
+
     return page_number_set
 
 def mark_non_body_text(pages, page_sizes=None, enable=True):

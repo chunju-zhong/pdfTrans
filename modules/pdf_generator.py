@@ -206,7 +206,23 @@ class PdfGenerator:
             italic = full_block.italic
             
             logger.info(f"使用文本块自带样式: 字体='{original_font}', 大小={original_font_size}, 粗体={bold}, 斜体={italic}")
-            
+
+            # 计算原文行高倍率，确保翻译文本行高与原文一致
+            # 使用迭代收敛方法：初始假设行高=1.2，反复估算行数→计算行高→更新估算
+            bbox_height = block_bbox[3] - block_bbox[1]
+            if original_font_size > 0 and bbox_height > 0:
+                original_lineheight = 1.2  # 初始假设（拉丁字体典型行高）
+                for _iter in range(3):  # 3次迭代通常足够收敛
+                    estimated_lines = max(1, round(bbox_height / (original_font_size * original_lineheight)))
+                    original_lineheight = bbox_height / (original_font_size * estimated_lines)
+                # 下限保护：行高倍率不小于1.0
+                original_lineheight = max(1.0, original_lineheight)
+            else:
+                original_lineheight = 1.2  # 默认值
+                estimated_lines = 0
+
+            logger.info(f"原文行高倍率: {original_lineheight:.3f} (bbox高度={bbox_height:.1f}, 字体大小={original_font_size:.1f}, 估算行数={estimated_lines})")
+
             # 修复颜色转换逻辑
             if color > 0xFFFFFF:  # 带alpha通道的ARGB格式 0xAARRGGBB
                 r = (color >> 16) & 0xFF
@@ -268,10 +284,14 @@ class PdfGenerator:
             
             for attempt in range(1, max_attempts + 1):
                 try:
-                    # 计算当前尝试的调整策略
-                    reduction_factor = (attempt - 3) * 0.1
-                    adjusted_font_size = original_font_size * (1 - reduction_factor)
-                    adjusted_font_size = max(adjusted_font_size, original_font_size * 0.7)  # 不小于原大小的70%
+                    # 计算当前尝试的字体大小调整策略
+                    # 从原始字体大小开始，逐步缩小以适应文本框
+                    if attempt == 1:
+                        adjusted_font_size = original_font_size
+                    else:
+                        reduction_factor = (attempt - 1) * 0.1
+                        adjusted_font_size = original_font_size * (1 - reduction_factor)
+                        adjusted_font_size = max(adjusted_font_size, original_font_size * 0.7)  # 不小于原大小的70%
                     
                     logger.debug(f"尝试绘制文本，字体: {suitable_font}, 字体大小: {adjusted_font_size}, 文本框: {current_rect}")
                     
@@ -282,9 +302,10 @@ class PdfGenerator:
                         fontname=suitable_font,
                         fontsize=adjusted_font_size,
                         color=rgb_color,
-                        align=alignment
+                        align=alignment,
+                        lineheight=original_lineheight
                     )
-                    
+
                     if result >= 0:
                         logger.info(f"[OK] 文本渲染成功，插入了 {result} 个字符，使用字体大小: {adjusted_font_size}，文本框大小: {current_rect}")
                         logger.debug(f"渲染文本内容: '{translated_text[:100]}...' (完整长度={len(translated_text)})")
@@ -311,7 +332,8 @@ class PdfGenerator:
                             fontname=suitable_font,
                             fontsize=adjusted_font_size,
                             color=rgb_color,
-                            align=alignment
+                            align=alignment,
+                            lineheight=original_lineheight
                         )
                         if result >= 0:
                             logger.info(f"[OK] 缩小字体到{font_ratio*100:.0f}%后渲染成功，字体大小: {adjusted_font_size}")
@@ -341,7 +363,8 @@ class PdfGenerator:
                             fontname=suitable_font,
                             fontsize=min_font_size,
                             color=rgb_color,
-                            align=alignment
+                            align=alignment,
+                            lineheight=original_lineheight
                         )
                         if result >= 0:
                             logger.warning(
@@ -621,7 +644,8 @@ class PdfGenerator:
                                 fontname=suitable_font,
                                 fontsize=current_font_size,
                                 color=(0, 0, 0),
-                                align=1
+                                align=getattr(cell, 'alignment', 1),
+                                lineheight=1.2
                             )
 
                             if result >= 0:
@@ -638,7 +662,8 @@ class PdfGenerator:
                                 fontname=suitable_font,
                                 fontsize=base_font_size * 0.5,
                                 color=(0, 0, 0),
-                                align=1
+                                align=1,
+                                lineheight=1.2
                             )
                         except Exception as e:
                             logger.error(f"单元格 ({i+1},{j+1}) 最后尝试绘制异常: {str(e)}")

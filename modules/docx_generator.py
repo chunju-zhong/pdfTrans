@@ -6,6 +6,7 @@ from docx import Document
 from models.merged_block import MergedBlock
 from docx.shared import Inches, RGBColor, Pt, Emu
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 logger = logging.getLogger(__name__)
 
@@ -849,8 +850,11 @@ class DocxGenerator:
         else:
             logger.warning(f"图像文件不存在: {image_path}")
     
+    # Word 页面可用宽度（英寸），A4 纸减去左右边距
+    MAX_TABLE_WIDTH_INCHES = 6.5
+
     def _add_table(self, doc, table):
-        """添加表格到Word文档
+        """添加表格到Word文档，参照原文PDF表格的尺寸
 
         Args:
             doc: Word文档对象
@@ -858,62 +862,220 @@ class DocxGenerator:
         """
         # 使用cells属性
         table_data = table.cells
-        
+
         if not table_data:
             logger.warning("表格数据为空，跳过")
             return
-        
+
         # 创建表格
         num_rows = len(table_data)
         num_cols = len(table_data[0]) if num_rows > 0 else 0
-        
-        if num_rows > 0 and num_cols > 0:
-            word_table = doc.add_table(rows=num_rows, cols=num_cols)
 
-            from docx.oxml.ns import qn
-            from docx.oxml import OxmlElement
-
-            tbl = word_table._tbl
-            tblPr = tbl.tblPr if tbl.tblPr is not None else OxmlElement('w:tblPr')
-            borders = OxmlElement('w:tblBorders')
-            for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
-                border = OxmlElement(f'w:{border_name}')
-                border.set(qn('w:val'), 'single')
-                border.set(qn('w:sz'), '4')
-                border.set(qn('w:space'), '0')
-                border.set(qn('w:color'), '000000')
-                borders.append(border)
-            tblPr.append(borders)
-
-            # 合并单元格：遍历所有非None单元格，对row_span或col_span大于1的执行merge
-            for i, row in enumerate(table_data):
-                for j, cell in enumerate(row):
-                    if cell is None:
-                        continue
-                    row_span = getattr(cell, 'row_span', 1)
-                    col_span = getattr(cell, 'col_span', 1)
-                    if row_span > 1 or col_span > 1:
-                        word_table.cell(i, j).merge(
-                            word_table.cell(i + row_span - 1, j + col_span - 1)
-                        )
-
-            # 写入文本：仅对非None单元格（合并区域的左上角）写入
-            for i, row in enumerate(table_data):
-                for j, cell in enumerate(row):
-                    if cell is None:
-                        continue
-                    row_span = getattr(cell, 'row_span', 1)
-                    col_span = getattr(cell, 'col_span', 1)
-                    cell_text = cell.text
-                    cleaned_text = self._clean_xml_compatible_text(str(cell_text))
-                    cell_paragraph = word_table.cell(i, j).paragraphs[0]
-                    cell_run = cell_paragraph.add_run(cleaned_text)
-                    # 根据合并区域大小调整字号
-                    font_size = 9
-                    if row_span > 1 or col_span > 1:
-                        font_size = min(9 + (row_span - 1) * 2 + (col_span - 1), 16)
-                    cell_run.font.size = Pt(font_size)
-
-            logger.info(f"添加表格成功，{num_rows}行{num_cols}列")
-        else:
+        if num_rows == 0 or num_cols == 0:
             logger.warning("表格数据格式不正确，跳过")
+            return
+
+        word_table = doc.add_table(rows=num_rows, cols=num_cols)
+
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
+        # ---- 设置表格整体宽度 ----
+        table_width_inches = self.MAX_TABLE_WIDTH_INCHES
+        if table.bbox and len(table.bbox) == 4:
+            bbox_width_pt = table.bbox[2] - table.bbox[0]
+            if bbox_width_pt > 0:
+                table_width_inches = min(bbox_width_pt / 72.0, self.MAX_TABLE_WIDTH_INCHES)
+
+        table_alignment = getattr(table, 'alignment', 1)
+        if table_alignment == 0:
+            word_table.alignment = WD_TABLE_ALIGNMENT.LEFT
+        elif table_alignment == 2:
+            word_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
+        else:
+            word_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        # 禁用 autofit 以固定列宽
+        tbl = word_table._tbl
+        tbl_pr = tbl.tblPr if tbl.tblPr is not None else OxmlElement('w:tblPr')
+        tbl_layout = OxmlElement('w:tblLayout')
+        tbl_layout.set(qn('w:type'), 'fixed')
+        tbl_pr.append(tbl_layout)
+
+        # 设置表格总宽度
+        tbl_w = OxmlElement('w:tblW')
+        tbl_w.set(qn('w:w'), str(int(table_width_inches * 1440)))  # twips: 1 inch = 1440 twips
+        tbl_w.set(qn('w:type'), 'dxa')
+        tbl_pr.append(tbl_w)
+
+        # ---- 设置列宽 ----
+        col_widths_pdf = self._resolve_col_widths(table, num_cols)
+        total_col_pdf = sum(col_widths_pdf)
+        col_widths_inches = []
+        if total_col_pdf > 0:
+            for w in col_widths_pdf:
+                col_widths_inches.append(table_width_inches * (w / total_col_pdf))
+        else:
+            col_widths_inches = [table_width_inches / num_cols] * num_cols
+
+        # 设置 tblGrid 列宽（twips）
+        tbl_grid = tbl.find(qn('w:tblGrid'))
+        if tbl_grid is None:
+            tbl_grid = OxmlElement('w:tblGrid')
+            tbl.append(tbl_grid)
+        # 清除已有的 gridCol
+        for gc in tbl_grid.findall(qn('w:gridCol')):
+            tbl_grid.remove(gc)
+        for w_inch in col_widths_inches:
+            grid_col = OxmlElement('w:gridCol')
+            grid_col.set(qn('w:w'), str(int(w_inch * 1440)))
+            tbl_grid.append(grid_col)
+
+        # 设置 column 对象宽度
+        for col_idx, w_inch in enumerate(col_widths_inches):
+            word_table.columns[col_idx].width = Emu(int(w_inch * 914400))
+
+        # ---- 设置边框 ----
+        borders = OxmlElement('w:tblBorders')
+        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            border = OxmlElement(f'w:{border_name}')
+            border.set(qn('w:val'), 'single')
+            border.set(qn('w:sz'), '4')
+            border.set(qn('w:space'), '0')
+            border.set(qn('w:color'), '000000')
+            borders.append(border)
+        tbl_pr.append(borders)
+
+        # ---- 合并单元格 ----
+        for i, row in enumerate(table_data):
+            for j, cell in enumerate(row):
+                if cell is None:
+                    continue
+                row_span = getattr(cell, 'row_span', 1)
+                col_span = getattr(cell, 'col_span', 1)
+                if row_span > 1 or col_span > 1:
+                    word_table.cell(i, j).merge(
+                        word_table.cell(i + row_span - 1, j + col_span - 1)
+                    )
+
+        # ---- 设置行高 ----
+        row_heights_pdf = self._resolve_row_heights(table, num_rows)
+        for row_idx in range(num_rows):
+            if row_idx < len(row_heights_pdf) and row_heights_pdf[row_idx] > 0:
+                # PDF 点转 Emu: 1 点 = 12700 Emu
+                height_emu = int(row_heights_pdf[row_idx] * 12700)
+                tr = word_table.rows[row_idx]._tr
+                tr_pr = tr.find(qn('w:trPr'))
+                if tr_pr is None:
+                    tr_pr = OxmlElement('w:trPr')
+                    tr.insert(0, tr_pr)
+                tr_height = OxmlElement('w:trHeight')
+                tr_height.set(qn('w:val'), str(height_emu // 635))  # Emu 转 twips: 1 twip = 635 Emu
+                tr_height.set(qn('w:hRule'), 'atLeast')
+                tr_pr.append(tr_height)
+
+        # ---- 写入文本 ----
+        for i, row in enumerate(table_data):
+            for j, cell in enumerate(row):
+                if cell is None:
+                    continue
+                cell_text = cell.text
+                cleaned_text = self._clean_xml_compatible_text(str(cell_text))
+                cell_paragraph = word_table.cell(i, j).paragraphs[0]
+                cell_run = cell_paragraph.add_run(cleaned_text)
+                # 根据合并区域大小调整字号
+                row_span = getattr(cell, 'row_span', 1)
+                col_span = getattr(cell, 'col_span', 1)
+                font_size = 9
+                if row_span > 1 or col_span > 1:
+                    font_size = min(9 + (row_span - 1) * 2 + (col_span - 1), 16)
+                cell_run.font.size = Pt(font_size)
+                # 设置单元格段落对齐
+                cell_alignment = getattr(cell, 'alignment', 0)
+                if cell_alignment == 1:
+                    cell_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                elif cell_alignment == 2:
+                    cell_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                else:
+                    cell_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+        logger.info(f"添加表格成功，{num_rows}行{num_cols}列，宽度={table_width_inches:.2f}英寸")
+
+    def _resolve_col_widths(self, table, num_cols):
+        """解析列宽，优先使用 table.col_widths，fallback 到单元格 width
+
+        Args:
+            table: PdfTable对象
+            num_cols: 列数
+
+        Returns:
+            list[float]: 每列的宽度列表（PDF 点单位）
+        """
+        # 优先使用 table.col_widths
+        if table.col_widths and len(table.col_widths) == num_cols:
+            return list(table.col_widths)
+
+        # Fallback: 从单元格 width 推算（合并单元格宽度按跨列数等分分配）
+        col_widths = [0.0] * num_cols
+        for row in table.cells:
+            for j, cell in enumerate(row):
+                if cell is None or j >= num_cols:
+                    continue
+                cell_width = getattr(cell, 'width', 0)
+                col_span = getattr(cell, 'col_span', 1)
+                if cell_width <= 0:
+                    continue
+                if col_span <= 1:
+                    if cell_width > col_widths[j]:
+                        col_widths[j] = cell_width
+                else:
+                    # 合并单元格：宽度等分分配到各跨列
+                    per_col = cell_width / col_span
+                    for k in range(col_span):
+                        if j + k < num_cols and per_col > col_widths[j + k]:
+                            col_widths[j + k] = per_col
+
+        # 如果所有列宽都为 0，使用均匀分布
+        if all(w == 0 for w in col_widths) and table.bbox:
+            table_width = table.bbox[2] - table.bbox[0]
+            col_widths = [table_width / num_cols] * num_cols
+
+        return col_widths
+
+    def _resolve_row_heights(self, table, num_rows):
+        """解析行高，优先使用 table.row_heights，fallback 到单元格 height
+
+        Args:
+            table: PdfTable对象
+            num_rows: 行数
+
+        Returns:
+            list[float]: 每行的高度列表（PDF 点单位）
+        """
+        # 优先使用 table.row_heights
+        if table.row_heights and len(table.row_heights) == num_rows:
+            return list(table.row_heights)
+
+        # Fallback: 从单元格 height 推算（合并单元格高度按跨行数等分分配）
+        row_heights = [0.0] * num_rows
+        for i, row in enumerate(table.cells):
+            if i >= num_rows:
+                break
+            for cell in row:
+                if cell is None:
+                    continue
+                cell_height = getattr(cell, 'height', 0)
+                row_span = getattr(cell, 'row_span', 1)
+                if cell_height <= 0:
+                    continue
+                if row_span <= 1:
+                    if cell_height > row_heights[i]:
+                        row_heights[i] = cell_height
+                else:
+                    # 合并单元格：高度等分分配到各跨行
+                    per_row = cell_height / row_span
+                    for k in range(row_span):
+                        if i + k < num_rows and per_row > row_heights[i + k]:
+                            row_heights[i + k] = per_row
+
+        return row_heights

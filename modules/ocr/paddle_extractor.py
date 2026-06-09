@@ -1397,6 +1397,53 @@ class PaddleOcrExtractor(OcrExtractor):
                     cell.width = grid_x2 - grid_x1
                     cell.height = grid_y2 - grid_y1
 
+        # 提取单元格对齐方式
+        from modules.extractors.coordinate_utils import extract_cell_alignment
+        for row_idx in range(n_rows):
+            for col_idx in range(n_cols):
+                cell = cells[row_idx][col_idx] if row_idx < len(cells) and col_idx < len(cells[row_idx]) else None
+                if cell is None:
+                    continue
+                # 收集该单元格内的 textline bbox
+                cell_x1 = tx1 + col_idx * col_width_avg
+                cell_x2 = tx1 + (col_idx + 1) * col_width_avg
+                cell_y1 = ty1 + row_idx * row_height_avg
+                cell_y2 = ty1 + (row_idx + 1) * row_height_avg
+
+                tl_x0, tl_y0, tl_x1, tl_y1 = None, None, None, None
+                for tl_box in textline_boxes:
+                    if len(tl_box) < 4:
+                        continue
+                    bx, by, bx2, by2 = float(tl_box[0]), float(tl_box[1]), float(tl_box[2]), float(tl_box[3])
+                    cx, cy = (bx + bx2) / 2, (by + by2) / 2
+                    if cell_x1 <= cx <= cell_x2 and cell_y1 <= cy <= cell_y2:
+                        if tl_x0 is None:
+                            tl_x0, tl_y0, tl_x1, tl_y1 = bx, by, bx2, by2
+                        else:
+                            tl_x0 = min(tl_x0, bx)
+                            tl_y0 = min(tl_y0, by)
+                            tl_x1 = max(tl_x1, bx2)
+                            tl_y1 = max(tl_y1, by2)
+
+                if tl_x0 is not None and cell.bbox:
+                    # 转换像素坐标到 PDF 坐标（使用 cell 的 bbox 作为参考）
+                    cell_bbox_pdf = cell.bbox
+                    cell_width_pdf = cell_bbox_pdf[2] - cell_bbox_pdf[0]
+                    if cell_width_pdf > 0:
+                        # 计算文本在像素空间中的相对位置
+                        text_center_px = (tl_x0 + tl_x1) / 2
+                        cell_center_px = (cell_x1 + cell_x2) / 2
+                        center_offset = abs(text_center_px - cell_center_px) / (cell_x2 - cell_x1) if (cell_x2 - cell_x1) > 0 else 0
+
+                        if center_offset < 0.15:
+                            cell.alignment = 1
+                        elif (tl_x0 - cell_x1) / (cell_x2 - cell_x1) < 0.10:
+                            cell.alignment = 0
+                        elif (cell_x2 - tl_x1) / (cell_x2 - cell_x1) < 0.10:
+                            cell.alignment = 2
+                        else:
+                            cell.alignment = 0
+
         return cells, row_heights, col_widths
 
     @staticmethod

@@ -1,6 +1,55 @@
 # Changelog
 
+## 2026-06-09 (continued)
+
+- Fixed Roman numeral page numbers not recognized as footers, causing cross-page text merging errors:
+  - Added `roman_to_int()` function in `text_analyzer.py`: converts Roman numerals (e.g., xv, xii) to integers
+  - Added `ROMAN_NUMERAL_PATTERN` regex in `text_analyzer.py`: matches standalone Roman numerals
+  - Added Roman numeral page number detection in `identify_page_numbers()`: detects standalone Roman numerals in top/bottom 15% area with font size < 10.0, supports sequential increment pattern and value matching
+  - Added 14 unit tests (`test_text_analyzer.py`), all 35 tests passing
+- Fixed merged block split bbox height too large causing text overflow and paragraph occlusion:
+  - `translation_service.py` split block bbox height now uses each block's own `original_bbox[3]`, width still uses `max_width`
+  - No longer uses `max_height` to expand split block height, avoiding downward expansion occluding the next block
+- Fixed CJK font line height larger than Latin font causing translated text to overflow bbox:
+  - `pdf_generator.py` added original text line height ratio calculation: `lineheight = bbox_height / (font_size × estimated_lines)`, minimum 1.0, default 1.2
+  - All `insert_textbox()` calls now include `lineheight` parameter, making translated text line height consistent with original
+  - Table rendering uses `lineheight=1.2` default value
+- Fixed PDF generator first render using enlarged font causing text overflow:
+  - `pdf_generator.py` first attempt uses original font size, progressively shrinks on overflow (1.0x → 0.9x → 0.8x → 0.7x)
+- Fixed merged block split equal distribution causing second block to be empty and translated text loss:
+  - Added `_get_original_text_len()` helper function in `text_processing.py`
+  - `split_translated_result()` allocation strategy changed from equal distribution to proportional by original text length
+  - Added protection: non-last block's `actual_end` does not exceed `translation_len - min_characters_per_block × remaining_blocks`
+- Related files:
+  - `modules/extractors/text_analyzer.py`
+  - `modules/pdf_generator.py`
+  - `services/translation_service.py`
+  - `utils/text_processing.py`
+  - `tests/test_text_analyzer.py`
+
 ## 2026-06-09
+
+- Word table size matching original PDF:
+  - Rewrote `docx_generator.py` `_add_table()`: uses `PdfTable.col_widths`/`row_heights`/`bbox` for table sizing instead of uniform splitting
+  - Added `_resolve_col_widths()` and `_resolve_row_heights()` helper methods with PDF point to Word unit conversion (1pt=12700EMU, 1in=1440twips)
+  - Merged cell width/height distributed equally across spanned columns/rows
+  - Table layout set to `tblLayout=fixed` with precise column widths via `tblGrid`/`gridCol`
+- PDF and Word table alignment matching original PDF:
+  - Added `alignment` parameter to `PdfCell` (0=left, 1=center, 2=right) and `PdfTable` (default 1=center)
+  - Added `extract_cell_alignment()` in `coordinate_utils.py`: infers alignment from character bbox position relative to cell bbox (center offset <15% → centered, left offset <10% → left-aligned, right offset <10% → right-aligned)
+  - Added `extract_table_alignment()` in `coordinate_utils.py`: infers table-level alignment from table bbox position relative to page width
+  - `table_processor.py` computes text bbox from character-level bboxes per cell and calls `extract_cell_alignment` to set cell alignment
+  - `paddle_extractor.py` OCR mode alignment extraction: uses textline bbox center offset to infer cell alignment
+  - `pdf_generator.py` uses `cell.alignment` instead of hardcoded `align=1`
+  - `docx_generator.py` uses `table.alignment` for table-level alignment and `cell.alignment` for cell paragraph alignment
+  - PyMuPDF has no native alignment attribute; alignment is fully inferred from character positions
+- Related files:
+  - `models/extraction.py`
+  - `modules/docx_generator.py`
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_generator.py`
 
 - Fixed `Rect.intersect()` in-place mutation causing table text overlap detection failure:
   - PyMuPDF's `Rect.intersect()` mutates the caller rectangle, causing all cumulative overlap area calculations in `_extract_text_blocks` to be incorrect

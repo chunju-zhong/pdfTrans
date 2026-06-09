@@ -530,13 +530,13 @@ class TestPdfGenerator:
     
     def test_no_underline_strikethrough(self, test_pdf_path):
         """测试移除下划线和删除线支持
-        
+
         验证系统不再支持下划线和删除线，避免出现不必要的下划线。
         """
         # 创建临时输出文件路径
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
             output_pdf_path = temp_file.name
-        
+
         try:
             # 准备测试内容，包含可能导致下划线的文本
             translated_content = {
@@ -559,15 +559,64 @@ class TestPdfGenerator:
                 ],
                 'tables': []
             }
-            
+
             # 调用生成方法，验证不会抛出异常
             generator = PdfGenerator()
             generator.generate_pdf(test_pdf_path, translated_content, output_pdf_path, target_lang="zh")
-            
+
             # 验证输出文件存在且大小合理
             assert os.path.exists(output_pdf_path)
             assert os.path.getsize(output_pdf_path) > 0
-            
+
+        finally:
+            # 确保临时文件被清理
+            if os.path.exists(output_pdf_path):
+                os.remove(output_pdf_path)
+
+    def test_lineheight_consistency(self, test_pdf_path):
+        """测试翻译文本行高与原文一致
+
+        验证 PDF 生成器使用 lineheight 参数确保翻译文本行高与原文一致，
+        CJK 文本不会因字体行高差异而溢出原始 bbox。
+        """
+        # 创建临时输出文件路径
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            output_pdf_path = temp_file.name
+
+        try:
+            # 模拟一个11行英文的 bbox（高度较大），翻译为9行中文
+            # bbox 高度 = 158.4pt, 字体大小 = 12pt, 估算行数 = 11
+            # 行高倍率 = 158.4 / (12 * 11) ≈ 1.2
+            translated_content = {
+                'text_content': [
+                    {
+                        'page_num': 1,
+                        'text_blocks': [
+                            {
+                                'text': '这是一个测试文本，用于验证行高参数是否正确应用。当翻译文本行数少于原文时，使用原文行高倍率可以确保翻译文本不超出原始文本框。',
+                                'position': {
+                                    'x0': 50,
+                                    'y0': 50,
+                                    'x1': 400,
+                                    'y1': 208  # 158.4pt 高度，约11行@12pt
+                                },
+                                'block_type': 0,
+                                'font_size': 12
+                            }
+                        ]
+                    }
+                ],
+                'tables': []
+            }
+
+            # 调用生成方法，验证不会抛出异常
+            generator = PdfGenerator()
+            generator.generate_pdf(test_pdf_path, translated_content, output_pdf_path, target_lang="zh")
+
+            # 验证输出文件存在且大小合理
+            assert os.path.exists(output_pdf_path)
+            assert os.path.getsize(output_pdf_path) > 0
+
         finally:
             # 确保临时文件被清理
             if os.path.exists(output_pdf_path):

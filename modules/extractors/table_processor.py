@@ -222,7 +222,7 @@ def extract_table_cells_by_bbox(page, table, table_bbox=None):
         rows_data.append(row_cells)
 
     if not rows_data:
-        return [], [], []
+        return [], [], [], {}
 
     num_rows = len(rows_data)
     num_cols = max(len(row) for row in rows_data)
@@ -323,7 +323,28 @@ def extract_table_cells_by_bbox(page, table, table_bbox=None):
                 row_data.append(None)
         data.append(row_data)
 
-    return data, cell_bboxes, rows_data
+    # 4.5 计算每个单元格的对齐方式
+    cell_alignments = {}
+    for key, chars in cell_chars.items():
+        if not chars:
+            cell_alignments[key] = 0
+            continue
+        # 计算文本整体 bbox
+        text_x0 = min(c["bbox"].x0 for c in chars)
+        text_y0 = min(c["bbox"].y0 for c in chars)
+        text_x1 = max(c["bbox"].x1 for c in chars)
+        text_y1 = max(c["bbox"].y1 for c in chars)
+        text_bbox = (text_x0, text_y0, text_x1, text_y1)
+        # 获取单元格 bbox
+        row_idx, col_idx = key
+        cell_bbox = rows_data[row_idx][col_idx]
+        if cell_bbox:
+            from .coordinate_utils import extract_cell_alignment
+            cell_alignments[key] = extract_cell_alignment(text_bbox, cell_bbox)
+        else:
+            cell_alignments[key] = 0
+
+    return data, cell_bboxes, rows_data, cell_alignments
 
 
 def extract_tables_by_pymupdf(pdf_path, pages=None):
@@ -385,13 +406,14 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                         # 获取表格内容（使用单元格精确bbox提取，避免标题/脚注被错误包含）
                         rows_data = []
                         try:
-                            data, table_cell_bboxes, rows_data = extract_table_cells_by_bbox(page, table, table_bbox=bbox)
+                            data, table_cell_bboxes, rows_data, cell_alignments = extract_table_cells_by_bbox(page, table, table_bbox=bbox)
                             logger.info(f"表格{table_idx}内容(精确bbox提取): {data}")
                         except Exception as e:
                             logger.warning(f"精确bbox提取失败，回退到table.extract(): {e}")
                             data = table.extract()
                             table_cell_bboxes = []
                             rows_data = []
+                            cell_alignments = {}
                             logger.info(f"表格{table_idx}内容(回退): {data}")
                         
                         # 构建单元格信息
@@ -437,6 +459,7 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                                         cell_bbox = (0, 0, 100, 30)  # 默认值
 
                                 cell_info = create_cell_info(text, cell_bbox, row_idx, col_idx)
+                                cell_info['alignment'] = cell_alignments.get((row_idx, col_idx), 0)
                                 cell_info_list.append(cell_info)
                                 logger.debug(f"创建单元格信息: 行={row_idx}, 列={col_idx}, 文本='{text}', 边界框={cell_bbox}")
 
@@ -495,13 +518,17 @@ def extract_tables_by_pymupdf(pdf_path, pages=None):
                                 logger.info(f"计算的列宽: {col_widths_list}")
                             
                             # 创建PdfTable对象并添加到pdf_tables列表
+                            from .coordinate_utils import extract_table_alignment
+                            table_alignment = extract_table_alignment(bbox_tuple, page.rect.width) if bbox_tuple else 1
+
                             pdf_table = PdfTable(
                                 page_num=page_num,
                                 table_idx=table_idx,
                                 cells=cell_matrix,
                                 bbox=bbox_tuple,
                                 row_heights=row_heights_list,
-                                col_widths=col_widths_list
+                                col_widths=col_widths_list,
+                                alignment=table_alignment
                             )
                             pdf_tables.append(pdf_table)
                             logger.info(f"表格: 第{page_num}页-表格{table_idx}, 包含{len(cell_matrix)}行{len(cell_matrix[0]) if cell_matrix else 0}列, 边界框: {bbox_tuple}")

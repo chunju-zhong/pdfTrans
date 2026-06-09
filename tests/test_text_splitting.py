@@ -275,7 +275,7 @@ class TestTextSplitting:
     
     def test_split_translated_result_mixed_language(self):
         """测试 `split_translated_result` 函数处理中英文混合文本
-        
+
         验证 `split_translated_result` 函数能够正确处理中英文混合情况下的拆分
         """
         merged_translation = 'This is English text with 中文内容 mixed together. 这是另一个中英文混合的句子，包含English words。'
@@ -284,13 +284,137 @@ class TestTextSplitting:
             {'block_text': 'Second block with more content'},
             {'block_text': 'Third block with the most content of all blocks'}
         ]
-        
+
         translated_blocks = split_translated_result(merged_translation, original_blocks)
-        
+
         assert len(translated_blocks) == len(original_blocks), f"拆分结果数量 {len(translated_blocks)} 应该等于原始块数量 {len(original_blocks)}"
-        
+
         # 检查块首是否为标点
         for i, block in enumerate(translated_blocks):
             if block and block.strip():
                 first_char = block.strip()[0]
                 assert first_char not in '.,;:?!。，、；：？！', f"块 {i+1} 首字符 '{first_char}' 不应该是标点符号"
+
+
+class TestProportionalSplit:
+    """按比例分配翻译文本测试类"""
+
+    def test_proportional_split_title_and_body(self):
+        """测试标题+正文合并块的按比例拆分
+        
+        验证短标题块和长正文块都能分到翻译文本，且第二个块不为空
+        """
+        merged_translation = "本书不涉及的内容 为了使本书保持合理的篇幅，某些主题被认定超出范围。我已经确保不会涵盖那些我不确定能否经得起时间考验的主题。"
+        original_blocks = [
+            {'block_text': 'What This Book Does Not Cover'},  # 短标题 ~30字符
+            {'block_text': 'To keep this book at a reasonable length, certain topics have been deemed out of scope. I have taken care to not cover topics that I am not confident will stand the test of time.'}  # 长正文 ~200字符
+        ]
+        
+        translated_blocks = split_translated_result(merged_translation, original_blocks)
+        
+        assert len(translated_blocks) == 2, f"拆分结果数量应为2，实际为{len(translated_blocks)}"
+        # 两个块都不应为空（核心目标：第二个块不再为空）
+        assert translated_blocks[0].strip(), "标题块不应为空"
+        assert translated_blocks[1].strip(), "正文块不应为空"
+
+    def test_proportional_split_second_block_not_empty(self):
+        """测试第二个块不再为空
+
+        验证按比例分配后，第二个块不再出现0字符的情况
+        """
+        # 模拟短翻译文本场景，之前均等分配会导致第一个块消耗全部文本
+        merged_translation = "这是一个简短的翻译结果。"
+        original_blocks = [
+            {'block_text': 'Short title'},  # 短标题
+            {'block_text': 'This is a much longer body paragraph that contains many words and should receive the majority of the translated text.'}  # 长正文
+        ]
+
+        translated_blocks = split_translated_result(merged_translation, original_blocks)
+
+        assert len(translated_blocks) == 2
+        # 两个块都不应为空
+        assert translated_blocks[0].strip(), "第一个块不应为空"
+        assert translated_blocks[1].strip(), "第二个块不应为空"
+
+    def test_proportional_split_equal_length_blocks(self):
+        """测试等长原始块的按比例拆分
+
+        验证等长原始块分配到大致相等的翻译文本
+        """
+        merged_translation = "这是第一部分的内容。这是第二部分的内容。"
+        original_blocks = [
+            {'block_text': 'First block with similar length'},
+            {'block_text': 'Second block with similar length'}
+        ]
+
+        translated_blocks = split_translated_result(merged_translation, original_blocks)
+
+        assert len(translated_blocks) == 2
+        assert translated_blocks[0].strip(), "第一个块不应为空"
+        assert translated_blocks[1].strip(), "第二个块不应为空"
+        # 等长块分配的文本长度应大致相等（允许一定偏差）
+        ratio = len(translated_blocks[0]) / max(len(translated_blocks[1]), 1)
+        assert 0.3 < ratio < 3.0, f"等长块分配比例{ratio:.2f}偏差过大"
+
+    def test_proportional_split_three_blocks(self):
+        """测试三个不同长度块的按比例拆分
+        
+        验证三个不同长度的块都能分到翻译文本，且都不为空
+        """
+        merged_translation = "短标题。中等长度的正文内容，包含一些详细信息。很长的正文段落，包含大量的详细信息和解释，应该分配到最多的翻译文本。"
+        original_blocks = [
+            {'block_text': 'Short'},  # 短块
+            {'block_text': 'Medium length block with some content'},  # 中等块
+            {'block_text': 'This is a very long block that contains a lot of text and should receive the most translated text because it has the most original content.'}  # 长块
+        ]
+        
+        translated_blocks = split_translated_result(merged_translation, original_blocks)
+        
+        assert len(translated_blocks) == 3
+        # 所有块都不应为空（核心目标：按比例分配后每个块都有文本）
+        for i, block in enumerate(translated_blocks):
+            assert block.strip(), f"块{i+1}不应为空"
+
+    def test_get_original_text_len_dict_format(self):
+        """测试 _get_original_text_len 辅助函数处理字典格式
+
+        验证辅助函数能正确处理包含 'block_text' 键的字典
+        """
+        from utils.text_processing import _get_original_text_len
+
+        # 字典格式（旧格式，block_text 直接在字典中）
+        block_dict = {'block_text': 'Hello world'}
+        assert _get_original_text_len(block_dict) == 11
+
+        # 字典格式（新格式，text_block 嵌套）
+        class MockTextBlock:
+            def __init__(self, text):
+                self.block_text = text
+
+        block_dict_nested = {'text_block': MockTextBlock('Nested text')}
+        assert _get_original_text_len(block_dict_nested) == 11
+
+        # TextBlock 对象格式
+        block_obj = MockTextBlock('Object text')
+        assert _get_original_text_len(block_obj) == 11
+
+        # 空字典
+        assert _get_original_text_len({}) == 0
+
+    def test_proportional_split_empty_original_text(self):
+        """测试原始文本为空的块
+        
+        验证原始文本为空的块仍能分到最小字符数，且两个块都不为空
+        """
+        merged_translation = "这是翻译结果，需要分配给多个块。"
+        original_blocks = [
+            {'block_text': ''},  # 空块
+            {'block_text': 'This is a non-empty block with some content'}  # 非空块
+        ]
+        
+        translated_blocks = split_translated_result(merged_translation, original_blocks)
+        
+        assert len(translated_blocks) == 2
+        # 两个块都不应为空（核心目标：空块也能分到最小字符数）
+        assert translated_blocks[0].strip(), "空原始文本块不应得到空翻译"
+        assert translated_blocks[1].strip(), "非空块不应为空"

@@ -1,6 +1,55 @@
 # 更新日志
 
+## 2026-06-09（续）
+
+- 修复罗马数字页码未被识别为页脚导致跨页文本错误合并：
+  - `text_analyzer.py` 新增 `roman_to_int()` 函数：将罗马数字（如 xv、xii）转换为整数
+  - `text_analyzer.py` 新增 `ROMAN_NUMERAL_PATTERN` 正则：匹配独立罗马数字
+  - `identify_page_numbers()` 新增罗马数字页码识别：检测顶部/底部15%区域、字体<10.0的独立罗马数字，支持连续递增模式识别和值匹配
+  - 新增14个单元测试（`test_text_analyzer.py`），全部35个测试通过
+- 修复合并块拆分后 bbox 高度过大导致文本溢出和段落遮挡：
+  - `translation_service.py` 拆分块 bbox 高度改为使用各块自身的 `original_bbox[3]`，宽度仍用 `max_width`
+  - 不再使用 `max_height` 扩展拆分块高度，避免向下扩展遮挡下一块
+- 修复 CJK 字体行高大于拉丁字体导致翻译文本溢出 bbox：
+  - `pdf_generator.py` 新增原文行高倍率计算：`行高倍率 = bbox高度 / (字体大小 × 估算行数)`，下限1.0，默认1.2
+  - 所有 `insert_textbox()` 调用添加 `lineheight` 参数，使翻译文本行高与原文一致
+  - 表格渲染使用 `lineheight=1.2` 默认值
+- 修复 PDF 生成器首次渲染使用放大字体导致文本溢出：
+  - `pdf_generator.py` 首次尝试使用原始字体大小，溢出时逐步缩小（1.0x → 0.9x → 0.8x → 0.7x）
+- 修复合并块拆分时均等分配导致第二个块为空、翻译文本丢失：
+  - `text_processing.py` 新增 `_get_original_text_len()` 辅助函数
+  - `split_translated_result()` 分配策略从均等分配改为按原始文本长度比例分配
+  - 新增保护：非最后一个块的 `actual_end` 不超过 `translation_len - min_characters_per_block × remaining_blocks`
+- 相关文件：
+  - `modules/extractors/text_analyzer.py`
+  - `modules/pdf_generator.py`
+  - `services/translation_service.py`
+  - `utils/text_processing.py`
+  - `tests/test_text_analyzer.py`
+
 ## 2026-06-09
+
+- Word 表格尺寸匹配原文：
+  - `docx_generator.py` `_add_table()` 重写：使用 `PdfTable.col_widths`/`row_heights`/`bbox` 设置表格尺寸，替代均匀分割
+  - 新增 `_resolve_col_widths()` 和 `_resolve_row_heights()` 辅助方法，处理 PDF 点到 Word 单位转换（1pt=12700EMU, 1in=1440twips）
+  - 合并单元格宽度/高度按跨列/行数等分分配到各列/行
+  - 表格布局设为 `tblLayout=fixed`，通过 `tblGrid`/`gridCol` 精确控制列宽
+- PDF 和 Word 表格对齐方式匹配原文：
+  - `PdfCell` 新增 `alignment` 参数（0=左对齐, 1=居中, 2=右对齐），`PdfTable` 新增 `alignment` 参数（默认1=居中）
+  - `coordinate_utils.py` 新增 `extract_cell_alignment()`：从字符 bbox 与单元格 bbox 位置关系推断对齐方式（中心偏移<15%→居中，左偏移<10%→左对齐，右偏移<10%→右对齐）
+  - `coordinate_utils.py` 新增 `extract_table_alignment()`：从表格 bbox 与页面宽度位置关系推断表格整体对齐方式
+  - `table_processor.py` 在提取单元格时从字符级 bbox 计算文本 bbox，调用 `extract_cell_alignment` 设置单元格对齐
+  - `paddle_extractor.py` OCR 模式新增对齐提取：使用 textline bbox 中心偏移推断单元格对齐
+  - `pdf_generator.py` 使用 `cell.alignment` 替代硬编码 `align=1`
+  - `docx_generator.py` 使用 `table.alignment` 设置表格整体对齐，使用 `cell.alignment` 设置单元格段落对齐
+  - PyMuPDF 无原生对齐属性，对齐信息完全由字符位置推断
+- 相关文件：
+  - `models/extraction.py`
+  - `modules/docx_generator.py`
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/extractors/table_processor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_generator.py`
 
 - 修复 `Rect.intersect()` 原地修改导致表格文本重叠检测失效：
   - PyMuPDF 的 `Rect.intersect()` 会原地修改调用者矩形，导致 `_extract_text_blocks` 循环中累积重叠面积计算全部错误
