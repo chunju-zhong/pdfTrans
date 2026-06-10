@@ -12,6 +12,7 @@ from .extractors import (
     update_text_block_style
 )
 from .chapter_identifier import ChapterIdentifier
+from modules.extractors.coordinate_utils import detect_text_block_alignment
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +423,9 @@ class PdfExtractor:
                         block_type=block_type,
                         page_num=current_page_num
                     )
+                    # 检测文本块对齐方式
+                    page_width = page.rect.width
+                    text_block.alignment = detect_text_block_alignment((x0, y0, x1, y1), page_width)
                     text_block_objects[block_no] = text_block
         
         # 2. 使用dict模式提取详细文本信息，包括字体属性，添加flags=1保持原始顺序

@@ -825,6 +825,9 @@ class PaddleOcrExtractor(OcrExtractor):
                                 page_num=page_num,
                             )
                             tb.font_size = estimated_font_size
+                            # 检测文本块对齐方式
+                            page_width_pts = page_info.get('page_width_pts', 0)
+                            tb.alignment = detect_text_block_alignment(pdf_bbox, page_width_pts)
                             if label in self.NON_BODY_LABELS:
                                 tb.is_body_text = False
                             text_blocks.append(tb)
@@ -1398,7 +1401,7 @@ class PaddleOcrExtractor(OcrExtractor):
                     cell.height = grid_y2 - grid_y1
 
         # 提取单元格对齐方式
-        from modules.extractors.coordinate_utils import extract_cell_alignment
+        from modules.extractors.coordinate_utils import extract_cell_alignment, detect_text_block_alignment
         for row_idx in range(n_rows):
             for col_idx in range(n_cols):
                 cell = cells[row_idx][col_idx] if row_idx < len(cells) and col_idx < len(cells[row_idx]) else None

@@ -1,5 +1,44 @@
 # AI 开发进度记录
 
+### 2026-06-10
+- **当前状态**：已完成 PDF 翻译中对齐方式文本块语序混乱问题的全面修复（LLM 提示词改进 + 对齐检测 + bbox 越界修复）
+- **已完成任务**：
+  - 文本块对齐方式属性与检测：
+    - `TextBlock` 新增 `alignment` 属性（0=左, 1=中, 2=右），支持序列化
+    - 新增 `detect_text_block_alignment()` 函数，左/右对齐优先于居中检测（阈值15%）
+    - 非 OCR 和 OCR 提取路径均已集成对齐检测
+  - 语义合并对齐检查：
+    - 三个语义合并函数均增加 `is_different_alignment` 检查，不同对齐方式的块不合并
+    - PDF 渲染使用提取到的 alignment 值替代硬编码
+  - LLM 语义分析提示词完全重写：
+    - 两步分析法：语义角色识别（5种角色）+ 合并决策矩阵
+    - 5 个 few-shot 边界场景示例覆盖签名行/引用/列表/标题所有边界类型
+    - 单对版本和批量版本同步更新，AipingSemanticAnalyzer 自动继承
+    - 第3页 Praise 书评页验证通过：7个文本对决策全部正确
+  - 拆分后 bbox 越界修复：
+    - `translation_service.py` 增加 `min(x0+max_width, original_x1)` 保护
+    - Madhav 引用末句 "涵盖了该领域..." 不再超出页面右边界
+  - 保留原文格式：
+    - `TextBlock.__init__` 移除 `text.strip()`，保留换行和空格
+- **技术实现**：
+  - 对齐检测算法：`left_ratio = x0/page_width < 15% → 左对齐`，`right_ratio = (width-x1)/page_width < 15% → 右对齐`，否则居中
+  - LLM 两步分析：Step1 判断每个文本的语义角色 → Step2 基于 (role1, role2) 决策矩阵输出 merge=true/false
+  - 决策矩阵核心规则：(signature, *) = false, (*, signature) = false, (title, body) = false, (list_item, list_item) = false, (body, body) = true, (quote_body, quote_body) = true
+- **影响**：
+  - 左右对称布局（如 Praise 书评页）的左对齐标题和右对齐正文不再被错误合并
+  - 签名行（如 "—Jay Alammar"）不再与下一个引用的正文跨引用合并
+  - 同一引用内的句子延续仍正确合并
+  - 拆分后的短文本块不再因 x1 越界被截断或显示位置异常
+  - 原文中的换行和空格在后续处理流程中被完整保留
+- **遇到的问题**：
+  - 初期尝试硬编码签名行检测规则（NON_NAME_STARTERS 黑名单 + ROLE_KEYWORDS 词表），用户指出无法区分签名行与列表项/标题行，最终转向改进 LLM 提示词方案
+  - 居中检测优先级问题：初始实现居中检测优先于左右对齐，导致左右对称布局中文本全被误判为居中，修正为左/右优先
+  - 拆分 bbox 越界根因隐蔽：`translation_service.py` 的 `x0 + max_width` 计算未考虑 x0 较大的块
+- **后续计划**：
+  - 验证第2页右对齐文本翻译语序正确性
+  - 运行完整300+页文档翻译验证全局效果
+  - 考虑改进 `split_translated_result()` 的跨语言字符长度比例不一致问题（当前按英文比例分配中文字符）
+
 ### 2026-06-09（续2）
 - **当前状态**：已修复罗马数字页码识别、合并块 bbox 高度、CJK 行高、PDF 字体放大、翻译文本按比例分配等5个问题
 - **已完成任务**：

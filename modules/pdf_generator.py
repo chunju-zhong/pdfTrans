@@ -273,8 +273,8 @@ class PdfGenerator:
                 except Exception as e:
                     logger.warning(f'公式渲染失败，降级为文本: {e}')
             
-            # 使用默认左对齐
-            alignment = 0
+            # 使用文本块的对齐方式
+            alignment = getattr(full_block, 'alignment', 0)
             logger.info(f"使用对齐方式: {alignment} (0=左对齐, 1=居中, 2=右对齐)")
             
             # 不再使用字体回退列表，只使用适合的字体

@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-06-10
+
+- Fixed text blocks with different alignments being incorrectly merged, causing out-of-order translation output (signature/title/list-item boundary recognition):
+  - Added `alignment` attribute to `TextBlock` model (`models/text_block.py`): 0=left, 1=center, 2=right, with serialization support
+  - Added `detect_text_block_alignment()` function in `modules/extractors/coordinate_utils.py`: infers text block alignment from bbox position relative to page width, left/right alignment checked before center (15% threshold)
+  - `modules/pdf_extractor.py` non-OCR path calls `detect_text_block_alignment` to set TextBlock.alignment during extraction
+  - `modules/ocr/paddle_extractor.py` OCR path also sets TextBlock.alignment during extraction
+  - All three merge functions in `utils/text_processing.py` (`merge_semantic_blocks`, `merge_semantic_blocks_with_llm`, `merge_semantic_blocks_with_llm_two_phase`) added alignment check: blocks with different alignments are not merged
+  - `modules/pdf_generator.py` uses TextBlock.alignment instead of hardcoded alignment=0 for rendering
+  - Fixed alignment detection priority: changed from "center → right → left" to "left → right → center", fixing issue where symmetric layouts had all text misidentified as centered
+- Rewrote LLM semantic analysis prompts — enhanced boundary recognition for signatures/titles/list items:
+  - Completely rewrote `_generate_batch_semantic_analysis_prompt` in `modules/semantic_analyzer.py`:
+    - Two-step analysis: first identify semantic role (body/title/signature/list_item/quote_body), then decide merge based on decision matrix
+    - Defined 5 semantic roles with feature descriptions and judgment criteria
+    - Added merge decision matrix: signature → any role = direct false; title → body/list_item = direct false, etc.
+    - Added 5 few-shot boundary examples: signature boundary (A), same-quote continuation (B), between list items (C), list continuation (D), title boundary (E)
+  - Synchronized rewrite of `_generate_semantic_analysis_prompt` (single-pair version) with same two-step approach and examples
+  - `AipingSemanticAnalyzer` inherits base class prompt methods; changes take effect automatically without modification
+  - Verified: Page 3 Praise review page LLM decisions improved from [true×7] to [false,false,false,false,true,false,false]; signatures no longer cross-quote merged with next quote body
+- Fixed split block bbox x1 overflow:
+  - `services/translation_service.py` added x1 upper bound protection: `min(original_bbox[0] + max_width, original_bbox[2])`
+  - Root cause: using uniform `x0 + max_width` for x1 calculation caused blocks with larger x0 to exceed original bbox and page width (e.g., Madhav quote last sentence x0=192.24 resulted in x1=537.00)
+- Preserve original newlines and whitespace:
+  - Removed `text.strip()` call in `models/text_block.py`, storing original text format as-is
+- Related files:
+  - `models/text_block.py`
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/pdf_extractor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_generator.py`
+  - `modules/semantic_analyzer.py`
+  - `services/translation_service.py`
+  - `utils/text_processing.py`
+
 ## 2026-06-09 (continued)
 
 - Fixed Roman numeral page numbers not recognized as footers, causing cross-page text merging errors:

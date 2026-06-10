@@ -145,6 +145,14 @@ def merge_semantic_blocks(text_blocks, progress_callback=None):
         first_block = current_merged.original_blocks[0]
         current_is_title = getattr(first_block, 'is_title_block', False)
         
+        # 检查对齐方式是否变化
+        curr_alignment = getattr(curr_block, 'alignment', 0)
+        first_block_of_merged = current_merged.original_blocks[0]
+        current_alignment = getattr(first_block_of_merged, 'alignment', 0)
+        is_different_alignment = curr_alignment != current_alignment
+        if is_different_alignment:
+            logger.info(f"对齐方式变化: 当前合并块alignment={current_alignment}, 待合并块alignment={curr_alignment}, 不合并")
+
         # 检查是否需要开始新的合并块
         # 1. 如果当前块是章节标题，且当前合并块不是标题，则结束当前合并块
         # 2. 如果当前块不是章节标题，且当前合并块是标题，则结束当前合并块
@@ -175,6 +183,8 @@ def merge_semantic_blocks(text_blocks, progress_callback=None):
         elif not is_chapter_title and current_is_title:
             should_end_current_block = True
         elif is_different_chapter:
+            should_end_current_block = True
+        elif is_different_alignment:
             should_end_current_block = True
         elif not can_merge:
             should_end_current_block = True
@@ -865,6 +875,14 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
                     
                     logger.info(f"处理文本对 {j+1}: 合并={should_merge}, 块1='{prev_text[:50]}...', 块2='{curr_text[:50]}...', 章节ID={curr_chapter_id}, 是否不同章节={is_different_chapter}, 是否标题={is_chapter_title}")
                     
+                    # 检查对齐方式是否变化
+                    curr_alignment = getattr(curr_block, 'alignment', 0)
+                    first_block_of_merged = current_merged.original_blocks[0]
+                    current_alignment = getattr(first_block_of_merged, 'alignment', 0)
+                    is_different_alignment = curr_alignment != current_alignment
+                    if is_different_alignment:
+                        logger.info(f"对齐方式变化: 当前合并块alignment={current_alignment}, 待合并块alignment={curr_alignment}, 不合并")
+
                     # 检查是否需要开始新的合并块
                     # 1. 如果当前块是章节标题，且当前合并块不是标题，则结束当前合并块
                     # 2. 如果当前块不是章节标题，且当前合并块是标题，则结束当前合并块
@@ -882,6 +900,8 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
                     elif not is_chapter_title and current_is_title:
                         should_end_current_block = True
                     elif is_different_chapter:
+                        should_end_current_block = True
+                    elif is_different_alignment:
                         should_end_current_block = True
                     elif not can_merge:
                         should_end_current_block = True
@@ -1128,12 +1148,22 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
 
         logger.info(f"[DEBUG] 合并判断 i={i}: should_merge={should_merge}, is_different_chapter={is_different_chapter}, is_chapter_title={is_chapter_title}, current_is_title={current_is_title}, can_merge={can_merge}, curr_text='{curr_block.block_text[:30]}...'")
 
+        # 检查对齐方式是否变化
+        curr_alignment = getattr(curr_block, 'alignment', 0)
+        first_block_of_merged = current_merged.original_blocks[0]
+        current_alignment = getattr(first_block_of_merged, 'alignment', 0)
+        is_different_alignment = curr_alignment != current_alignment
+        if is_different_alignment:
+            logger.info(f"对齐方式变化: 当前合并块alignment={current_alignment}, 待合并块alignment={curr_alignment}, 不合并")
+
         should_end_current_block = False
         if is_chapter_title and not current_is_title:
             should_end_current_block = True
         elif not is_chapter_title and current_is_title:
             should_end_current_block = True
         elif is_different_chapter:
+            should_end_current_block = True
+        elif is_different_alignment:
             should_end_current_block = True
         elif not can_merge:
             should_end_current_block = True

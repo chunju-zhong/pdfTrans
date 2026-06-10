@@ -1,5 +1,39 @@
 # 更新日志
 
+## 2026-06-10
+
+- 修复 PDF 翻译中不同对齐方式文本块被错误合并导致语序混乱（签名行/标题/列表项边界识别）：
+  - `models/text_block.py` 新增 `alignment` 属性（0=左对齐, 1=居中, 2=右对齐），支持序列化
+  - `modules/extractors/coordinate_utils.py` 新增 `detect_text_block_alignment()` 函数：基于 bbox 与页面宽度位置关系推断文本块对齐方式，左/右对齐优先于居中检测（阈值15%）
+  - `modules/pdf_extractor.py` 非OCR路径提取时调用 `detect_text_block_alignment` 设置 TextBlock.alignment
+  - `modules/ocr/paddle_extractor.py` OCR 路径提取时同样设置 TextBlock.alignment
+  - `utils/text_processing.py` 三个语义合并函数（`merge_semantic_blocks`、`merge_semantic_blocks_with_llm`、`merge_semantic_blocks_with_llm_two_phase`）新增对齐方式检查：不同 alignment 的块不合并
+  - `modules/pdf_generator.py` PDF 渲染使用 TextBlock.alignment 替代硬编码 alignment=0
+  - 对齐检测优先级修正：从"居中→右对齐→左对齐"改为"左对齐→右对齐→居中"，修复左右对称布局中文本全被误判为居中的问题
+- 重写 LLM 语义分析提示词——增强签名行/标题/列表项等语义边界识别：
+  - `modules/semantic_analyzer.py` `_generate_batch_semantic_analysis_prompt` 完全重写：
+    - 新增两步分析法：先识别语义角色（正文/标题/签名行/列表项/引用正文），再基于合并决策矩阵判断是否合并
+    - 定义 5 种语义角色的特征描述和判断标准
+    - 新增合并决策矩阵：signature→任何角色直接 false；title→body/list_item 直接 false 等
+    - 新增 5 个 few-shot 边界场景示例：签名行边界(A)、同引用内延续(B)、列表项之间(C)、列表续行(D)、标题边界(E)
+  - `_generate_semantic_analysis_prompt`（单对版本）同步重写，应用同样的两步分析法和示例
+  - `AipingSemanticAnalyzer` 继承基类提示词方法，无需单独修改即可自动生效
+  - 验证结果：第3页 Praise 书评页的 7 个文本对 LLM 决策从 [true×7] 改进为 [false,false,false,false,true,false,false]，签名行不再与下一引用正文跨引用合并
+- 修复合并块拆分后 bbox x1 越界问题：
+  - `services/translation_service.py` 拆分块 bbox 重算增加 x1 上限保护：`min(original_bbox[0] + max_width, original_bbox[2])`
+  - 根因：统一用 `x0 + max_width` 计算 x1 时，x0 较大的块会超出原始 bbox 和页面宽度（如 Madhav 引用末句 x0=192.24 导致 x1=537.00）
+- 保留原文换行和空格：
+  - `models/text_block.py` 移除 `text.strip()` 调用，改为直接存储原文完整格式
+- 相关文件：
+  - `models/text_block.py`
+  - `modules/extractors/coordinate_utils.py`
+  - `modules/pdf_extractor.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_generator.py`
+  - `modules/semantic_analyzer.py`
+  - `services/translation_service.py`
+  - `utils/text_processing.py`
+
 ## 2026-06-09（续）
 
 - 修复罗马数字页码未被识别为页脚导致跨页文本错误合并：

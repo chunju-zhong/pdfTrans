@@ -18,7 +18,7 @@ class TextBlock(CopyableMixin):
             page_num (int): 页面号
         """
         self.block_no = block_no
-        self.block_text = text.strip()
+        self.block_text = text  # 保留原文中的换行和空格，不做strip处理
         self.block_bbox = bbox
         self.block_type = block_type
         self.page_num = page_num  # 添加页面号属性
@@ -38,6 +38,8 @@ class TextBlock(CopyableMixin):
         self.italic = False
         self.underline = False
         self.strikethrough = False
+        # 对齐方式
+        self.alignment = 0  # 0=左对齐, 1=居中, 2=右对齐
     
     def update_style(self, font="", font_size=0.0, color=0, flags=0):
         """更新文本块样式信息
@@ -89,6 +91,7 @@ class TextBlock(CopyableMixin):
         obj.italic = data.get('italic', False)
         obj.underline = data.get('underline', False)
         obj.strikethrough = data.get('strikethrough', False)
+        obj.alignment = data.get('alignment', 0)
         return obj
 
     def to_dict(self):
@@ -116,5 +119,6 @@ class TextBlock(CopyableMixin):
             'bold': self.bold,
             'italic': self.italic,
             'underline': self.underline,
-            'strikethrough': self.strikethrough
+            'strikethrough': self.strikethrough,
+            'alignment': self.alignment,
         }

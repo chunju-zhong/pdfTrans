@@ -477,3 +477,41 @@ def extract_table_alignment(table_bbox, page_width):
 
     # 默认居中
     return 1
+
+
+def detect_text_block_alignment(bbox, page_width):
+    """从文本块 bbox 与页面宽度的位置关系检测对齐方式
+
+    检测优先级：左/右对齐优先于居中。
+    书籍页面布局通常左右对称，导致左对齐和右对齐文本的区域中心都接近页面中心。
+    如果居中检测优先，所有文本都会被误判为居中。因此先检查左/右边缘对齐。
+
+    Args:
+        bbox: 文本块边界框 (x0, y0, x1, y1)
+        page_width: 页面宽度
+
+    Returns:
+        int: 对齐方式，0=左对齐, 1=居中, 2=右对齐
+    """
+    if not bbox or page_width <= 0:
+        return 0
+
+    # 左对齐：文本左边缘距页面左边缘 < 15%
+    left_offset = bbox[0] / page_width
+    if left_offset < 0.15:
+        return 0
+
+    # 右对齐：文本右边缘距页面右边缘 < 15%
+    right_offset = (page_width - bbox[2]) / page_width
+    if right_offset < 0.15:
+        return 2
+
+    # 居中：文本中心与页面中心偏移 < 15%（且不满足左/右对齐条件）
+    text_center_x = (bbox[0] + bbox[2]) / 2
+    page_center_x = page_width / 2
+    center_offset = abs(text_center_x - page_center_x) / page_width
+    if center_offset < 0.15:
+        return 1
+
+    # 默认左对齐
+    return 0

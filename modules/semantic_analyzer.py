@@ -231,55 +231,76 @@ class SemanticAnalyzer:
         """
         # 获取语言名称
         lang_name = self.supported_languages.get(source_lang, source_lang)
-        
+
         return f"""
-        你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系，能够处理各种类型的文档，包括技术文档和普通文档。
-        
-        请分析以下两个{lang_name}相邻文本块是否应该合并为一个语义单元：
-        
-        块1: "{text1}"
-        块2: "{text2}"
-        
-        # 分析标准：
-        1. 语义连贯性：两个块是否表达同一个完整的语义单元或句子。
-        2. 语法完整性：前一个块是否是不完整的句子，后一个块是否是其延续，特别是被分割的句子。
-        3. 标题识别：如果任一文本块是标题（大小标题），则不应合并
-        4. 列表开头：如果块2是一个列表的开头（以•、-、*、数字+点等列表标记开头），则不应合并
-        
-        # 标题识别规则：
-        - 标题通常具有简洁性、概括性和引导性
-        - 标题通常是短语或简短句子，不包含详细内容
-        - 标题通常用于引入或概括后续内容
-        - 标题示例："1. 引言"、"2.1 方法概述"、"结论"、"背景介绍"
-        - 非标题示例："这是一个详细的段落内容，包含具体的信息和解释。"
-        
-        # 重要判断规则：
-        - 如果块1是标题，块2不是标题，返回merge: false
-        - 如果块2是标题，块1不是标题，返回merge: false
-        - 如果两个块都是标题，返回merge: false
-        - 如果块2是一个列表的开头（以•、-、*、数字+点等列表标记开头），返回merge: false
-        - 只有当两个块都不是标题且满足分析标准中的合并条件时，才返回merge: true
-        
-        请根据{lang_name}的语法和语义规则进行分析，考虑文档的类型和内容特点，给出明确的判断。
-        
-        # 重要输出要求：
-        1. 只返回纯JSON字符串，不包含任何其他文本
-        2. 不要包含Markdown代码块标记（如 ```json 或 ```）
-        3. 确保返回的内容可以直接被JSON解析器解析
-        4. 只输出一行JSON，不要有多余的空白行
-        5. 只包含merge字段，值为true或false
-        
-        正确输出示例：
-        {{"merge": true}}
-        
-        错误输出示例：
-        ```json
-        {{"merge": true}}
-        ```
-        
-        请严格按照要求输出，仅返回：
-        {{"merge": true/false}}
-        """
+你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系。
+请使用**两步分析法**判断以下两个{lang_name}文本块是否应该合并。
+
+## 第一步：识别每个文本块的语义角色（Semantic Role）
+
+| 语义角色 | 特征描述 | 合并行为 |
+|----------|----------|----------|
+| **正文 (body)** | 完整句子或段落片段，描述具体内容，以大写字母或小写字母开头均可 | 可与相邻正文合并 |
+| **标题 (title)** | 短语或简短句子，具有概括性、引导性，通常用于引入后续内容 | 不与任何其他角色合并 |
+| **签名行/署名 (signature)** | 以 `—` 或 `--` 开头，后跟人名 + 职位/机构/书名等信息 | **独立语义单元，绝不与前不与后合并** |
+| **列表项 (list_item)** | 以 `•`、`-`、`*`、数字+`.` 等列表标记开头 | 不与新列表项合并，但可与自身续行合并 |
+| **引用正文 (quote_body)** | 引用或推荐的具体内容描述 | 可与同引用内的正文合并，不跨引用合并 |
+
+## 第二步：基于语义角色的合并决策矩阵
+
+```
+              块2=正文    块2=标题    块2=签名    块2=列表项
+块1=正文      [进一步判断]  不合       不合       [进一步判断]
+块1=标题      不合        [进一步判断] 不合       不合
+块1=签名      不合        不合       不合       不合
+块1=列表项    [续行检查]   不合       不合       不合
+
+[进一步判断] = 检查语义连贯性和语法完整性（是否为同一句子的延续）
+[续行检查]   = 检查块2是否为块1列表项内容的续行（以小写字母开头）
+不合         = 直接返回 merge=false
+```
+
+## 待分析的文本对
+
+块1: "{text1}"
+块2: "{text2}"
+
+## 边界场景参考示例
+
+### 示例A：签名行边界（核心场景——签名行是独立单元）
+输入：
+块1: "—Jay Alammar, coauthor, Hands-On Large Language Models"
+块2: "Designing Large Language Model Applications is a comprehensive tour of LLMs"
+输出：merge: false
+理由：块1是引用署名行（signature），标志引用A结束；块2是新引用B的正文。两者属于不同引用。
+
+### 示例B：同一引用内正文可合并
+输入：
+块1: "systems. It builds toward a powerful synthesis of advanced methods"
+块2: "like tool use, reasoning, RAG, and fine-tuning"
+输出：merge: true
+理由：块2以小写字母"like"开头，是前一句的语法延续，属于同一引用同一句。
+
+### 示例C：标题与正文边界
+输入：
+块1: "Praise for Designing Large Language Model Applications"
+块2: "Designing Large Language Model Applications is a masterclass in building AI"
+输出：merge: false
+理由：块1是页面标题（短、概括性），块2是引用正文的开始。标题和正文不应合并。
+
+## 输出要求
+
+1. 只返回纯JSON字符串，不包含任何其他文本
+2. 不要包含Markdown代码块标记（如 ```json 或 ```）
+3. 确保返回的内容可以直接被JSON解析器解析
+4. 只输出一行JSON，只包含merge字段，值为true或false
+
+正确输出格式：
+{{"merge": true}}
+
+请严格按照要求输出，仅返回：
+{{"merge": true/false}}
+"""
     
     def _generate_batch_semantic_analysis_prompt(self, text_pairs, source_lang):
         """生成批量语义分析提示词
@@ -305,140 +326,97 @@ class SemanticAnalyzer:
         lang_name = self.supported_languages.get(source_lang, source_lang)
         
         prompt = f"""
-        你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系，能够处理各种类型的文档，包括技术文档和普通文档。
-        请分析以下多对{lang_name}的相邻文本块，分别判断文本块是否应该合并为一个语义单元。
-        """
+你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系。
+请使用**两步分析法**对以下多对{lang_name}文本块分别判断是否应该合并。
+"""
         # 添加文本块对
         for i, (text1, text2) in enumerate(text_pairs):
             prompt += f"\n对{i+1}:\n块1: \"{text1}\"\n块2: \"{text2}\"\n"
-        
+
         prompt += """
-        # 分析标准：
-        1. 语义连贯性：如果两个块表达同一个完整的语义单元，逻辑上的延续，属于同一个句子，返回: true
-        2. 语法完整性：如果前一个块是不完整的句子，后一个块是其延续，返回: true
-        3. 逻辑关系：两个块之间是否存在紧密的逻辑联系，包括概念的关联性和内容的连续性
-        4. 标题识别：如果任一文本块是标题（大小标题），则不应合并，返回: false
-        5. 列表开头：如果块2是一个列表的开头（以•、-、*、数字+点等列表标记开头），返回: false
-        6. 多列表项：如果前一个是列表项，后一个也是列表项，返回: false
-        7. 列表项延续：如果前一个块是列表项，后一个块是其延续，返回: true
-        
-        # 文档类型特殊规则：
-        - 对于技术文档：注意识别专业术语和技术概念的延续，如"agentic system"、"context window"、"LM"等，这些应该被视为整体概念的一部分
-        - 对于普通文档：注意识别叙述、描述和说明性内容的连续性
-        - 对于所有文档：即使两个块在语法上看起来不完整，只要它们在语义和逻辑上紧密相关，也应该合并
-        - **关键规则**：如果块1和块2在语义上是同一个句子或短语的延续，即使它们被分割成不同的文本块，也应该合并
-        
-        # 重要输出要求：
-        1. 只返回纯JSON字符串，不包含任何其他文本
-        2. 不要包含Markdown代码块标记（如 ```json 或 ```）
-        3. 确保返回的内容可以直接被JSON解析器解析
-        4. 只输出一行JSON，不要有多余的空白行
-        5. 返回一个包含所有分析结果的JSON对象，键为"merge"，值为布尔值数组
-        6. **关键要求**：返回的 `merge` 数组长度必须与输入文本对数量完全一致
-        7. **严格要求**：每对输入文本必须对应一个分析结果，不得遗漏或重复
-        
-        # 具体输出长度要求
-        - 如果输入 n 对文本，返回的 `merge` 数组必须包含 n 个布尔值
-        - `merge` 数组的长度必须等于输入文本对的数量
-        - 例如：输入 3 对文本时，`merge` 数组必须包含 3 个元素
-        - 例如：输入 5 对文本时，`merge` 数组必须包含 5 个元素
-        - 例如：输入 4 对文本时，`merge` 数组必须包含 4 个元素
-        
-        # 详细示例
-        ## 示例 1：输入 3 对文本
-        输入：
-        对1:
-        块1: "Hello"
-        块2: "world"
-        
-        对2:
-        块1: "How are"
-        块2: "you"
-        
-        对3:
-        块1: "I am"
-        块2: "fine"
-        
-        正确输出：
-        {{"merge": [true, true, true]}}
-        
-        ## 示例 2：输入 5 对文本
-        输入：
-        对1:
-        块1: "a variety"
-        块2: "of components:"
-        
-        对2:
-        块1: "such"
-        块2: "as"
-        
-        对3:
-        块1: "for example"
-        块2: ":"
-        
-        对4:
-        块1: "including"
-        块2: "the following"
-        
-        对5:
-        块1: "consisting"
-        块2: "of"
-        
-        正确输出：
-        {{"merge": [true, true, true, true, true]}}
-        
-        ## 示例 3：列表项延续示例
-        输入：
-        对1:
-        块1: "• Context to guide reasoning defines the agent's fundamental reasoning patterns and"
-        块2: "available actions, dictating its behavior:"
-        
-        对2:
-        块1: "available actions, dictating its behavior:"
-        块2: "• System Instructions: High-level directives defining the agent's persona, capabilities,"
-        
-        正确输出：
-        {"merge": [true, false]}
-        
-        解释：
-        - 对1: 块1是列表项，块2是非列表项且是其延续，应该合并（返回true）
-        - 对2: 块2是新的列表项，不应该合并（返回false）
-        
-        ## 示例 4：混合文档类型示例
-        输入：
-        对1:
-        块1: "An agentic system is the ultimate curator of the input"
-        块2: "context window the LM."
-        
-        对2:
-        块1: "Once upon a time"
-        块2: "there was a beautiful princess"
-        
-        对3:
-        块1: "I went to the store"
-        块2: "to buy some groceries"
-        
-        对4:
-        块1: "Introduction"
-        块2: "This chapter introduces the topic"
-        
-        正确输出：
-        {{"merge": [true, true, true, false]}}
-        
-        解释：
-        - 对1: 块1和块2都在讨论相关的内容，应该合并（返回true）
-        - 对2: 块1和块2是同一个故事的延续，应该合并（返回true）
-        - 对3: 块1和块2是同一个动作的描述，应该合并（返回true）
-        - 对4: 块1是标题，不应该合并（返回false）
-        
-        # 错误提示
-        - 如果返回的结果数量与输入数量不一致，将被视为无效输出
-        - 如果返回的 JSON 格式错误，将被视为无效输出
-        - 请确保返回的 JSON 格式正确，且 `merge` 数组长度与输入文本对数量一致
-        
-        请严格按照要求输出，仅返回：
-        {{"merge": [true/false, true/false, ...]}}
-        """
+## 第一步：识别每个文本块的语义角色（Semantic Role）
+
+对每一对文本，先识别块1和块2各自的语义角色：
+
+| 语义角色 | 特征描述 | 合并行为 |
+|----------|----------|----------|
+| **正文 (body)** | 完整句子或段落片段，描述具体内容 | 可与相邻正文合并 |
+| **标题 (title)** | 短语/简短句子，概括性、引导性 | 不与任何其他角色合并 |
+| **签名行/署名 (signature)** | 以 `—` 或 `--` 开头 + 人名 + 职位/机构/书名 | **独立单元，绝不与前不与后合并** |
+| **列表项 (list_item)** | 以 `•`、`-`、`*`、数字+`.` 开头 | 不与新列表项合并，可与自身续行合并 |
+| **引用正文 (quote_body)** | 引用/推荐的具体内容描述 | 可与同引用内正文合并不跨引用 |
+
+## 第二步：基于语义角色的合并决策矩阵
+
+```
+              块2=正文    块2=标题    块2=签名    块2=列表项
+块1=正文      [进一步判断]  不合       不合       [进一步判断]
+块1=标题      不合        [进一步判断] 不合       不合
+块1=签名      不合        不合       不合       不合
+块1=列表项    [续行检查]   不合       不合       不合
+
+[进一步判断] = 检查语义连贯性和语法完整性（是否为同一句子的延续）
+[续行检查]   = 检查块2是否为块1列表项内容的续行（以小写字母开头）
+不合         = 直接返回 merge=false
+```
+
+## 边界场景参考示例（5个核心场景）
+
+### 示例A：签名行边界——签名行是独立语义单元
+输入：
+对K:
+块1: "—Jay Alammar, coauthor, Hands-On Large Language Models"
+块2: "Designing Large Language Model Applications is a comprehensive tour of LLMs"
+输出：merge: false
+理由：块1是引用署名行（signature），标志引用A结束；块2是新引用B的正文。
+
+### 示例B：同一引用内正文可合并
+输入：
+对L:
+块1: "systems. It builds toward a powerful synthesis of advanced methods"
+块2: "like tool use, reasoning, RAG, and fine-tuning"
+输出：merge: true
+理由：块2以小写字母"like"开头，是前一句的语法延续，属于同一引用同一句。
+
+### 示例C：列表项边界——独立列表项不合并
+输入：
+对M:
+块1: "• Understand how to prepare datasets for LLM training"
+块2: "• Develop an intuition about the Transformer architecture"
+输出：merge: false
+理由：两个都是独立的列表项开头（都以 • 开头），每个列表项是独立的语义单元。
+
+### 示例D：列表项续行应合并
+输入：
+对N:
+块1: "• Context to guide reasoning defines the agent's fundamental"
+块2: "reasoning patterns and available actions"
+输出：merge: true
+理由：块2以小写字母"r"开头，是块1列表项内容的续行。
+
+### 示例E：标题与正文边界
+输入：
+对O:
+块1: "Praise for Designing Large Language Model Applications"
+块2: "Designing Large Language Model Applications is a masterclass in building AI"
+输出：merge: false
+理由：块1是页面标题（短、概括性），块2是引用正文的开始。标题和正文不应合并。
+
+## 输出要求
+
+1. 只返回纯JSON字符串，不包含任何其他文本
+2. 不要包含Markdown代码块标记（如 ```json 或 ```）
+3. 确保返回的内容可以直接被JSON解析器解析
+4. 只输出一行JSON
+5. 返回一个包含所有分析结果的JSON对象，键为"merge"，值为布尔值数组
+6. **关键要求**：返回的 `merge` 数组长度必须与输入文本对数量完全一致，每对输入必须对应一个结果
+
+正确输出格式示例（假设有5对输入）：
+{{"merge": [true, false, true, false, true]}}
+
+请严格按照要求输出，仅返回：
+{{"merge": [true/false, true/false, ...]}}
+"""
         
         logger.info(f"批量语义分析提示词生成完成，长度={len(prompt)}")
         return prompt

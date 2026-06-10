@@ -411,9 +411,10 @@ class TranslationService:
             original_bbox = text_block.block_bbox
             if max_width > 0:
                 # 计算新的边界框，保持左上角坐标不变
-                # 宽度使用最大宽度（避免窄块文字换行过多），高度使用原始块自身高度（避免向下扩展遮挡下一块）
-                new_bbox = (original_bbox[0], original_bbox[1], 
-                            original_bbox[0] + max_width, 
+                # 宽度使用最大宽度（避免窄块文字换行过多），但不超过原始块的x1（防止越界）
+                # 高度使用原始块自身高度（避免向下扩展遮挡下一块）
+                new_bbox = (original_bbox[0], original_bbox[1],
+                            min(original_bbox[0] + max_width, original_bbox[2]),
                             original_bbox[3])
             else:
                 new_bbox = original_bbox
