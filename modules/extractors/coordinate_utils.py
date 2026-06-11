@@ -486,6 +486,9 @@ def detect_text_block_alignment(bbox, page_width):
     书籍页面布局通常左右对称，导致左对齐和右对齐文本的区域中心都接近页面中心。
     如果居中检测优先，所有文本都会被误判为居中。因此先检查左/右边缘对齐。
 
+    特殊处理：缩进正文（如列表项、引用块）的 x0 可能超过左对齐阈值，
+    但其宽度占页面大部分（>55%），应判定为左对齐而非右对齐。
+
     Args:
         bbox: 文本块边界框 (x0, y0, x1, y1)
         page_width: 页面宽度
@@ -499,6 +502,13 @@ def detect_text_block_alignment(bbox, page_width):
     # 左对齐：文本左边缘距页面左边缘 < 15%
     left_offset = bbox[0] / page_width
     if left_offset < 0.15:
+        return 0
+
+    # 宽块检查：如果文本块宽度 > 页面宽度的 55%，
+    # 说明是跨越大部分页面的正文内容（可能带缩进），判定为左对齐
+    # 这避免了缩进列表项/引用块因 x0 较大、x1 接近右边缘而被误判为右对齐
+    block_width = bbox[2] - bbox[0]
+    if block_width / page_width > 0.55:
         return 0
 
     # 右对齐：文本右边缘距页面右边缘 < 15%
