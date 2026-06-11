@@ -75,21 +75,18 @@ class TestSemanticAnalyzer:
             model="test-model"
         )
 
-        text_pairs = [
-            ("Hello", "world"),
-            ("How are", "you")
-        ]
+        blocks = ["Hello", "world", "How are", "you"]
 
         with patch.object(analyzer.client.chat.completions, 'create') as mock_create:
             mock_response = MagicMock()
-            mock_response.choices = [MagicMock(message=MagicMock(content='{"merge": [true, false]}'))]
+            mock_response.choices = [MagicMock(message=MagicMock(content='{"merge": [true, false, true]}'))]
             mock_create.return_value = mock_response
 
-            result = analyzer.batch_analyze_semantic_relationship(text_pairs, 'en')
+            result = analyzer.batch_analyze_semantic_relationship(blocks, 'en')
 
             assert isinstance(result, list)
-            assert len(result) == 2
-            assert result == [True, False]
+            assert len(result) == 3
+            assert result == [True, False, True]
 
     def test_batch_analyze_with_retry(self):
         """测试批量语义分析方法的重试机制"""
@@ -99,21 +96,19 @@ class TestSemanticAnalyzer:
             model="test-model"
         )
 
-        text_pairs = [
-            ("Hello", "world"),
-            ("How are", "you"),
-            ("I am", "fine")
-        ]
+        blocks = ["Hello", "world", "How are", "you"]
 
         with patch.object(analyzer.client.chat.completions, 'create') as mock_create:
+            # 第一次返回2个决策（期望3个），触发重试
             mock_response1 = MagicMock()
             mock_response1.choices = [MagicMock(message=MagicMock(content='{"merge": [true, false]}'))]
+            # 第二次返回正确的3个决策
             mock_response2 = MagicMock()
             mock_response2.choices = [MagicMock(message=MagicMock(content='{"merge": [true, false, true]}'))]
 
             mock_create.side_effect = [mock_response1, mock_response2]
 
-            result = analyzer.batch_analyze_semantic_relationship(text_pairs, 'en')
+            result = analyzer.batch_analyze_semantic_relationship(blocks, 'en')
 
             assert isinstance(result, list)
             assert len(result) == 3
@@ -128,18 +123,15 @@ class TestSemanticAnalyzer:
             model="test-model"
         )
 
-        text_pairs = [
-            ("Hello", "world"),
-            ("How are", "you"),
-            ("I am", "fine")
-        ]
+        blocks = ["Hello", "world", "How are", "you"]
 
         with patch.object(analyzer.client.chat.completions, 'create') as mock_create:
+            # 始终返回2个决策（期望3个），3次重试后补足False
             mock_response = MagicMock()
             mock_response.choices = [MagicMock(message=MagicMock(content='{"merge": [true, false]}'))]
             mock_create.return_value = mock_response
 
-            result = analyzer.batch_analyze_semantic_relationship(text_pairs, 'en')
+            result = analyzer.batch_analyze_semantic_relationship(blocks, 'en')
 
             assert isinstance(result, list)
             assert len(result) == 3
@@ -154,17 +146,14 @@ class TestSemanticAnalyzer:
             model="test-model"
         )
 
-        text_pairs = [
-            ("Hello", "world"),
-            ("How are", "you")
-        ]
+        blocks = ["Hello", "world", "How are"]
 
         with patch.object(analyzer.client.chat.completions, 'create') as mock_create:
             mock_response = MagicMock()
             mock_response.choices = [MagicMock(message=MagicMock(content='invalid json'))]
             mock_create.return_value = mock_response
 
-            result = analyzer.batch_analyze_semantic_relationship(text_pairs, 'en')
+            result = analyzer.batch_analyze_semantic_relationship(blocks, 'en')
 
             assert isinstance(result, list)
             assert len(result) == 2
@@ -186,8 +175,8 @@ class TestSemanticAnalyzer:
         assert "你是专业的文本语义分析专家" in prompt
         assert "块1: \"Hello\"" in prompt
         assert "块2: \"world\"" in prompt
-        assert "分析标准" in prompt
-        assert "重要输出要求" in prompt
+        assert "语义角色" in prompt
+        assert "输出要求" in prompt
         assert "merge" in prompt
 
     def test_generate_batch_semantic_analysis_prompt(self):
@@ -198,22 +187,21 @@ class TestSemanticAnalyzer:
             model="test-model"
         )
 
-        text_pairs = [
-            ("Hello", "world"),
-            ("How are", "you")
-        ]
+        blocks = ["Hello", "world", "How are", "you"]
 
-        prompt = analyzer._generate_batch_semantic_analysis_prompt(text_pairs, 'en')
+        prompt = analyzer._generate_batch_semantic_analysis_prompt(blocks, 'en')
 
         assert "你是专业的文本语义分析专家" in prompt
-        assert "对1:" in prompt
-        assert "块1: \"Hello\"" in prompt
-        assert "块2: \"world\"" in prompt
-        assert "对2:" in prompt
-        assert "块1: \"How are\"" in prompt
-        assert "块2: \"you\"" in prompt
-        assert "分析标准" in prompt
-        assert "重要输出要求" in prompt
+        assert "块1:" in prompt
+        assert "块2:" in prompt
+        assert "块3:" in prompt
+        assert "块4:" in prompt
+        assert "Hello" in prompt
+        assert "world" in prompt
+        assert "How are" in prompt
+        assert "you" in prompt
+        assert "语义角色" in prompt
+        assert "输出要求" in prompt
 
     def test_supported_languages(self):
         """测试支持的语言"""

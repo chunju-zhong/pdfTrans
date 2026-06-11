@@ -22,12 +22,14 @@ class MockSemanticAnalyzer:
     def __init__(self, merge_all=False):
         self.merge_all = merge_all
 
-    def batch_analyze_semantic_relationship(self, text_pairs, source_lang):
+    def batch_analyze_semantic_relationship(self, blocks, source_lang):
         """模拟批量语义分析，返回合并判断结果"""
         import time
         time.sleep(0.1)
+        if len(blocks) <= 1:
+            return []
         results = []
-        for i, (text1, text2) in enumerate(text_pairs):
+        for i in range(len(blocks) - 1):
             if self.merge_all:
                 results.append(True)
             else:
@@ -60,31 +62,33 @@ def test_parallel_batch_analyze():
 
     analyzer = MockSemanticAnalyzer(merge_all=False)
 
-    text_pairs = [
-        ("Hello world", "This is a test"),
-        ("Second pair", "Third text"),
-        ("Fourth text", "Fifth text"),
-        ("Sixth text", "Seventh text"),
-        ("Eighth text", "Ninth text"),
-        ("Tenth text", "Eleventh text"),
-        ("Twelfth text", "Thirteenth text"),
-        ("Fourteenth text", "Fifteenth text"),
-        ("Sixteenth text", "Seventeenth text"),
-        ("Eighteenth text", "Nineteenth text"),
-        ("Twentieth text", "Twenty-first text"),
-        ("Twenty-second text", "Twenty-third text"),
+    # 13个顺序文本块，产生12个合并决策
+    blocks = [
+        "Hello world",
+        "This is a test",
+        "Second text",
+        "Third text",
+        "Fourth text",
+        "Fifth text",
+        "Sixth text",
+        "Seventh text",
+        "Eighth text",
+        "Ninth text",
+        "Tenth text",
+        "Eleventh text",
+        "Twelfth text",
     ]
 
     results = parallel_batch_analyze(
-        analyzer, text_pairs, "en",
+        analyzer, blocks, "en",
         max_workers=3, batch_size=5
     )
 
-    logger.info(f"输入文本对数量: {len(text_pairs)}")
+    logger.info(f"输入文本块数量: {len(blocks)}")
     logger.info(f"输出结果数量: {len(results)}")
     logger.info(f"结果内容: {results}")
 
-    assert len(results) == len(text_pairs), f"结果数量不匹配: {len(results)} vs {len(text_pairs)}"
+    assert len(results) == len(blocks) - 1, f"结果数量不匹配: {len(results)} vs {len(blocks) - 1}"
 
     assert sum(results) > 0, "应该有一些True结果"
     assert len(results) - sum(results) > 0, "应该有一些False结果"
@@ -116,13 +120,15 @@ def test_parallel_batch_analyze_single_batch():
 
     analyzer = MockSemanticAnalyzer(merge_all=True)
 
-    text_pairs = [
-        ("Text 1", "Text 2"),
-        ("Text 3", "Text 4"),
+    # 3个块产生2个合并决策
+    blocks = [
+        "Text 1",
+        "Text 2",
+        "Text 3",
     ]
 
     results = parallel_batch_analyze(
-        analyzer, text_pairs, "en",
+        analyzer, blocks, "en",
         max_workers=3, batch_size=10
     )
 

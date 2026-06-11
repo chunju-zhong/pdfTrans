@@ -107,15 +107,15 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                     logger.error(f"失败时的文本块: 块1='{text1}', 块2='{text2}'")
                     return False
     
-    def batch_analyze_semantic_relationship(self, text_pairs, source_lang):
-        """批量分析多个文本块对之间的语义关系，判断是否应该合并
+    def batch_analyze_semantic_relationship(self, blocks, source_lang):
+        """批量分析顺序文本块之间的语义关系，判断相邻块是否应该合并
 
         Args:
-            text_pairs (list): 文本块对列表，每个元素是包含两个文本的元组
+            blocks (list[str]): 顺序文本块列表
             source_lang (str): 源语言代码
 
         Returns:
-            list: 布尔值列表，表示每个文本块对是否应该合并
+            list: 布尔值列表，长度为 len(blocks)-1，表示每对相邻块是否应该合并
         """
         import json
         import logging
@@ -123,14 +123,21 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
 
         logger = logging.getLogger(__name__)
 
-        # 记录输入文本对的详细信息
-        logger.info(f"开始批量语义分析: 文本对数量={len(text_pairs)}, 源语言={source_lang}")
-        for i, (text1, text2) in enumerate(text_pairs):
-            logger.debug(f"文本对 {i+1}: 块1='{text1[:100]}...' (长度={len(text1)}), 块2='{text2[:100]}...' (长度={len(text2)})")
+        # 少于2个块时无需分析
+        if len(blocks) <= 1:
+            logger.info(f"文本块数量={len(blocks)}，不足2个，无需分析")
+            return []
+
+        expected_merge_count = len(blocks) - 1
+
+        # 记录输入文本块的详细信息
+        logger.info(f"开始批量语义分析: 文本块数量={len(blocks)}, 源语言={source_lang}, 预期合并决策数={expected_merge_count}")
+        for i, block in enumerate(blocks):
+            logger.debug(f"块 {i+1}: '{block[:100]}...' (长度={len(block)})")
 
         # 准备批量语义分析的提示词
-        analysis_prompt = self._generate_batch_semantic_analysis_prompt(text_pairs, source_lang)
-        logger.info(f"生成批量语义分析提示词: 文本对数量={len(text_pairs)}, 提示词长度={len(analysis_prompt)}")
+        analysis_prompt = self._generate_batch_semantic_analysis_prompt(blocks, source_lang)
+        logger.info(f"生成批量语义分析提示词: 文本块数量={len(blocks)}, 提示词长度={len(analysis_prompt)}")
 
         max_retries = 3  # 最大重试次数
         retry_delay = 0.5  # 重试间隔（秒）
@@ -184,9 +191,9 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                 merge_results = analysis_json.get("merge", [])
                 logger.info(f"最终批量合并决策: {merge_results}")
                 
-                # 确保返回结果数量与输入文本对数量一致
-                if len(merge_results) != len(text_pairs):
-                    logger.error(f"批量分析结果数量与输入文本对数量不一致: 期望{len(text_pairs)}个结果，实际{len(merge_results)}个结果")
+                # 确保返回结果数量与预期一致（len(blocks) - 1）
+                if len(merge_results) != expected_merge_count:
+                    logger.error(f"批量分析结果数量与预期不一致: 期望{expected_merge_count}个结果，实际{len(merge_results)}个结果")
                     if attempt < max_retries - 1:
                         logger.error(f"结果数量不一致，将在 {retry_delay} 秒后重试...")
                         time.sleep(retry_delay)
@@ -197,17 +204,17 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                         # 转换为布尔值
                         final_results = [bool(result) for result in merge_results]
                         # 补足缺失的项
-                        while len(final_results) < len(text_pairs):
+                        while len(final_results) < expected_merge_count:
                             final_results.append(False)
                         # 截断多余的项（如果有的话）
-                        final_results = final_results[:len(text_pairs)]
+                        final_results = final_results[:expected_merge_count]
                         logger.info(f"补足后结果: {final_results}")
                         return final_results
                 
-                # 详细记录每个文本对的分析结果
+                # 详细记录每个相邻块对的分析结果
                 final_results = [bool(result) for result in merge_results]
                 
-                logger.info(f"批量语义分析完成: 共分析 {len(text_pairs)} 个文本对，合并 {sum(final_results)} 个")
+                logger.info(f"批量语义分析完成: 共分析 {len(blocks)} 个文本块，{expected_merge_count} 个相邻对，合并 {sum(final_results)} 个")
                 return final_results
 
             except json.JSONDecodeError as e:
@@ -218,15 +225,15 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                     time.sleep(retry_delay)
                 else:
                     logger.error("最终失败，返回默认值列表")
-                    return [False] * len(text_pairs)
+                    return [False] * expected_merge_count
             except Exception as e:
                 if attempt < max_retries - 1:
                     # 不是最后一次尝试，记录错误并重试
                     logger.error(f"aiping批量语义分析API请求失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}，将在 {retry_delay} 秒后重试...")
-                    logger.error(f"失败时的文本对数量: {len(text_pairs)}")
+                    logger.error(f"失败时的文本块数量: {len(blocks)}")
                     time.sleep(retry_delay)
                 else:
                     # 最后一次尝试失败，返回默认值列表
                     logger.error(f"aiping批量语义分析API请求最终失败: {str(e)}，返回默认值列表")
-                    logger.error(f"失败时的文本对数量: {len(text_pairs)}")
-                    return [False] * len(text_pairs)
+                    logger.error(f"失败时的文本块数量: {len(blocks)}")
+                    return [False] * expected_merge_count

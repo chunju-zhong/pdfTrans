@@ -410,12 +410,12 @@ class TranslationService:
             # 更新原始文本框：宽度使用合并块最大宽度，高度使用原始块自身高度
             original_bbox = text_block.block_bbox
             if max_width > 0:
-                # 计算新的边界框，保持左上角坐标不变
-                # 宽度使用最大宽度（避免窄块文字换行过多），但不超过原始块的x1（防止越界）
-                # 高度使用原始块自身高度（避免向下扩展遮挡下一块）
-                new_bbox = (original_bbox[0], original_bbox[1],
-                            min(original_bbox[0] + max_width, original_bbox[2]),
-                            original_bbox[3])
+                # 计算新的边界框：所有拆分块统一使用合并块的完整宽度
+                # 从 original_blocks 计算合并块的左右边界（MergedBlock 无 block_bbox 属性）
+                merged_x0 = min(b.block_bbox[0] for b in merged_block.original_blocks)
+                merged_x1 = max(b.block_bbox[2] for b in merged_block.original_blocks)
+                # x0=合并块左边界, x1=合并块右边界, y/h保留原始块自身值
+                new_bbox = (merged_x0, original_bbox[1], merged_x1, original_bbox[3])
             else:
                 new_bbox = original_bbox
             

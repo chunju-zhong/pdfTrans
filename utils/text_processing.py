@@ -657,57 +657,6 @@ def split_translated_result(merged_translation, original_blocks):
             if not current_block:
                 break
 
-    # 添加最终的分段长度平衡调整
-    # 检查所有分段的长度，确保分布均匀
-    logger.info("开始分段长度平衡调整")
-    if num_blocks > 1:
-        # 计算各分段长度
-        block_lengths = [len(block) for block in translated_blocks]
-        logger.info(f"调整前各块长度: {block_lengths}")
-
-        # 计算平均长度和标准差
-        avg_length = sum(block_lengths) / num_blocks
-        max_length = max(block_lengths)
-        logger.info(f"平均长度: {avg_length}, 最大长度: {max_length}")
-
-        # 如果最后一个分段明显长于平均长度，进行调整
-        if block_lengths[-1] > avg_length * 1.5:
-            # 计算需要重新分配的字符数
-            excess_length = block_lengths[-1] - int(avg_length)
-            logger.info(f"最后一个块过长，需要重新分配 {excess_length} 个字符")
-
-            # 从最后一个分段中取出多余的部分
-            last_block = translated_blocks[-1]
-            if excess_length > 0 and len(last_block) > excess_length:
-                # 寻找合适的拆分位置，确保不拆分单词和左成对字符
-                split_point = len(last_block) - excess_length
-                adjusted_split = adjust_split_position(last_block, split_point)
-
-                # 将多余部分分配到前面的分段中
-                excess_text = last_block[adjusted_split:]
-                translated_blocks[-1] = last_block[:adjusted_split]
-                logger.info(f"从最后一个块中提取多余文本: '{excess_text[:100]}...' (长度={len(excess_text)})")
-
-                # 均匀分配到前面的分段
-                num_front_blocks = num_blocks - 1
-                if num_front_blocks > 0:
-                    chars_per_block = len(excess_text) // num_front_blocks
-                    remaining_chars = len(excess_text) % num_front_blocks
-                    logger.info(f"分配策略: 每块 {chars_per_block} 字符，剩余 {remaining_chars} 字符")
-
-                    current_pos = 0
-                    for i in range(num_front_blocks):
-                        # 计算当前块应分配的字符数
-                        assign_chars = chars_per_block + (1 if i < remaining_chars else 0)
-
-                        # 如果还有剩余字符，分配给当前块
-                        if current_pos < len(excess_text):
-                            end_pos = current_pos + assign_chars
-                            assign_text = excess_text[current_pos:end_pos]
-                            translated_blocks[i] += assign_text
-                            logger.debug(f"分配给块 {i+1}: '{assign_text}' (长度={len(assign_text)})")
-                            current_pos = end_pos
-
     # 记录最终结果
     final_lengths = [len(block) for block in translated_blocks]
     total_final_length = sum(final_lengths)
@@ -803,78 +752,57 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
             i += 1
             continue
 
-        # 准备当前批次的文本对
-        text_pairs = []
-        batch_blocks = []
+        # 准备当前批次的顺序文本块
+        batch_block_texts = []  # 存储顺序文本块（含前导块）
+        batch_curr_blocks = []  # 存储对应的当前块（不含前导块）
         batch_start = i
-        
-        # 收集批量处理的文本对
-        # 直接使用相邻原始块构建文本对，不进行任何假设合并或累积更新
-        batch_text_pairs = []  # 存储构建的文本对
-        batch_curr_blocks = []  # 存储对应的当前块
-        
-        while i < total_blocks and len(batch_text_pairs) < batch_size:
+
+        # 收集批量处理的顺序文本块
+        # 第一个块是前一个原始块的文本（用于与当前批次的第一个块形成相邻对）
+        if i > 0:
+            prev_block = text_blocks[i-1]
+            batch_block_texts.append(prev_block.block_text.strip())
+
+        while i < total_blocks and len(batch_curr_blocks) < batch_size:
             curr_block = text_blocks[i]
-            
-            # 直接使用前一个原始块的文本作为块1
-            # 使用当前原始块的文本作为块2
-            prev_block = text_blocks[i-1] if i > 0 else current_merged
-            prev_text = prev_block.block_text if hasattr(prev_block, 'block_text') else prev_block
-            curr_text = curr_block.block_text
-            
-            # 添加到文本对列表
-            batch_text_pairs.append((prev_text, curr_text))
+            batch_block_texts.append(curr_block.block_text.strip())
             batch_curr_blocks.append(curr_block)
-            
-            logger.info(f"构建文本对 {len(batch_text_pairs)}: 块1='{prev_text[:50]}...', 块2='{curr_text[:50]}...'")
-            
             i += 1
-        
-        # 更新文本对和批量块列表
-        text_pairs = batch_text_pairs
-        batch_blocks = batch_curr_blocks
-        
-        logger.info(f"批次收集完成: 起始索引={batch_start}, 文本对数量={len(text_pairs)}, 当前索引={i}")
-        
-        # 如果有文本对需要分析
-        if text_pairs:
+
+        logger.info(f"批次收集完成: 起始索引={batch_start}, 文本块数量={len(batch_block_texts)}, 当前索引={i}")
+
+        # 如果有文本块需要分析（至少2个块才能产生决策）
+        if len(batch_block_texts) >= 2:
             try:
                 # 批量分析语义关系
-                logger.info(f"开始批量分析语义关系: 批次大小={len(text_pairs)}, 源语言={source_lang}")
-                for j, (text1, text2) in enumerate(text_pairs):
-                    logger.debug(f"文本对 {j+1}: 块1='{text1[:50]}...', 块2='{text2[:50]}...'")
-                
+                logger.info(f"开始批量分析语义关系: 文本块数量={len(batch_block_texts)}, 源语言={source_lang}")
+
                 merge_results = semantic_analyzer.batch_analyze_semantic_relationship(
-                    text_pairs,
+                    batch_block_texts,
                     source_lang
                 )
                 logger.info(f"批量语义分析结果: {merge_results}")
-                
-                # 详细记录每个文本对的分析结果
-                for j, (result, (prev_text, curr_text)) in enumerate(zip(merge_results, text_pairs)):
-                    logger.info(f"文本对 {j+1} 分析结果: 合并={result}, 块1='{prev_text[:50]}...', 块2='{curr_text[:50]}...'")
-                
+
+                # merge_results[j] 表示 batch_block_texts[j] 和 batch_block_texts[j+1] 是否应该合并
+                # 对应 batch_curr_blocks[j] 是否应该与前一个块合并
+
                 # 处理批量分析结果
-                for j, (should_merge, curr_block) in enumerate(zip(merge_results, batch_blocks)):
+                for j, (should_merge, curr_block) in enumerate(zip(merge_results, batch_curr_blocks)):
                     # 获取当前块的章节信息
                     curr_chapter_id = getattr(curr_block, 'chapter_id', None)
                     # 检查是否是不同章节
                     is_different_chapter = curr_chapter_id != current_chapter_id
-                    
+
                     # 检查当前块是否为章节标题
                     is_chapter_title = getattr(curr_block, 'is_title_block', False)
-                    
+
                     # 检查当前合并块是否为章节标题
                     current_is_title = False
                     first_block = current_merged.original_blocks[0]
                     current_is_title = getattr(first_block, 'is_title_block', False)
-                    
-                    # 获取当前文本对的实际文本
-                    prev_text = text_pairs[j][0]
-                    curr_text = text_pairs[j][1]
-                    
-                    logger.info(f"处理文本对 {j+1}: 合并={should_merge}, 块1='{prev_text[:50]}...', 块2='{curr_text[:50]}...', 章节ID={curr_chapter_id}, 是否不同章节={is_different_chapter}, 是否标题={is_chapter_title}")
-                    
+
+                    logger.info(f"处理块 {j+1}: 合并={should_merge}, 章节ID={curr_chapter_id}, 是否不同章节={is_different_chapter}, 是否标题={is_chapter_title}")
+
                     # 检查对齐方式是否变化
                     curr_alignment = getattr(curr_block, 'alignment', 0)
                     first_block_of_merged = current_merged.original_blocks[0]
@@ -884,16 +812,12 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
                         logger.info(f"对齐方式变化: 当前合并块alignment={current_alignment}, 待合并块alignment={curr_alignment}, 不合并")
 
                     # 检查是否需要开始新的合并块
-                    # 1. 如果当前块是章节标题，且当前合并块不是标题，则结束当前合并块
-                    # 2. 如果当前块不是章节标题，且当前合并块是标题，则结束当前合并块
-                    # 3. 如果是不同章节，则结束当前合并块
-                    # 4. 如果不满足合并条件，则结束当前合并块
                     should_end_current_block = False
-                    
+
                     # 检查是否满足合并条件
-                    can_merge = ((should_merge and not is_different_chapter) or 
+                    can_merge = ((should_merge and not is_different_chapter) or
                                  (current_is_title and is_chapter_title and not is_different_chapter))
-                    
+
                     # 检查是否需要结束当前合并块
                     if is_chapter_title and not current_is_title:
                         should_end_current_block = True
@@ -905,7 +829,7 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
                         should_end_current_block = True
                     elif not can_merge:
                         should_end_current_block = True
-                    
+
                     if should_end_current_block:
                         # 保存当前合并块
                         merged_blocks.append(current_merged)
@@ -916,21 +840,17 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
                         current_merged = _create_merged_block(curr_block)
                         # 更新当前合并块的章节信息
                         current_chapter_id = curr_chapter_id
-                        
+
                         logger.info(f"开始新合并块: 文本='{current_merged.block_text[:100]}...', 章节ID={current_chapter_id}")
                     else:
                         # 合并块，处理空格
-                        # 使用文本对中的实际文本进行合并，确保与分析时使用的文本一致
                         if current_merged.block_text.endswith(' ') and curr_block.block_text.startswith(' '):
-                            # 只保留一个空格
                             current_merged.block_text = current_merged.block_text + curr_block.block_text[1:]
                             logger.debug("合并：前一个块以空格结尾，当前块以空格开头，只保留一个空格")
                         elif not current_merged.block_text.endswith(' ') and not curr_block.block_text.startswith(' '):
-                            # 添加一个空格
                             current_merged.block_text = current_merged.block_text + ' ' + curr_block.block_text
                             logger.debug("合并：前一个块不以空格结尾，当前块不以空格开头，添加一个空格")
                         else:
-                            # 直接拼接
                             current_merged.block_text = current_merged.block_text + curr_block.block_text
                             logger.debug("合并：直接拼接")
 
@@ -944,13 +864,12 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
                         # 更新最大宽度和高度
                         current_merged.max_width = max(current_merged.max_width, curr_width)
                         current_merged.max_height = max(current_merged.max_height, curr_height)
-                        
+
                         logger.info(f"合并块成功: 合并后文本长度={len(current_merged.block_text)}, 包含 {len(current_merged.original_blocks)} 个原始块")
-                        logger.debug(f"合并后文本: '{current_merged.block_text[:100]}...'")
             except Exception as e:
                 logger.error(f"批量语义分析失败: {str(e)}")
                 # 分析失败时，不回退到单对分析，直接跳过当前批次
-                logger.info(f"批量语义分析失败，跳过当前批次的 {len(batch_blocks)} 个块")
+                logger.info(f"批量语义分析失败，跳过当前批次的 {len(batch_curr_blocks)} 个块")
                 # 重置i到批次开始位置，以便下一次循环重新尝试处理这些块
                 i = batch_start
 
@@ -975,37 +894,69 @@ def merge_semantic_blocks_with_llm(text_blocks, semantic_analyzer, source_lang, 
     return merged_blocks, block_mapping
 
 
-def parallel_batch_analyze(semantic_analyzer, text_pairs, source_lang, max_workers=5, batch_size=20, max_retries=3):
-    """并行批量分析多个文本块对的语义关系
+def parallel_batch_analyze(semantic_analyzer, blocks, source_lang, max_workers=5, batch_size=20, max_retries=3):
+    """并行批量分析多个文本块的语义关系（overlap-1-block 批次策略）
+
+    将顺序文本块按 overlap-1-block 策略分批，每批 N 个块产生 N-1 个合并决策。
+    批次 k≥1 从上一批最后一个块开始，确保相邻批次间的边界对也能被分析。
 
     Args:
         semantic_analyzer: 语义分析器实例，用于调用LLM进行语义分析
-        text_pairs (list): 所有文本块对列表，每个元素是 (text1, text2) 元组
+        blocks (list): 顺序文本块列表，每个元素是字符串
         source_lang (str): 源语言代码
         max_workers (int): 最大并行线程数，默认5
-        batch_size (int): 每批处理的文本对数量，默认20
+        batch_size (int): 每批处理的文本块数量，默认20
         max_retries (int): 每个批次最大重试次数，默认3
 
     Returns:
-        list: 布尔值列表，表示每个文本块对是否应该合并（顺序与text_pairs一致）
+        list: 布尔值列表，长度为 len(blocks) - 1，
+              merge_decisions[i] 表示 blocks[i] 和 blocks[i+1] 是否应该合并
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     logger = logging.getLogger(__name__)
 
-    if not text_pairs:
+    if not blocks or len(blocks) < 2:
         return []
 
-    logger.info(f"开始并行批量语义分析: 文本对总数={len(text_pairs)}, 最大并行数={max_workers}, 批次大小={batch_size}")
+    logger.info(f"开始并行批量语义分析: 文本块总数={len(blocks)}, 最大并行数={max_workers}, 批次大小={batch_size}")
 
-    batches = [text_pairs[i:i+batch_size] for i in range(0, len(text_pairs), batch_size)]
+    # 构建 overlap-1-block 批次
+    # 批次0: blocks[0:batch_size] → batch_size-1 个决策
+    # 批次k≥1: blocks[prev_last_idx : prev_last_idx+batch_size] → N-1 个决策
+    # 相邻批次重叠1个块，确保边界对也被分析
+    batches = []
+    prev_last_idx = 0
+
+    while True:
+        if prev_last_idx == 0:
+            start_idx = 0
+        else:
+            start_idx = prev_last_idx
+
+        end_idx = min(start_idx + batch_size, len(blocks))
+
+        if start_idx >= len(blocks):
+            break
+
+        batch = blocks[start_idx:end_idx]
+        if len(batch) < 2:
+            # 不足2个块，无法产生决策，跳过
+            break
+
+        batches.append(batch)
+        prev_last_idx = end_idx - 1  # 记录本批最后一个块的索引
+
+        if end_idx >= len(blocks):
+            break
+
     logger.info(f"共分成 {len(batches)} 个批次进行并行处理")
 
     def analyze_batch_with_retry(batch_idx, batch, retry_count=0):
         """带重试的批次分析"""
         try:
             result = semantic_analyzer.batch_analyze_semantic_relationship(batch, source_lang)
-            logger.info(f"批次 {batch_idx+1}/{len(batches)} 分析成功，包含 {len(batch)} 个文本对")
+            logger.info(f"批次 {batch_idx+1}/{len(batches)} 分析成功，包含 {len(batch)} 个文本块，产生 {len(result)} 个决策")
             return batch_idx, result
         except Exception as e:
             logger.warning(f"批次 {batch_idx+1}/{len(batches)} 分析失败 (尝试 {retry_count+1}/{max_retries}): {str(e)}")
@@ -1015,7 +966,7 @@ def parallel_batch_analyze(semantic_analyzer, text_pairs, source_lang, max_worke
                 return analyze_batch_with_retry(batch_idx, batch, retry_count + 1)
             else:
                 logger.error(f"批次 {batch_idx+1}/{len(batches)} 最终失败，使用默认值")
-                return batch_idx, [False] * len(batch)
+                return batch_idx, [False] * (len(batch) - 1)
 
     results = [None] * len(batches)
 
@@ -1035,7 +986,12 @@ def parallel_batch_analyze(semantic_analyzer, text_pairs, source_lang, max_worke
         if batch_result:
             all_results.extend(batch_result)
 
-    logger.info(f"并行批量分析完成: 总文本对={len(text_pairs)}, 合并判断={sum(all_results)}, 不合并={len(all_results) - sum(all_results)}")
+    # 验证总决策数 == len(blocks) - 1
+    expected_count = len(blocks) - 1
+    if len(all_results) != expected_count:
+        logger.warning(f"并行批量分析结果数量异常: 期望 {expected_count}, 实际 {len(all_results)}")
+
+    logger.info(f"并行批量分析完成: 总文本块={len(blocks)}, 合并判断={sum(all_results)}, 不合并={len(all_results) - sum(all_results)}")
 
     return all_results
 
@@ -1074,23 +1030,21 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
         logger.info("原始块数量为0，返回空列表")
         return merged_blocks, block_mapping
 
-    text_pairs = []
-    for i in range(1, len(text_blocks)):
-        prev_text = text_blocks[i-1].block_text
-        curr_text = text_blocks[i].block_text
-        text_pairs.append((prev_text, curr_text))
+    # 构建顺序文本块列表，发送给LLM分析时strip首尾空白，避免尾部换行符干扰语义判断
+    # 原始block_text保持不变，供翻译和渲染使用
+    block_texts = [block.block_text.strip() for block in text_blocks]
 
-    logger.info(f"构建了 {len(text_pairs)} 个文本对")
+    logger.info(f"构建了 {len(block_texts)} 个文本块")
 
     merge_decisions = parallel_batch_analyze(
-        semantic_analyzer, text_pairs, source_lang,
+        semantic_analyzer, block_texts, source_lang,
         max_workers=max_workers, batch_size=batch_size
     )
 
     logger.info(f"阶段1完成：获取了 {len(merge_decisions)} 个合并判断，耗时 {time.time() - start_time:.2f}秒")
 
     if progress_callback:
-        progress_callback(len(text_pairs), len(text_pairs) * 2)  # phase 1 = 50%
+        progress_callback(len(merge_decisions), len(merge_decisions) * 2)  # phase 1 = 50%
 
     first_block = text_blocks[0]
 
@@ -1193,7 +1147,7 @@ def merge_semantic_blocks_with_llm_two_phase(text_blocks, semantic_analyzer, sou
             current_merged.max_height = max(current_merged.max_height, curr_height)
 
         if progress_callback:
-            progress_callback(len(text_pairs) + i, len(text_pairs) * 2)
+            progress_callback(len(merge_decisions) + i, len(merge_decisions) * 2)
 
     if current_merged is not None:
         merged_blocks.append(current_merged)
