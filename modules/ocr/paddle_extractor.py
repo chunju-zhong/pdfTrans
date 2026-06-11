@@ -24,6 +24,7 @@ from html.parser import HTMLParser
 from models.text_block import TextBlock
 from models.extraction import PdfPage, PdfTable, PdfCell, PdfImage, PdfExtraction
 from modules.ocr.base import OcrExtractor
+from modules.extractors.coordinate_utils import detect_text_block_alignment
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,9 @@ class PaddleOcrExtractor(OcrExtractor):
 
     # 标记为非正文的标签
     NON_BODY_LABELS = {'footer', 'page_number', 'footnote'}
+
+    # 标题类标签（需要清理换行符）
+    TITLE_LABELS = {'paragraph_title', 'title', 'section_title', 'document_title', 'doc_title'}
 
     # 需要保存为图片的版面标签
     IMAGE_LABELS = {'image', 'figure', 'chart', 'figure_caption', 'seal'}
@@ -567,7 +571,18 @@ class PaddleOcrExtractor(OcrExtractor):
         return []
 
     @staticmethod
-    def _build_text_from_textlines(block_bbox, textline_boxes, textline_texts):
+    def _build_text_from_textlines(block_bbox, textline_boxes, textline_texts, is_title=False):
+        """从 textline 级别的 OCR 结果构建文本
+
+        Args:
+            block_bbox: 布局区域 bbox (x1,y1,x2,y2) 像素坐标
+            textline_boxes: textline bbox 列表
+            textline_texts: textline 文本列表
+            is_title: 是否为标题类文本（需要清理换行符）
+
+        Returns:
+            str | None: 构建的文本，或 None（无法构建时）
+        """
         if textline_boxes is None or textline_texts is None or len(textline_boxes) == 0 or len(textline_texts) == 0 or len(textline_boxes) != len(textline_texts):
             return None
         bx1, by1, bx2, by2 = block_bbox
@@ -596,6 +611,18 @@ class PaddleOcrExtractor(OcrExtractor):
         if current_parts:
             lines.append(' '.join(current_parts))
         result = '\n'.join(lines)
+
+        # 对标题类文本清理换行符
+        if is_title and result and '\n' in result:
+            original_text = result
+            # 将换行符替换为空格
+            result = result.replace('\n', ' ')
+            # 清理多余空格
+            result = ' '.join(result.split())
+            # 记录清理日志
+            newline_count = original_text.count('\n')
+            logger.info(f"[换行符清理] 标题文本清理换行符: '{original_text[:30]}' -> '{result[:30]}', 换行符数量={newline_count}")
+
         return result if result.strip() else None
 
     def _process_page_layout(self, pipeline, img_path, page_num, page_info, use_formula=False):
@@ -777,7 +804,8 @@ class PaddleOcrExtractor(OcrExtractor):
                     if label in self.TEXT_LABELS:
                         textline_text = PaddleOcrExtractor._build_text_from_textlines(
                             (float(x1), float(y1), float(x2), float(y2)),
-                            textline_boxes, textline_texts
+                            textline_boxes, textline_texts,
+                            is_title=(label in self.TITLE_LABELS)
                         )
                         text = textline_text if textline_text else (content or '')
                         if text.strip():
@@ -918,7 +946,8 @@ class PaddleOcrExtractor(OcrExtractor):
                     else:
                         textline_text = PaddleOcrExtractor._build_text_from_textlines(
                             (float(x1), float(y1), float(x2), float(y2)),
-                            textline_boxes, textline_texts
+                            textline_boxes, textline_texts,
+                            is_title=(label in self.TITLE_LABELS)
                         )
                         text = textline_text if textline_text else (content or '')
                         if text.strip():

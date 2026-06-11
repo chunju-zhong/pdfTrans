@@ -1,6 +1,7 @@
 import fitz  # PyMuPDF
 import os
 import logging
+import re
 from models.text_block import TextBlock
 from models.extraction import PdfPage, PdfImage, PdfExtraction
 from .extractors import (
@@ -477,8 +478,91 @@ class PdfExtractor:
                     if style_info:
                         # 使用样式信息更新TextBlock对象
                         update_text_block_style(text_block_objects[matched_block_no], style_info)
+                        
+                        # 判断是否是标题并清理换行符
+                        text_block = text_block_objects[matched_block_no]
+                        if self._is_title_text(text_block, page.rect.height):
+                            self._clean_title_newlines(text_block)
         
         return text_block_objects
+    
+    def _is_title_text(self, text_block, page_height):
+        """判断文本块是否是标题
+        
+        Args:
+            text_block (TextBlock): 文本块对象
+            page_height (float): 页面高度
+            
+        Returns:
+            bool: 是否是标题
+        """
+        # 标题判断条件：
+        # 1. 字体大小较大（> 14pt）
+        # 2. 文本较短（< 100字符）
+        # 3. 文本包含章节号（如 "2.3"、"Chapter 1"等）
+        # 4. 文本位置在页面顶部（y0 < page_height * 0.2）
+        
+        text = text_block.block_text
+        font_size = text_block.font_size
+        y0 = text_block.block_bbox[1]
+        
+        # 检查字体大小
+        is_large_font = font_size > 14.0
+        
+        # 检查文本长度
+        is_short_text = len(text.strip()) < 100
+        
+        # 检查是否包含章节号
+        # 匹配模式：数字+点+数字（如 2.3, 1.1.1），或 Chapter + 数字，或 第X章/节
+        chapter_patterns = [
+            r'^\d+\.\d+',  # 如 2.3, 1.1.1
+            r'^Chapter\s+\d+',  # 如 Chapter 1
+            r'^第[一二三四五六七八九十\d]+[章节]',  # 如 第一章, 第2节
+        ]
+        has_chapter_number = any(re.match(pattern, text.strip()) for pattern in chapter_patterns)
+        
+        # 检查位置是否在页面顶部
+        is_at_top = y0 < page_height * 0.2
+        
+        # 判断逻辑：满足以下任一条件即为标题
+        # 1. 字体大 + 文本短 + 在顶部
+        # 2. 包含章节号
+        # 3. 字体大 + 文本短
+        is_title = (
+            (is_large_font and is_short_text and is_at_top) or
+            has_chapter_number or
+            (is_large_font and is_short_text)
+        )
+        
+        if is_title:
+            logger.debug(f"标题判断: '{text[:30]}' - 字体:{font_size}, 长度:{len(text)}, 位置:{y0}, 判断结果:{is_title}")
+        
+        return is_title
+    
+    def _clean_title_newlines(self, text_block):
+        """清理标题文本中的换行符
+        
+        Args:
+            text_block (TextBlock): 文本块对象
+        """
+        original_text = text_block.block_text
+        
+        # 统计换行符数量
+        newline_count = original_text.count('\n')
+        
+        if newline_count > 0:
+            # 清理策略：
+            # 1. 将换行符替换为空格
+            # 2. 清理多余空格
+            cleaned_text = original_text.replace('\n', ' ')
+            cleaned_text = ' '.join(cleaned_text.split())
+            
+            # 更新文本块
+            text_block.block_text = cleaned_text
+            
+            # 记录日志
+            logger.info(f"[换行符清理] 标题文本清理换行符: '{original_text[:30]}' -> '{cleaned_text[:30]}'")
+            logger.debug(f"[换行符清理] 换行符数量: {newline_count}, 原文长度: {len(original_text)}, 清理后长度: {len(cleaned_text)}")
     
     def _extract_images(self, page, current_page_num, temp_images_dir):
         """从页面中提取图像
