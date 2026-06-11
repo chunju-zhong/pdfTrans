@@ -1,5 +1,47 @@
 # 更新日志
 
+## 2026-06-11
+
+- 修复第22页 Acknowledgments 跨段落合并导致语序混乱——LLM 提示词增加段落边界检测：
+  - `modules/semantic_analyzer.py` `_generate_batch_semantic_analysis_prompt` 新增 **示例F：段落边界** few-shot 示例——展示两个完整正文段落之间不应合并的模式（前段以句号结尾 + 后段以全新句子开头 + 话题转换）
+  - 强化"进一步判断"标准——在决策矩阵的 `[进一步判断]` 说明中增加明确的段落边界检测规则：① 前块以终结标点结尾；② 后块以新句子开头标志起始；③ 后块引入全新话题或主语
+  - `_generate_semantic_analysis_prompt`（单对版本）同步添加相同的段落边界示例和规则
+- 移除 `split_translated_result` 的"分段长度平衡调整"步骤——该步骤破坏文本顺序：
+  - `utils/text_processing.py` 移除 L660-709 的"分段长度平衡调整"代码块
+  - 根因：该逻辑从最后一个块尾部提取文本均匀分配到前面各块，导致朋友感谢名单被塞到段落开头，直接破坏语序
+- 优化 LLM 提示词为语言无关——支持所有源语言（不只是英文）：
+  - 签名行/列表项特征描述改为语言无关（不再依赖 `—`/`•`/`-` 等特定符号）
+  - few-shot 示例理由改为通用描述（不再引用"大写字母/小写字母"等英文特有概念）
+  - [进一步判断]规则改为语言无关（"独立的新主语/新话题"替代"大写字母开头"）
+- 重构语义合并为顺序块列表模式——消除重复文本并支持上下文感知判断：
+  - `modules/semantic_analyzer.py` `_generate_batch_semantic_analysis_prompt` 签名从 `(text_pairs, source_lang)` 改为 `(blocks, source_lang)`，提示词完全重写：
+    - 输入从成对文本对（上一对块2=下一对块1，滑动窗口重叠）改为顺序列出所有块（块1, 块2, ..., 块N），每块只出现一次
+    - 输出要求改为 N-1 个合并判断（merge 数组长度为块数减1）
+    - 新增「上下文感知指导」章节：指示 LLM 判断块i与块i+1时参考块1到块i-1的语义角色和内容
+  - `modules/semantic_analyzer.py` `batch_analyze_semantic_relationship` 签名从 `(text_pairs, source_lang)` 改为 `(blocks, source_lang)`，返回 `len(blocks)-1` 个决策
+  - `modules/aiping_semantic_analyzer.py` 同步适配新接口签名
+  - `utils/text_processing.py` `parallel_batch_analyze` 实现重叠1块分批策略：
+    - 批次0取 blocks[0:batch_size]，批次k取 blocks[prev_last_idx:prev_last_idx+batch_size]（包含前批最后1块作为上下文重叠）
+    - N块输出N-1个判断，合并时直接拼接无需丢弃
+    - 验证：25块分3批 → 9+9+6=24=25-1 ✓
+  - `utils/text_processing.py` `merge_semantic_blocks_with_llm_two_phase` 构建 `block_texts` 列表而非 `text_pairs`
+  - `utils/text_processing.py` `merge_semantic_blocks_with_llm` 构建 `batch_block_texts` 列表而非 `batch_text_pairs`
+  - 3个测试文件适配新接口，25个测试全部通过
+- 恢复文本提取时清理换行符功能——修复标题文本包含换行符导致截断的问题：
+  - OCR提取时：`modules/ocr/paddle_extractor.py` 添加 `TITLE_LABELS` 常量，在 `_build_text_from_textlines` 方法中清理标题换行符
+  - 非OCR提取时：`modules/pdf_extractor.py` 添加 `_is_title_text` 和 `_clean_title_newlines` 方法
+  - 清理策略：将 `\n` 替换为空格，清理多余空格
+  - 影响：提高标题文本渲染质量，避免过度截断
+- 相关文件：
+  - `modules/semantic_analyzer.py`
+  - `modules/aiping_semantic_analyzer.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_extractor.py`
+  - `utils/text_processing.py`
+  - `tests/test_batch_semantic_analysis.py`
+  - `tests/test_semantic_analyzer.py`
+  - `tests/test_two_phase_merge.py`
+
 ## 2026-06-10
 
 - 修复 PDF 翻译中不同对齐方式文本块被错误合并导致语序混乱（签名行/标题/列表项边界识别）：

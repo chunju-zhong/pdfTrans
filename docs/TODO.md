@@ -23,6 +23,10 @@
 - [x] Code quality improvements (translation fallback, font estimation fix, resource release protection)
 - [x] Fix OCR formula recognition failure across all output formats (memory tier uses physical memory, DPI/inference params raised, log corrected)
 - [x] Further optimize glossary extraction accuracy and efficiency
+- [ ] Fix split logic not cleaning title newlines issue
+  - Add title recognition and newline cleaning in `split_translated_result` function
+  - Add `_is_title_block` function to determine if original block is a title
+  - Cleaning strategy: Replace `\n` with space, clean extra spaces
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
 - [x] Merged cell rendering optimization (text truncation, line separation, horizontal lines exceeding table boundary)
 - [x] Fix Rect.intersect() in-place mutation causing table text overlap detection failure

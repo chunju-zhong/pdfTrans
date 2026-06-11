@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-06-11
+
+- Fixed Page 22 Acknowledgments cross-paragraph merge causing out-of-order text — added paragraph boundary detection to LLM prompts:
+  - Added **Example F: Paragraph Boundary** few-shot example in `modules/semantic_analyzer.py` `_generate_batch_semantic_analysis_prompt` — showing two complete body paragraphs should not merge (previous ends with period + next starts with new sentence + topic shift)
+  - Strengthened "[Further Judgment]" criteria — added explicit paragraph boundary detection rules: ① previous block ends with terminating punctuation; ② next block starts with new sentence marker; ③ next block introduces new topic or subject
+  - `_generate_semantic_analysis_prompt` (single-pair version) synchronized with same paragraph boundary example and rules
+- Removed "segment length balance adjustment" step from `split_translated_result` — this step broke text order:
+  - Removed L660-709 code block from `utils/text_processing.py`
+  - Root cause: this logic extracted text from last block's tail and distributed evenly to previous blocks, causing friend acknowledgment list to be inserted at paragraph beginning, directly breaking text order
+- Optimized LLM prompts to be language-agnostic — support all source languages (not just English):
+  - Signature line/list item feature descriptions changed to language-agnostic (no longer depend on specific symbols like `—`/`•`/`-`)
+  - Few-shot example reasoning changed to generic descriptions (no longer reference English-specific concepts like "uppercase/lowercase letters")
+  - [Further Judgment] rules changed to language-agnostic ("independent new subject/topic" replaces "uppercase letter start")
+- Refactored semantic merge to sequential block list mode — eliminate duplicate text and enable context-aware judgment:
+  - `modules/semantic_analyzer.py` `_generate_batch_semantic_analysis_prompt` signature changed from `(text_pairs, source_lang)` to `(blocks, source_lang)`, prompt completely rewritten:
+    - Input changed from paired text pairs (previous pair's block2 = next pair's block1, sliding window overlap) to sequential block listing (block1, block2, ..., blockN), each block appears only once
+    - Output requirement changed to N-1 merge decisions (merge array length = block count - 1)
+    - Added "Context-Aware Guidance" section: instruct LLM to reference semantic roles and content of blocks 1 through i-1 when judging block i and block i+1
+  - `modules/semantic_analyzer.py` `batch_analyze_semantic_relationship` signature changed from `(text_pairs, source_lang)` to `(blocks, source_lang)`, returns `len(blocks)-1` decisions
+  - `modules/aiping_semantic_analyzer.py` synchronized with new interface signature
+  - `utils/text_processing.py` `parallel_batch_analyze` implemented overlap-1-block batching strategy:
+    - Batch 0 takes blocks[0:batch_size], batch k takes blocks[prev_last_idx:prev_last_idx+batch_size] (includes previous batch's last 1 block as context overlap)
+    - N blocks output N-1 decisions, concatenate directly without discarding
+    - Verified: 25 blocks in 3 batches → 9+9+6=24=25-1 ✓
+  - `utils/text_processing.py` `merge_semantic_blocks_with_llm_two_phase` builds `block_texts` list instead of `text_pairs`
+  - `utils/text_processing.py` `merge_semantic_blocks_with_llm` builds `batch_block_texts` list instead of `batch_text_pairs`
+  - 3 test files adapted to new interface, all 25 tests passing
+- Restored newline cleaning during text extraction — fixed title text containing newlines causing truncation:
+  - OCR extraction: Added `TITLE_LABELS` constant in `modules/ocr/paddle_extractor.py`, cleaning title newlines in `_build_text_from_textlines` method
+  - Non-OCR extraction: Added `_is_title_text` and `_clean_title_newlines` methods in `modules/pdf_extractor.py`
+  - Cleaning strategy: Replace `\n` with space, clean extra spaces
+  - Impact: Improved title text rendering quality, avoided excessive truncation
+- Related files:
+  - `modules/semantic_analyzer.py`
+  - `modules/aiping_semantic_analyzer.py`
+  - `modules/ocr/paddle_extractor.py`
+  - `modules/pdf_extractor.py`
+  - `utils/text_processing.py`
+  - `tests/test_batch_semantic_analysis.py`
+  - `tests/test_semantic_analyzer.py`
+  - `tests/test_two_phase_merge.py`
+
 ## 2026-06-10
 
 - Fixed text blocks with different alignments being incorrectly merged, causing out-of-order translation output (signature/title/list-item boundary recognition):
