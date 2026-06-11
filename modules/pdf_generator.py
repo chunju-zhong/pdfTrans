@@ -105,13 +105,15 @@ class PdfGenerator:
                     for table in translated_content.get('tables', []):
                         tables_by_page.setdefault(table.page_num, []).append(table)
 
+                    # 清空字体缓存，确保每次生成使用干净状态
+                    self.font_cache = {}
+
                     for page_num in pages_to_output:
                         original_page_idx = page_num - 1
-                        original_page = original_doc[original_page_idx]
 
-                        # 克隆原始页面到新文档
-                        new_page = new_doc.new_page(width=original_page.rect.width, height=original_page.rect.height)
-                        new_page.show_pdf_page(new_page.rect, original_doc, original_page_idx)
+                        # 使用 insert_pdf 复制原始页面到新文档（比 show_pdf_page 更高效，资源引用更合理）
+                        new_doc.insert_pdf(original_doc, from_page=original_page_idx, to_page=original_page_idx)
+                        new_page = new_doc[-1]  # 获取刚插入的页面
 
                         # 获取当前页的翻译内容
                         page_translated_blocks = blocks_by_page.get(page_num)
@@ -138,8 +140,8 @@ class PdfGenerator:
                     # 在保存文档之前获取总页数
                     total_pages = len(new_doc)
 
-                    # 保存文档
-                    new_doc.save(output_pdf_path)
+                    # 保存文档（启用压缩优化：deflate压缩流、garbage清理未引用对象、clean清理冗余内容）
+                    new_doc.save(output_pdf_path, deflate=True, garbage=4, clean=True)
                 finally:
                     new_doc.close()
                 
@@ -171,8 +173,9 @@ class PdfGenerator:
         """在页面上绘制翻译后的文本，使用块级关联实现样式保留
         
         核心逻辑：
-        1. 直接使用translated_blocks中文本块自带的样式信息
-        2. 按原文样式（字体、大小、颜色、位置）渲染翻译文本
+        1. 第一遍遍历：收集所有需要 redact 的区域，添加 redaction 标注
+        2. 执行 apply_redactions 一次性删除原文（比白色矩形遮盖更彻底，减少PDF体积）
+        3. 第二遍遍历：按原文样式（字体、大小、颜色、位置）渲染翻译文本
         
         Args:
             page (fitz.Page): PDF页面对象
@@ -187,7 +190,27 @@ class PdfGenerator:
         
         logger.info(f"开始绘制翻译文本V2，共 {total_blocks} 个完整文本块")
         
-        # 处理每个完整文本块
+        # ========== 第一遍：添加 redaction 标注，标记需要删除的原文区域 ==========
+        for block_idx, full_block in enumerate(full_text_blocks):
+            block_bbox = full_block.block_bbox
+            original_font_size = full_block.font_size
+            rect = fitz.Rect(block_bbox[0], block_bbox[1], block_bbox[2], block_bbox[3])
+
+            bg_padding = max(3, min(original_font_size * 0.4, 8))
+            bg_rect = fitz.Rect(
+                max(rect.x0 - bg_padding, 0),
+                max(rect.y0 - bg_padding, 0),
+                min(rect.x1 + bg_padding, page.rect.width),
+                min(rect.y1 + bg_padding, page.rect.height)
+            )
+            page.add_redact_annot(bg_rect, fill=(1, 1, 1))
+            logger.debug(f"添加 redaction 标注，区域: {bg_rect} (padding={bg_padding:.1f})")
+
+        # 一次性执行 redaction，真正删除原文（不删除图片）
+        page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+        logger.info(f"已执行 redaction 删除原文，共处理 {total_blocks} 个文本块区域")
+
+        # ========== 第二遍：插入翻译文本 ==========
         for block_idx, full_block in enumerate(full_text_blocks):
             logger.info(f"处理完整文本块 {block_idx+1}/{total_blocks}")
             
@@ -208,20 +231,22 @@ class PdfGenerator:
             logger.info(f"使用文本块自带样式: 字体='{original_font}', 大小={original_font_size}, 粗体={bold}, 斜体={italic}")
 
             # 计算原文行高倍率，确保翻译文本行高与原文一致
-            # 使用迭代收敛方法：初始假设行高=1.2，反复估算行数→计算行高→更新估算
             bbox_height = block_bbox[3] - block_bbox[1]
             if original_font_size > 0 and bbox_height > 0:
-                original_lineheight = 1.2  # 初始假设（拉丁字体典型行高）
-                for _iter in range(3):  # 3次迭代通常足够收敛
-                    estimated_lines = max(1, round(bbox_height / (original_font_size * original_lineheight)))
-                    original_lineheight = bbox_height / (original_font_size * estimated_lines)
-                # 下限保护：行高倍率不小于1.0
-                original_lineheight = max(1.0, original_lineheight)
+                # 保守估算：假设原文只有1行（适用于标题等短文本）
+                # 对于长文本，bbox_height 通常足够容纳多行
+                estimated_lines = max(1, round(bbox_height / (original_font_size * 1.2)))
+                
+                # 计算行高倍率
+                original_lineheight = bbox_height / (original_font_size * estimated_lines)
+                
+                # 上下限保护：行高倍率在合理范围内
+                original_lineheight = max(1.0, min(original_lineheight, 2.0))
+                
+                logger.info(f"原文行高倍率: {original_lineheight:.3f} (bbox高度={bbox_height:.1f}, 字体大小={original_font_size:.1f}, 估算行数={estimated_lines})")
             else:
                 original_lineheight = 1.2  # 默认值
                 estimated_lines = 0
-
-            logger.info(f"原文行高倍率: {original_lineheight:.3f} (bbox高度={bbox_height:.1f}, 字体大小={original_font_size:.1f}, 估算行数={estimated_lines})")
 
             # 修复颜色转换逻辑
             if color > 0xFFFFFF:  # 带alpha通道的ARGB格式 0xAARRGGBB
@@ -255,16 +280,6 @@ class PdfGenerator:
             rect = fitz.Rect(block_bbox[0], block_bbox[1], block_bbox[2], block_bbox[3])
             logger.debug(f"文本框尺寸: {rect.width}x{rect.height}")
 
-            bg_padding = max(3, min(original_font_size * 0.4, 8))
-            bg_rect = fitz.Rect(
-                max(rect.x0 - bg_padding, 0),
-                max(rect.y0 - bg_padding, 0),
-                min(rect.x1 + bg_padding, page.rect.width),
-                min(rect.y1 + bg_padding, page.rect.height)
-            )
-            page.draw_rect(bg_rect, color=(1, 1, 1), fill=True, width=0)
-            logger.debug(f"绘制背景色覆盖原文，区域: {bg_rect} (padding={bg_padding:.1f})")
-
             if getattr(full_block, 'is_formula', False) and full_block.block_text:
                 try:
                     img_buf = self._render_formula_image(full_block.block_text, fontsize=original_font_size)
@@ -281,7 +296,12 @@ class PdfGenerator:
             max_attempts = 5
             success = False
             current_rect = rect
-            
+
+            # 记录文本渲染尝试的初始参数
+            logger.info(f"[文本渲染] 开始尝试渲染，文本框尺寸: 宽度={current_rect.width:.1f}, 高度={current_rect.height:.1f}")
+            logger.info(f"[文本渲染] 原始字体大小: {original_font_size:.1f}, 行高倍率: {original_lineheight:.3f}")
+            logger.info(f"[文本渲染] 文本内容长度: {len(translated_text)} 字符")
+
             for attempt in range(1, max_attempts + 1):
                 try:
                     # 计算当前尝试的字体大小调整策略
@@ -292,9 +312,10 @@ class PdfGenerator:
                         reduction_factor = (attempt - 1) * 0.1
                         adjusted_font_size = original_font_size * (1 - reduction_factor)
                         adjusted_font_size = max(adjusted_font_size, original_font_size * 0.7)  # 不小于原大小的70%
-                    
-                    logger.debug(f"尝试绘制文本，字体: {suitable_font}, 字体大小: {adjusted_font_size}, 文本框: {current_rect}")
-                    
+
+                    logger.info(f"[文本渲染] 第 {attempt} 次尝试: 字体大小={adjusted_font_size:.1f} (原始={original_font_size:.1f}, 调整比例={(adjusted_font_size/original_font_size):.0%})")
+                    logger.info(f"[文本渲染] 第 {attempt} 次尝试: 文本框尺寸=宽度={current_rect.width:.1f}, 高度={current_rect.height:.1f}, 行高倍率={original_lineheight:.3f}")
+
                     # 尝试绘制文本
                     result = page.insert_textbox(
                         current_rect,
@@ -305,6 +326,8 @@ class PdfGenerator:
                         align=alignment,
                         lineheight=original_lineheight
                     )
+
+                    logger.info(f"[文本渲染] 第 {attempt} 次尝试结果: 返回值={result}, 成功={result >= 0}")
 
                     if result >= 0:
                         logger.info(f"[OK] 文本渲染成功，插入了 {result} 个字符，使用字体大小: {adjusted_font_size}，文本框大小: {current_rect}")
@@ -345,39 +368,105 @@ class PdfGenerator:
                         break
 
             if not success:
-                truncated_text = translated_text
-                min_font_size = original_font_size * 0.5
-                ellipsis = "..."
-                max_truncation_attempts = 10
-                for trunc_attempt in range(1, max_truncation_attempts + 1):
-                    ratio = 1.0 - trunc_attempt * 0.1
-                    if ratio <= 0.1:
-                        break
-                    truncated_text = translated_text[:max(1, int(len(translated_text) * ratio))]
-                    if not truncated_text.endswith(ellipsis):
-                        truncated_text = truncated_text.rstrip() + ellipsis
+                # 在截断之前，先尝试调整行高倍率
+                logger.info(f"[行高调整] 尝试调整行高倍率以避免截断")
+                for lineheight_attempt in [1.5, 1.8, 2.0]:
+                    logger.info(f"[行高调整] 尝试行高倍率={lineheight_attempt}")
                     try:
                         result = page.insert_textbox(
                             current_rect,
-                            truncated_text,
+                            translated_text,
                             fontname=suitable_font,
                             fontsize=min_font_size,
                             color=rgb_color,
                             align=alignment,
-                            lineheight=original_lineheight
+                            lineheight=lineheight_attempt
                         )
                         if result >= 0:
-                            logger.warning(
-                                f"截断文本后渲染成功: 原始长度={len(translated_text)}, "
-                                f"截断后长度={len(truncated_text)}, 截断比例={ratio:.0%}, "
-                                f"字体大小={min_font_size:.1f}"
-                            )
+                            logger.info(f"[OK] 调整行高倍率到{lineheight_attempt}后渲染成功")
                             success = True
                             break
-                        logger.debug(f"截断到{ratio:.0%}仍溢出，继续截断")
+                        logger.debug(f"行高倍率{lineheight_attempt}仍溢出，继续尝试")
                     except Exception as e:
-                        logger.warning(f"截断文本绘制失败: {e}")
+                        logger.warning(f"行高调整尝试失败: {e}")
                         break
+
+            if not success:
+                logger.warning(f"[智能截断] 所有尝试失败，开始智能截断")
+                logger.warning(f"[智能截断] 文本框尺寸: 宽度={current_rect.width:.1f}, 高度={current_rect.height:.1f}")
+                logger.warning(f"[智能截断] 使用最小字体大小: {min_font_size:.1f}, 行高倍率: {original_lineheight:.3f}")
+                
+                # 按单词边界截断，而不是机械按比例
+                words = translated_text.split()
+                if len(words) > 1:
+                    for word_count in range(len(words) - 1, max(1, len(words) // 10), -1):
+                        truncated_text = ' '.join(words[:word_count]) + '...'
+                        logger.info(f"[智能截断] 尝试保留{word_count}个单词: '{truncated_text[:50]}...'")
+                        try:
+                            result = page.insert_textbox(
+                                current_rect,
+                                truncated_text,
+                                fontname=suitable_font,
+                                fontsize=min_font_size,
+                                color=rgb_color,
+                                align=alignment,
+                                lineheight=original_lineheight
+                            )
+                            if result >= 0:
+                                logger.warning(
+                                    f"[智能截断成功] 截断文本后渲染成功: 原始单词数={len(words)}, "
+                                    f"截断后单词数={word_count}, 截断比例={word_count/len(words):.0%}, "
+                                    f"字体大小={min_font_size:.1f}, 文本框尺寸=宽度={current_rect.width:.1f}, 高度={current_rect.height:.1f}"
+                                )
+                                success = True
+                                break
+                        except Exception as e:
+                            logger.warning(f"智能截断绘制失败: {e}")
+                            break
+                
+                # 如果智能截断也失败，回退到机械截断（但限制最小比例）
+                if not success:
+                    logger.warning(f"[机械截断] 智能截断失败，回退到机械截断")
+                    truncated_text = translated_text
+                    ellipsis = "..."
+                    max_truncation_attempts = 10
+                    for trunc_attempt in range(1, max_truncation_attempts + 1):
+                        ratio = 1.0 - trunc_attempt * 0.1
+                        if ratio < 0.3:  # 至少保留30%
+                            logger.warning(f"[机械截断] 达到最小比例限制(30%)，停止截断")
+                            break
+                        truncated_text = translated_text[:max(1, int(len(translated_text) * ratio))]
+                        if not truncated_text.endswith(ellipsis):
+                            truncated_text = truncated_text.rstrip() + ellipsis
+                        
+                        # 记录截断尝试的详细信息
+                        logger.info(f"[机械截断] 第 {trunc_attempt} 次截断尝试: 截断比例={ratio:.0%}")
+                        logger.info(f"[机械截断] 截断后文本预览: '{truncated_text[:50]}...' (长度={len(truncated_text)})")
+                        logger.info(f"[机械截断] 文本框尺寸: 宽度={current_rect.width:.1f}, 高度={current_rect.height:.1f}, 字体大小={min_font_size:.1f}")
+                        
+                        try:
+                            result = page.insert_textbox(
+                                current_rect,
+                                truncated_text,
+                                fontname=suitable_font,
+                                fontsize=min_font_size,
+                                color=rgb_color,
+                                align=alignment,
+                                lineheight=original_lineheight
+                            )
+                            if result >= 0:
+                                logger.warning(
+                                    f"[机械截断成功] 截断文本后渲染成功: 原始长度={len(translated_text)}, "
+                                    f"截断后长度={len(truncated_text)}, 截断比例={ratio:.0%}, "
+                                    f"字体大小={min_font_size:.1f}, 文本框尺寸=宽度={current_rect.width:.1f}, 高度={current_rect.height:.1f}, "
+                                    f"行高倍率={original_lineheight:.3f}, 截断后文本预览='{truncated_text[:50]}...'"
+                                )
+                                success = True
+                                break
+                            logger.debug(f"截断到{ratio:.0%}仍溢出，继续截断")
+                        except Exception as e:
+                            logger.warning(f"截断文本绘制失败: {e}")
+                            break
 
             if not success:
                 logger.warning(f"所有尝试（含截断）均失败，跳过文本块绘制: '{translated_text[:50]}...'")
@@ -386,6 +475,9 @@ class PdfGenerator:
     
     def _get_suitable_font(self, page, original_font, target_lang):
         """获取适合目标语言的字体
+
+        使用 font_cache 缓存字体查找结果，避免重复的文件系统查找和兼容性检测。
+        缓存 key 为 (original_font, target_lang)，value 为 (fontname, fontfile)。
 
         Args:
             page (fitz.Page): PDF页面对象
@@ -399,6 +491,24 @@ class PdfGenerator:
             ValueError: 当找不到适合目标语言的字体时抛出
         """
         logger.info(f"获取适合字体: 原字体='{original_font}', 目标语言='{target_lang}'")
+
+        # 检查缓存
+        cache_key = (original_font, target_lang)
+        if cache_key in self.font_cache:
+            cached_fontname, cached_fontfile = self.font_cache[cache_key]
+            logger.info(f"字体缓存命中: fontname='{cached_fontname}', fontfile='{cached_fontfile}'")
+            # 缓存命中时仍需调用 insert_font 确保当前页面引用了该字体
+            try:
+                if cached_fontfile:
+                    page.insert_font(fontname=cached_fontname, fontfile=cached_fontfile)
+                else:
+                    page.insert_font(fontname=cached_fontname, fontfile=None)
+            except Exception as e:
+                logger.warning(f"缓存字体插入当前页面失败，将重新查找: {e}")
+                # 插入失败则从缓存移除，继续正常查找
+                del self.font_cache[cache_key]
+            else:
+                return cached_fontname
         
         # 1. 检查是否有预先加载的字体
         if original_font:
@@ -408,6 +518,7 @@ class PdfGenerator:
                 # 检查原始字体是否支持目标语言字符
                 if self._check_embedded_font_support(page, original_font, target_lang):
                     logger.info(f"原始字体 '{original_font}' 支持目标语言 '{target_lang}'，直接使用")
+                    self.font_cache[cache_key] = (original_font, None)
                     return original_font
                 else:
                     logger.info(f"原始字体 '{original_font}' 不支持目标语言 '{target_lang}'，跳过")
@@ -433,6 +544,7 @@ class PdfGenerator:
                         fontname = "arialuni"
                         page.insert_font(fontname=fontname, fontfile=font_path)
                         logger.info(f"成功使用Arial Unicode字体作为 '{fontname}'")
+                        self.font_cache[cache_key] = (fontname, font_path)
                         return fontname
                     except Exception as e:
                         logger.error(f"Arial Unicode字体插入失败: {e}")
@@ -466,6 +578,7 @@ class PdfGenerator:
                     # 尝试插入字体
                     page.insert_font(fontname=fontname, fontfile=font_path)
                     logger.info(f"成功使用系统字体 '{font_filename}' 作为 '{fontname}'")
+                    self.font_cache[cache_key] = (fontname, font_path)
                     return fontname
                 except Exception as e:
                     logger.warning(f"系统字体 '{os.path.basename(font_path)}' 插入失败: {e}")
@@ -559,7 +672,58 @@ class PdfGenerator:
         suitable_font = self._get_suitable_font(page, 'GoogleSansText-Regular', target_lang)
         logger.info(f"适合的字体: 目标语言='{target_lang}', 选择='{suitable_font}'")
 
-        # 绘制单元格背景和文本
+        # ========== 第一遍：添加 redaction 标注，标记需要删除的单元格原文区域 ==========
+        for i, row in enumerate(table_cells):
+            for j, cell in enumerate(row):
+                if cell is None:
+                    continue
+
+                # 获取单元格 bbox
+                if isinstance(cell, dict):
+                    cell_bbox = cell.get('bbox')
+                elif hasattr(cell, 'bbox'):
+                    cell_bbox = cell.bbox
+                else:
+                    cell_bbox = None
+
+                # 计算单元格矩形区域
+                if cell_bbox and not (cell_bbox[0] == 0 and cell_bbox[1] == 0 and cell_bbox[2] == 0 and cell_bbox[3] == 0):
+                    x0, y0, x1, y1 = cell_bbox
+                    if x1 - x0 <= 0 or y1 - y0 <= 0:
+                        cell_bbox = None
+
+                if cell_bbox is None:
+                    if table_bbox and row_heights and col_widths:
+                        x0 = table_x0 + sum(col_widths[:j])
+                        y0 = table_y0 + sum(row_heights[:i])
+                        row_span = getattr(cell, 'row_span', 1) if hasattr(cell, 'row_span') else 1
+                        col_span = getattr(cell, 'col_span', 1) if hasattr(cell, 'col_span') else 1
+                        cell_width = sum(col_widths[j:j + col_span]) if j + col_span <= len(col_widths) else col_widths[j] if j < len(col_widths) else 100
+                        cell_height = sum(row_heights[i:i + row_span]) if i + row_span <= len(row_heights) else row_heights[i] if i < len(row_heights) else 30
+                        x1 = x0 + cell_width
+                        y1 = y0 + cell_height
+                    else:
+                        cell_width = (table_x1 - table_x0) / n_cols if n_cols > 0 else 100
+                        cell_height = (table_y1 - table_y0) / n_rows if n_rows > 0 else 30
+                        x0 = table_x0 + j * cell_width
+                        y0 = table_y0 + i * cell_height
+                        x1 = x0 + cell_width
+                        y1 = y0 + cell_height
+
+                cell_bg_rect = fitz.Rect(
+                    max(x0 - 2, 0),
+                    y0,
+                    min(x1 + 2, page.rect.width),
+                    y1
+                )
+                page.add_redact_annot(cell_bg_rect, fill=(1, 1, 1))
+
+        # 一次性执行 redaction，真正删除单元格原文（不删除图片）
+        page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+        logger.info(f"[表格绘制] 已执行 redaction 删除单元格原文")
+
+        # ========== 第二遍：插入翻译文本 ==========
+        # 绘制单元格文本
         for i, row in enumerate(table_cells):
             for j, cell in enumerate(row):
                 # 跳过被合并覆盖的位置
@@ -608,18 +772,6 @@ class PdfGenerator:
                 rect = fitz.Rect(x0, y0, x1, y1)
                 cell_height = y1 - y0
                 cell_width = x1 - x0
-
-                # 绘制单元格背景
-                try:
-                    cell_bg_rect = fitz.Rect(
-                        max(rect.x0 - 2, 0),
-                        rect.y0,
-                        min(rect.x1 + 2, page.rect.width),
-                        rect.y1
-                    )
-                    page.draw_rect(cell_bg_rect, color=(1, 1, 1), fill=True, width=0)
-                except Exception as e:
-                    logger.error(f"绘制单元格 ({i+1},{j+1}) 背景异常: {str(e)}")
 
                 # 绘制单元格文本
                 if cell_text:
