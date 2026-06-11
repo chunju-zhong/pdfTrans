@@ -1,0 +1,3 @@
+- [ ] OMP_NUM_THREADS 固定为 1
+- [ ] MKL_NUM_THREADS 和 OPENBLAS_NUM_THREADS 保留可配置
+- [ ] 语法检查通过

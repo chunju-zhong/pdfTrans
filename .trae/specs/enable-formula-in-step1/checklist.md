@@ -1,0 +1,13 @@
+- [x] 步骤1管线创建时 use_formula=True
+- [x] 步骤1内存不足时回退到 use_formula=False 并记录警告
+- [x] 步骤1 _process_page_layout 能从 formula_res_list 提取 LaTeX 并生成 is_formula=True 的 TextBlock
+- [x] formula/formula_number 标签的块不再被忽略，而是正确生成公式 TextBlock
+- [x] 步骤3公式识别代码已完全移除
+- [x] _process_page_formulas 方法已删除
+- [x] 步骤编号已更新（原步骤4→步骤3）
+- [x] MEMORY_CAP_LAYOUT 调整为 1800MB
+- [x] system_profiler.py 中 cap_layout 对应调整
+- [x] pdf_extractor.py 中 _low_memory_skip_formula 逻辑已移除
+- [x] ocr_worker.py 中 skip_formula 参数传递逻辑已清理
+- [ ] 行内公式页面（如第34页）步骤1能检测到 formula 标签
+- [x] 内存不足时优雅降级，不影响其他步骤

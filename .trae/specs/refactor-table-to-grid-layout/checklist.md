@@ -1,0 +1,7 @@
+- [x] `_compute_table_grid` 方法正确计算每行统一行高和每列统一列宽
+- [x] 同一行内所有单元格的 bbox 具有相同的 y0 和 y1（行高一致）
+- [x] 同一列内所有单元格的 bbox 具有相同的 x0 和 x1（列宽一致）
+- [x] 单元格 bbox 转换为 PDF 坐标
+- [x] `PdfTable.row_heights` 和 `PdfTable.col_widths` 已设置（PDF 点单位）
+- [x] 语法检查和单元测试通过
+- [ ] PDF 输出中表格字体大小一致、线条整齐（需要用户提供测试 PDF 运行验证）

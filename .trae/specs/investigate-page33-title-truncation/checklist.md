@@ -1,0 +1,6 @@
+- [x] pdf_generator.py 截断日志记录文本框尺寸、字体大小、行高等参数
+- [x] pdf_generator.py 截断日志记录每次尝试的结果
+- [x] pdf_generator.py 截断日志记录截断比例和文本内容预览
+- [x] 第33页标题截断根因已确定（OCR导入错误导致文本块提取失败）
+- [x] 截断策略已优化，避免过度截断
+- [x] OCR导入错误已修复（detect_text_block_alignment 已添加到文件顶部导入）

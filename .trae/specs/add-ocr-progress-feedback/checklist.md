@@ -1,0 +1,8 @@
+- [x] _run_ocr_once 新增 progress_callback 参数，STEP_START/STEP_PROGRESS/STEP_COMPLETE 时调用回调
+- [x] run_ocr_in_subprocess 新增 progress_callback 参数，透传给 _run_ocr_once
+- [x] PdfExtractor.extract 新增 progress_callback 参数，OCR 模式下传递给 run_ocr_in_subprocess
+- [x] 分批 OCR 时 progress_callback 包装批次信息（第X/Y批）
+- [x] translation_service 中 OCR 模式下创建 progress_callback 桥接 Task.update_phase_progress
+- [x] 进度百分比计算正确（批次进度 × 步骤内进度权重）
+- [x] 进度消息格式：单批 "OCR提取: 步骤名 X/Y页"，分批 "OCR提取: 第A/B批 - 步骤名 X/Y页"
+- [x] 非 OCR 模式下进度显示不受影响

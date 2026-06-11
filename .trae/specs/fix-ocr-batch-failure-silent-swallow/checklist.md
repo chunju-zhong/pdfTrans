@@ -1,0 +1,12 @@
+- [x] _merge_batch_results 新增 all_page_nums 参数，返回 (PdfExtraction, missing_pages) 元组
+- [x] 缺失页码计算正确：all_page_nums 中不在任何 valid_result.pages 中的页码
+- [x] PdfExtractor.extract 所有返回路径统一返回 (PdfExtraction, list[int]) 元组
+- [x] OCR 分批路径传递 all_page_nums 给 _merge_batch_results
+- [x] OCR 单批路径返回 (result, [])
+- [x] 非 OCR 路径收集 _process_page 失败的页码到 failed_pages
+- [x] translation_service 适配 extract() 返回的元组
+- [x] missing_pages 非空时调用 task.add_warning() 通知用户
+- [x] missing_pages 包含所有目标页面时返回 None
+- [x] "页面无正文块"警告同时调用 task.add_warning()
+- [x] process_translation_sync 中的 extract() 调用也适配新返回值
+- [x] glossary_service.py 中的 extract() 调用适配新返回值

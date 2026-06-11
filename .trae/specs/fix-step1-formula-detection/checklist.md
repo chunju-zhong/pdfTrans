@@ -1,0 +1,3 @@
+- [x] 步骤1管线创建时 use_formula=True
+- [x] 步骤1版面分析能检测到 formula/formula_number 标签
+- [x] 步骤3公式识别在有公式的页面上被正确触发

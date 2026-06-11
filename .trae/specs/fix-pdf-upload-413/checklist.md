@@ -1,0 +1,6 @@
+- [x] config.py 中 MAX_CONTENT_LENGTH 已改为 500MB
+- [x] app.py 中注册了 413 错误处理器，返回 JSON 格式响应
+- [x] main.js 中 getPdfPageCount 上传前校验文件大小，超限显示提示且不发送请求
+- [x] main.js 中 getPdfPageCount 对 413 状态码做专门处理，显示友好提示
+- [x] main.js 中翻译提交逻辑添加文件大小校验和 413 处理
+- [x] 上传超过 500MB 的文件时，前端显示友好提示而非 413 错误页面

@@ -1,0 +1,9 @@
+- [x] `config.py` 的 `AIPING_EXTRA_BODY` 包含 `"enable_thinking": False`
+- [x] `config.py` 新增 `SILICON_FLOW_EXTRA_BODY = {"enable_thinking": False}` 配置项
+- [x] `modules/glossary_extractor.py` 的 `SiliconFlowGlossaryExtractor` 使用 `config.SILICON_FLOW_EXTRA_BODY`
+- [x] `modules/semantic_analyzer.py` 基类使用 `config.SILICON_FLOW_EXTRA_BODY`
+- [x] `modules/markdown_generator.py` 基类 `MarkdownGenerator._call_api` 使用 `config.SILICON_FLOW_EXTRA_BODY`
+- [x] `aiping_translator.py` 的 `temperature` 调整为 0.7，`top_p` 调整为 0.8（匹配 Qwen3 非思考模式推荐参数）
+- [x] `aiping_translator.py` 在流式响应处理中统计 `reasoning_content` 长度
+- [x] `aiping_translator.py` 在 `translated_text` 为空时记录 WARNING 日志
+- [ ] 翻译请求不再返回与原文相同的结果（Qwen3 思考模式已禁用）

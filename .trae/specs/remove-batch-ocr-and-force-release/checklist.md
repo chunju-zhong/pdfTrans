@@ -1,0 +1,7 @@
+- [x] `_force_release_memory` 方法已从 `PaddleExtractor` 中完全移除
+- [x] `_force_release_memory` 的所有调用点已移除，`del pipeline` + `gc.collect()` 保留
+- [x] 分批 OCR 处理逻辑已移除，所有 PDF 统一使用单次 `run_ocr_in_subprocess()` 调用
+- [x] `_merge_batch_results` 函数已移除
+- [x] `OCR_BATCH_SIZE` 配置项已从 config.py 移除
+- [x] 无用 import 已清理
+- [x] OCR 功能正常：小页数 PDF 和大页数 PDF 均能通过单次子进程调用完成提取

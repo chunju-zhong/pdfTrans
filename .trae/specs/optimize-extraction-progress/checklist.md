@@ -1,0 +1,10 @@
+- [x] PHASE_CONFIG 阶段区间已重新分配：init 0-5, extraction 5-40, semantic_merge 40-50, translation 50-85, table_translation 85-92, generation 92-98, clean 98-100
+- [x] calculate_progress 和 update_phase_progress 使用 round() 四舍五入替代整数截断
+- [x] set_error 保留当前进度值，不再归零
+- [x] _complete_task 进度流程已修正：generation 0% 在文件生成前、generation 100% 在文件生成后、clean 100% 在清理后
+- [x] 无表格时 translate_tables 直接返回空列表，不更新 table_translation 阶段进度
+- [x] 语义合并阶段有细粒度进度更新，消息格式"正在合并语义块: X/Y"
+- [x] 生成阶段有细粒度进度更新，消息格式"正在生成输出文件: PDF..."
+- [x] OCR 模式下提取阶段进度在 5-40% 区间内平滑推进
+- [x] 非 OCR 模式下提取阶段快速完成，进度正常推进
+- [x] 错误发生时进度条保留当前位置，不跳回 0%

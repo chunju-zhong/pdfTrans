@@ -1,0 +1,3 @@
+- [x] `_extract_original_images` 方法已删除
+- [x] `extract_from_pdf` 中不再调用 `_extract_original_images`
+- [x] `all_images` 直接等于 `chart_seal_images`（仅 PPStructureV3 裁剪的图像）

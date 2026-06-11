@@ -1,0 +1,5 @@
+- [x] `max_allowed_end` 不小于 `start_pos`，避免负值
+- [x] `sum(original_lengths[i:])` 替换为递减变量 `remaining_original_len`
+- [x] 行高倍率使用迭代收敛方法估算，偏差 < 5%
+- [x] `roman_to_int` 文档注明不验证语法规则
+- [x] 现有测试全部通过

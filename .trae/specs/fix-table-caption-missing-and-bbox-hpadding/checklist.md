@@ -1,0 +1,12 @@
+- [x] `bg_padding` 使用 `max(3, min(original_font_size * 0.4, 8))` 计算公式
+- [x] 文本框背景水平方向也应用 padding，clamp 到页面边界
+- [x] 小字体（6pt）padding = 3pt 最小值（代码逻辑验证）
+- [x] 大字体（20pt+）padding 被限制在 8pt 最大值（代码逻辑验证）
+- [x] 表格单元格白色背景水平方向添加了 `2pt` padding，clamp 到页面边界
+- [x] 表格单元格边框不受 padding 影响，仍使用原始单元格边界
+- [x] 使用 `overall_ocr_res` textline 数据检测未被任何 LayoutBlock 覆盖的漏检文本（代码实现、诊断日志）
+- [x] `figure_caption` 标签文本被提取为 `TextBlock`（代码实现、诊断日志）
+- [x] 漏检文本按垂直邻近关系聚合，创建为 `TextBlock` 并加入翻译队列（代码实现）
+- [ ] PDF 输出中表格标题/脚注等漏检文本已被翻译（需要端到端运行验证）
+- [ ] PDF 输出中文本框背景完全覆盖原文，右侧边缘无残留（需要端到端运行验证）
+- [ ] PDF 输出中表格框背景完全覆盖原表格区域（需要端到端运行验证）

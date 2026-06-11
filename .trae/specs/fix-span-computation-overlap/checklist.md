@@ -1,0 +1,3 @@
+- [x] compute_span_from_none_positions 向下扫描验证整行段均为 None
+- [x] 相邻合并单元格的 None 不被误归为其他单元格的 row_span
+- [x] 编译通过，测试无回归

@@ -1,0 +1,7 @@
+- [x] system_profiler.py 中已移除 3600 秒硬编码上限，compute_timeout_params 不再截断 max_total_time
+- [x] run_ocr_in_subprocess 中使用 config.OCR_MAX_TOTAL_TIME 作为超时上限
+- [x] config.py 中 OCR_MAX_TOTAL_TIME 已改为 7200 秒
+- [x] _run_ocr_once 中收到 step_progress 时根据已完成页数动态延长超时
+- [x] 动态延长有上限（config.OCR_MAX_TOTAL_TIME * 2），防止无限延长
+- [x] _degrade_params 中每次重试增加 50% 超时预算
+- [x] 重试循环中使用降级后的 max_total_time

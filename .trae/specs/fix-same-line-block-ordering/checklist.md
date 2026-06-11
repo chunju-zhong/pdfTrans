@@ -1,0 +1,38 @@
+- [x] TextBlock 模型包含 alignment 属性（0=左, 1=中, 2=右），默认 0
+- [x] TextBlock.from_dict/to_dict 包含 alignment 属性
+- [x] coordinate_utils.py 新增 detect_text_block_alignment 函数
+- [x] 右对齐文本块被检测为 alignment=2
+- [x] 居中文本块被检测为 alignment=1
+- [x] 左对齐文本块被检测为 alignment=0
+- [x] 非 OCR 路径提取时设置 TextBlock.alignment
+- [x] OCR 路径提取时设置 TextBlock.alignment
+- [x] merge_semantic_blocks 中不同 alignment 的块不合并
+- [x] merge_semantic_blocks_with_llm 中不同 alignment 的块不合并
+- [x] merge_semantic_blocks_with_llm_two_phase 中不同 alignment 的块不合并
+- [x] PDF 生成使用 TextBlock.alignment 替代硬编码 alignment=0
+- [x] 对齐检测优先级：左/右对齐优先于居中（修复左右对称布局误判）
+- [x] 左对齐阈值调整为 15%（与右对齐一致）
+- [x] 居中检测前提：不满足左/右对齐条件时才判定居中
+- [x] 左右对称布局中左对齐标题（x0/width < 15%）被检测为 alignment=0
+- [x] 左右对称布局中右对齐正文（(width-x1)/width < 15%）被检测为 alignment=2
+- [x] 左对齐标题不再与右对齐正文合并
+- [x] LLM 提示词包含语义角色判断（正文/标题/签名行/列表项）
+- [x] LLM 提示词包含签名行边界 few-shot 示例（—Name 后不与新引用合并）
+- [x] LLM 提示词包含列表项边界 few-shot 示例（列表项之间不合并）
+- [x] LLM 提示词包含标题边界 few-shot 示例（标题后正文不合并）
+- [x] 签名行不与下一个引用的正文合并（LLM 返回 merge=false）— 日志验证通过：对3(Jay签名→Megan正文)=false, 对5(Megan签名→Madhav正文)=false
+- [x] 同一引用内的句子延续正确合并（LLM 返回 merge=true）— 日志验证通过：对6(Madhav正文→续行)=true
+- [x] 第3页右对齐文本翻译后语序正确（各引用独立，签名行与正文不交叉）— 截图验证通过，7个合并块全部独立
+- [ ] 第2页右对齐正文翻译后语序正确
+- [ ] 拆分后文本块 bbox 不越界（x1 ≤ 原始块 x1 或页面宽度）
+- [ ] Madhav 引用末句 "涵盖了该领域所有重要的理念与实用知识。" 位置正常（不超出页面右边界）
+- [x] LLM 提示词包含段落边界 few-shot 示例（完整段落之间不合并）
+- [x] LLM 提示词"进一步判断"标准包含段落边界检测规则（终结标点 + 大写开头 + 话题转换）
+- [x] 单对提示词同步包含段落边界示例和规则
+- [ ] 第22页 Acknowledgments 各感谢段落独立不被合并（块2/3/4 分别为独立合并块）
+- [x] split_translated_result() 的"分段长度平衡调整"步骤已移除（该步骤从最后一个块尾部提取文本均匀分配到前面各块，破坏语序）
+- [ ] 第22页拆分结果不再出现语序错乱
+- [x] LLM 提示词 few-shot 示例根据 source_lang 动态选择对应语言
+- [x] LLM 提示词规则描述为语言无关（不依赖大小写等英文特有概念）
+- [x] 签名行特征描述覆盖多语言格式
+- [ ] 英文源语言下提示词效果不变（回归测试）

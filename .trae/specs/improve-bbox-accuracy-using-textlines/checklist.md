@@ -1,0 +1,9 @@
+- [ ] `_compute_tight_bbox` 方法已实现，匹配逻辑与 `_build_text_from_textlines` 一致
+- [ ] 文本块处理中使用 tight bbox 替代原始 layout bbox（有数据时）
+- [ ] textline 数据不足时回退到原始 `block.bbox`
+- [ ] tight bbox 宽度超过 layout bbox 30% 时截断
+- [ ] 表格单元格有精确 bbox（非全部 `(0,0,0,0)`）
+- [ ] 表格单元格无匹配 textline 时使用近似区域 bbox
+- [ ] PDF 输出中文本框右侧无原文残影
+- [ ] PDF 输出中表格底部无原文残影
+- [ ] 与 padding 配合使用效果协调（不重叠、不漏白）

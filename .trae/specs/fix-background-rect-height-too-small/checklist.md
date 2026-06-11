@@ -1,0 +1,6 @@
+- [x] 白色背景矩形上下各扩展 font_size * 0.3 的 padding
+- [x] 背景矩形不超出页面边界（clamp y0 >= 0, y1 <= page.rect.height）
+- [x] 文本插入使用原始 block_bbox（未扩展的矩形）
+- [x] 文本溢出调整仍基于原始 block_bbox
+- [x] 语义合并时 max_height 改为 curr_bbox[3] - first_bbox[1]（累加而非取最大值）
+- [x] max_width 逻辑不受影响（仍取最大值）

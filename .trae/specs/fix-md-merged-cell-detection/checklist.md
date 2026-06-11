@@ -1,0 +1,5 @@
+- [ ] span_map 为空但 data 有 None 时，基于 data 的 None 分布重新计算 span
+- [ ] 补充的 span 正确设置到 PdfCell 的 row_span/col_span
+- [ ] 被合并位置正确标记为 None
+- [ ] 语法检查通过
+- [ ] 第22页表格合并单元格被正确检测，Markdown 输出使用 HTML 格式

@@ -1,0 +1,14 @@
+- [x] set_result 根据 task_type 显示"翻译完成！"或"术语提取完成！"
+- [x] cancel 根据 task_type 显示"翻译已取消"或"术语提取已取消"
+- [x] process_translation_sync 中 progress_callback 从 task.progress 读取，与 PHASE_CONFIG 对齐
+- [x] app.py glossary 错误处理使用 set_error 方法
+- [x] clean 阶段 100% 消息为"临时文件清理完成"
+- [x] _create_translators 不设置 translation 阶段进度
+- [x] _translate_content 不预设 translation 5% 进度，避免进度倒退
+- [x] 跳过语义合并时不设 semantic_merge 100%
+- [x] process_translation 和 process_translation_sync 不重复设置 init 阶段
+- [x] glossary init 阶段消息为描述性消息（"文件保存完成..."/"文件检查完成..."）而非"开始提取PDF文本..."
+- [x] glossary pdf_extraction 阶段有 0% 起始进度
+- [x] glossary 服务不重复设置 init 阶段
+- [x] extract_glossary_sync 中 progress_callback 从 task.progress 读取
+- [x] CLI 模式进度与 Web 模式进度一致

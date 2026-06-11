@@ -1,0 +1,6 @@
+- [x] compute_span_from_none_positions 向右扫描验证整列段均为 None
+- [x] (4,1) 的 col_span 正确检测（基于 None 位置推断）
+- [x] (3,2) 和 (3,3) 的 row_span=3 仍正确检测
+- [x] 遮挡逻辑排除合并单元格边界位置（画线优先于不画线）
+- [x] bbox_matrix None 分布日志已添加
+- [x] 编译通过，测试无回归

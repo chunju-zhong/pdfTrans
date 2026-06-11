@@ -1,0 +1,11 @@
+- [x] 使用 `insert_pdf` 替代 `show_pdf_page` + `new_page` 复制页面，新文档页面内容流可直接操作
+- [x] `_draw_translated_text` 使用 redaction 标注替代白色矩形遮盖，原文被真正删除而非视觉覆盖
+- [x] `_draw_translated_table` 使用 redaction 标注替代白色矩形遮盖，单元格原文被真正删除
+- [x] redaction 执行顺序正确：先添加所有标注 → apply_redactions → 再插入翻译文本
+- [x] `apply_redactions` 使用 `images=fitz.PDF_REDACT_IMAGE_NONE` 不误删页面图片
+- [x] `self.font_cache` 被正确使用，相同 `(original_font, target_lang)` 组合不重复执行文件系统查找
+- [x] 缓存命中时仍调用 `page.insert_font()` 确保当前页面引用字体
+- [x] `generate_pdf` 开始时清空 `self.font_cache`
+- [x] `save()` 调用包含 `deflate=True, garbage=4, clean=True` 参数
+- [ ] 翻译后 PDF 体积显著缩小（1 页从 23MB 降至 5MB 以内）
+- [ ] 翻译文本渲染效果与修改前一致，无布局偏移或文字丢失

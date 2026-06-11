@@ -1,0 +1,5 @@
+- [x] `split_translated_result()` 按原始文本长度比例分配翻译文本
+- [x] 非最后一个块的分割点不超过 `translation_len - min_characters_per_block * remaining_blocks`
+- [x] 标题块、正文块都分配到与其原始长度相当的翻译文本
+- [x] 第二个块不再为空
+- [x] 现有测试全部通过

@@ -1,0 +1,4 @@
+- [x] paddle_extractor.py 中的 temp_images 清理代码已被删除
+- [x] 翻译服务层在全部输出文件生成后统一清理 temp_images（成功与异常路径均已覆盖）
+- [ ] 生成 markdown 文件中图片引用为相对路径（images_{unique_id}/xxx.png）—— 需实际运行OCR翻译验证
+- [ ] ZIP 包中的 MD 文件与 images 目录结构正确，打开后图片可正常显示 —— 需实际运行OCR翻译验证

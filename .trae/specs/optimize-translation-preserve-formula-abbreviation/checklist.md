@@ -1,0 +1,6 @@
+- [x] TextBlock 类新增 is_formula 属性，默认 False
+- [x] OCR 提取公式时设置 is_formula=True
+- [x] 翻译服务跳过 is_formula=True 的文本块，直接使用原文
+- [x] 跳过的公式块仍包含在翻译结果中用于 PDF 渲染
+- [x] 翻译提示词新增"不翻译公式"规则
+- [x] 翻译提示词新增"不解释缩写"规则

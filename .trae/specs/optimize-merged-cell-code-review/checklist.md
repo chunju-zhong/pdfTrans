@@ -1,0 +1,5 @@
+- [x] compute_span_from_none_positions 第三步不再检查 covered_by_col_span，只验证 bbox_matrix None 分布
+- [x] 遮挡边界排除逻辑精确化：只排除 col_span 上/下边框和 row_span 左/右边框
+- [x] translation_service.py 中 getattr(cell, 'row_span', 1) 重复代码已提取为辅助函数
+- [x] 所有合并单元格相关调试日志从 logger.info 降级为 logger.debug
+- [x] 现有单元测试通过，无回归

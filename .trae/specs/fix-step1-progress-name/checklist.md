@@ -1,0 +1,6 @@
+- [x] PaddleOcrExtractor 类定义了步骤常量 STEP_LAYOUT_OCR/STEP_LAYOUT_OCR_NAME/STEP_IMAGE_CROP/STEP_IMAGE_CROP_NAME
+- [x] 步骤 1 名称已改为"版面分析+文本+公式+表格"
+- [x] paddle_extractor.py 中所有 status_callback 调用使用常量引用，无硬编码步骤编号和名称
+- [x] paddle_extractor.py 中日志消息使用常量引用
+- [x] paddle_extractor.py 中内存检查的 step_name 使用常量引用
+- [x] translation_service.py 中 STEP_WEIGHTS 键引用 PaddleOcrExtractor 常量

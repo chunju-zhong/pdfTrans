@@ -1,0 +1,5 @@
+- [x] all_page_nums 使用 sorted(pages) 而非 list(pages)
+- [x] 步骤1.5单页 predict 超时保护（120秒）
+- [x] 超时后跳过该页并记录警告日志
+- [x] 超时后通过 status_callback 通知用户
+- [x] 跳过后继续处理后续页面

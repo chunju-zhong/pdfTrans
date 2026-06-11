@@ -1,0 +1,8 @@
+- [x] `Rect.intersect()` 全部替换为 `&` 运算符（pdf_extractor.py 5处、style_analyzer.py 2处）
+- [x] 累积重叠面积逻辑保留
+- [x] 空单元格 bbox 列表回退到表格整体 bbox 检测
+- [x] 表格 bbox 字符过滤逻辑保留
+- [x] 移除所有 `[DIAG]` 诊断日志
+- [x] 保留有价值的 debug 日志
+- [x] 语法检查通过
+- [x] 测试用例覆盖所有变更（13个测试全部通过）

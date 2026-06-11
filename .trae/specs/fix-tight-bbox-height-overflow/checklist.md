@@ -1,0 +1,7 @@
+- [x] _compute_tight_bbox() 高度超过布局区域 110% 时截断到布局区域内
+- [x] formula/formula_number 路径 font_size 优先使用 textline 平均高度
+- [x] figure_caption 路径 font_size 优先使用 textline 平均高度
+- [x] else 分支 font_size 优先使用 textline 平均高度
+- [x] supplement 路径 font_size 使用单个 textline 高度
+- [x] formula_res_list 路径 font_size 优先使用 textline 平均高度
+- [x] 现有测试全部通过

@@ -1,0 +1,13 @@
+- [ ] `_clean_latex()` 能修复花括号不匹配的 LaTeX（如末尾多余 `}`）
+- [ ] `_clean_latex()` 能修复常见 OCR 误识别命令（如 `\{it` → `\mathit`）
+- [ ] `_clean_latex()` 返回修复置信度标记
+- [ ] PDF 生成器公式渲染失败时自动重试修复后的 LaTeX
+- [ ] PDF 生成器修复后仍失败时降级为纯文本并标记质量低
+- [ ] DOCX 生成器公式 OMML 转换失败时自动重试修复后的 LaTeX
+- [ ] DOCX 生成器修复后仍失败时降级为纯文本
+- [ ] Markdown 生成器输出公式前验证 LaTeX 语法
+- [ ] Markdown 生成器对无法修复的公式添加 `<!-- formula-quality:low -->` 标记
+- [ ] 38页 SOTR 公式在 PDF 中渲染为图像而非截断文本
+- [ ] 38页 SOTR 公式在 Word 中以 OMML 格式正确显示
+- [ ] 38页 SOTR 公式在 Markdown 中用 `$$...$$` 包裹且语法可解析
+- [ ] 39页公式 LaTeX 花括号修复后三端正确输出

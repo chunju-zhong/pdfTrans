@@ -1,0 +1,8 @@
+- [x] Word `_add_table()` 对 col_span > 1 的单元格调用 `cell.merge()`
+- [x] Word `_add_table()` 对 row_span > 1 的单元格调用 `cell.merge()`
+- [x] Word `_add_table()` 跳过 `cell is None` 位置的文本写入
+- [x] Markdown `_convert_table_to_markdown()` 检测合并单元格
+- [x] Markdown 有合并时使用 HTML `<table>` 格式，`<td>` 添加 `colspan`/`rowspan`
+- [x] Markdown 无合并时保持管道表格格式
+- [x] 语法检查通过
+- [x] 现有测试无回归

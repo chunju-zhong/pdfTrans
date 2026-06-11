@@ -1,0 +1,9 @@
+- [x] 步骤1使用 `use_table=True` 创建 PP-StructureV3 管线
+- [x] 步骤1从 `result["table_res_list"]` 提取表格识别结果
+- [x] 表格 HTML 使用 `html_dict.get('pred', '')` 提取（键名为 `'pred'`）
+- [x] 步骤1创建 `PdfTable` 对象并添加到结果中
+- [x] 表格识别诊断日志记录 `table_res_list` 长度和 HTML 提取结果
+- [x] `_process_page_tables` 方法已移除
+- [x] 步骤2的管线创建和调用逻辑已移除
+- [x] 步骤1返回值包含 `tables` 字段
+- [ ] OCR 表格识别后输出正确的表格数量（不再为 0）

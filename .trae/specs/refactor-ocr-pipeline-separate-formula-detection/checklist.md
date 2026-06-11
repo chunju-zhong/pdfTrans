@@ -1,0 +1,11 @@
+- [x] 步骤1管线创建时 use_formula=False
+- [x] 新增步骤1.5纯公式版面分析（逐页管线模式）
+- [x] 步骤1.5检查 parsing_res_list 中 formula/formula_number 标签
+- [x] 步骤1.5更新 all_layout_results 的 has_formula
+- [x] 步骤1.5每页处理完后 del pipeline + gc.collect()（finally 块中）
+- [x] 步骤1.5可用内存 < 1.5GB 时跳过并通知用户
+- [x] 步骤1.5有进度回调（step_start/step_progress/step_complete）
+- [x] 步骤3根据步骤1.5的 has_formula 结果正确触发
+- [x] 公式识别被跳过时通知用户（status_callback + task.add_warning）
+- [x] 各步骤管线正确释放（步骤1/1.5/2/3 均使用 finally 块确保释放）
+- [x] STEP_WEIGHTS 更新支持步骤1.5（{1: 0.45, 1.5: 0.05, 2: 0.25, 3: 0.25}）

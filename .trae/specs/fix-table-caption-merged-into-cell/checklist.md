@@ -1,0 +1,14 @@
+- [ ] `extract_table_cells_by_bbox` 方案已回退，恢复使用 `table.extract()`
+- [ ] `page_table_cells` 仍从 `table.cells` 直接获取单元格 bbox
+- [ ] `separate_table_caption_and_footnote` 函数使用正则匹配 "Table/Figure X." 模式检测表格标题
+- [ ] 标题文本及其后的段落文本从单元格中分离，单元格仅保留实际表格数据
+- [ ] 如果分离后某行所有单元格为空，该行从 data 中移除
+- [ ] 跨单元格的标题文本被正确合并
+- [ ] `extract_tables_by_pymupdf` 返回值扩展为四元组 `(pdf_tables, page_tables, page_table_cells, separated_text_blocks)`
+- [ ] `pdf_extractor.py` 中 separated_text_blocks 被转换为 TextBlock 对象加入 text_blocks 列表
+- [ ] camelot 分支返回空的 separated_text_blocks
+- [ ] 测试文件适配新的四元组返回值
+- [ ] 诊断日志记录表格标题/脚注的检测和分离过程
+- [ ] PDF 输出中 "Table 5. An example of role prompting" 在表格下方正确位置翻译和渲染
+- [ ] PDF 输出中 "The above example shows..." 在表格标题下方正确位置翻译和渲染
+- [ ] 其他页面的表格正常工作（无回归）

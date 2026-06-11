@@ -1,0 +1,7 @@
+- [x] 使用 `overall_ocr_res.rec_boxes` 获取 textline 级别 bbox 高度估算字体大小
+- [x] 对每个 block，找到落在其 bbox 范围内的 textline
+- [x] 字体大小 = textline bbox 高度平均值（PDF 点坐标）* 0.75
+- [x] 回退逻辑：overall_ocr_res → LayoutBlock.num_of_lines/text_line_height → bbox_height * 0.75
+- [x] 字体大小上限为 36pt
+- [x] 公式识别字体大小上限为 36pt，系数改为 0.75
+- [x] FONT_DEBUG 日志输出 method 字段标识估算方法

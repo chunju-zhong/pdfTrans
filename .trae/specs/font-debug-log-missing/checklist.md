@@ -1,0 +1,6 @@
+- [x] PPStructureV3 构造后 root logger 的 level 被恢复为 INFO
+- [x] PPStructureV3 构造后 root logger 的 handlers 包含 FileHandler('app.log') 和 StreamHandler
+- [x] PPStructureV3 构造后 `modules.ocr.paddle_extractor` logger 的 propagate 为 True
+- [x] `modules.ocr.paddle_extractor` logger 显式设置了 level=INFO 和独立的 handlers
+- [ ] OCR 提取运行后 `app.log` 中出现 `[FONT_DEBUG]` 日志（需用户实际运行验证）
+- [ ] PPStructureV3 构造前后的所有 `paddle_extractor` INFO 日志均正常输出到 app.log（需用户实际运行验证）

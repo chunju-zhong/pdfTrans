@@ -1,0 +1,8 @@
+- [x] STEP_WEIGHTS 已调整为 {1: 0.80, 2: 0.20}，移除步骤 1.5 和 3
+- [x] step_complete 时进度推进到当前步骤的累积权重上限
+- [x] 步骤 1.5 跳过警告处理已移除
+- [x] batch_idx/total_batches 处理保留不变
+- [x] extract_from_pdf 步骤 2 发送 step_start 回调
+- [x] extract_from_pdf 步骤 2 发送 step_complete 回调
+- [x] OCR 进度在步骤 1 完成后推进到 80%，而非卡在 45%
+- [x] OCR 进度在步骤 2 完成后推进到 100%

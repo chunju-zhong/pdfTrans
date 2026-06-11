@@ -1,0 +1,11 @@
+- [x] PdfCell 模型新增 alignment 属性，from_dict/to_dict 正确序列化
+- [x] PdfTable 模型新增 alignment 属性，from_dict/to_dict 正确序列化
+- [x] coordinate_utils.py 新增 extract_cell_alignment() 函数，利用字符 bbox 提取对齐
+- [x] coordinate_utils.py 新增 extract_table_alignment() 函数，根据 bbox 位置提取表格对齐
+- [x] table_processor.py extract_table_cells_by_bbox 利用字符 bbox 提取对齐并传入 cell_info
+- [x] table_processor.py 创建 PdfCell 时从 cell_info 获取 alignment
+- [x] table_processor.py 创建 PdfTable 时设置 alignment
+- [x] paddle_extractor.py OCR 表格提取时利用 textline bbox 提取单元格 alignment
+- [x] pdf_generator.py 表格单元格使用 cell.alignment 替代硬编码 align=1
+- [x] docx_generator.py 单元格段落对齐使用 cell.alignment
+- [x] docx_generator.py 表格整体对齐使用 table.alignment 替代硬编码 CENTER

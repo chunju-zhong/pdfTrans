@@ -1,0 +1,6 @@
+- [x] step_progress payload 包含 step_name 字段
+- [x] 进度消息不出现"OCR提取:  X/Y页"（缺少步骤名）
+- [x] 步骤 2 step_start 不发送 total_pages
+- [x] message 死代码已移除
+- [x] 消息格式统一：step_start/step_progress/step_complete 三种格式
+- [x] step_start 时进度使用前面步骤的累积权重，不倒退到 5%

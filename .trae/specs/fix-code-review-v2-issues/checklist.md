@@ -1,0 +1,10 @@
+- [x] pdf_generator.py `_check_embedded_font_support` 中 `test_chars.get()` 结果已赋值给 `test_char`，不再抛出 NameError
+- [x] pdf_generator.py `_check_font_support` 中 `test_chars.get()` 结果已赋值给 `test_char`，不再抛出 NameError
+- [x] ocr_worker.py `_ocr_worker_func` 中已移除冗余的 `logging.basicConfig()` 调用
+- [x] ocr_worker.py 子进程日志不再重复输出
+- [x] paddle_extractor.py 的 `from typing import Optional, Dict, Any` 已移动到文件顶部 import 区域
+- [x] pdf_generator.py 日志中不再包含 emoji 字符（✅、⚠️、❌）
+- [x] paddle_extractor.py 字体大小估算逻辑已统一使用 `_estimate_font_size_from_textlines` 方法
+- [x] paddle_extractor.py logger 恢复逻辑已封装为 `_restore_logger_state` 方法
+- [x] ocr_worker.py 环境变量设置块前已添加安全性注释
+- [x] config.py OCR_MAX_TOTAL_TIME 默认值已从 86400 改为 252000（70小时）

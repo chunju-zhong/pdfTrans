@@ -1,0 +1,11 @@
+- [ ] `separate_table_caption_and_footnote` 使用正则匹配 "Table/Figure X." 模式检测表格标题
+- [ ] 标题文本及其后的段落文本从单元格中分离，单元格仅保留实际表格数据
+- [ ] 跨单元格的标题文本被正确处理（如 "OutputTable 5." 中 "Output" 保留，"Table 5." 及之后分离）
+- [ ] 如果分离后某行所有单元格为空，该行从 data 中移除
+- [ ] `extract_tables_by_pymupdf` 返回值扩展为四元组 `(pdf_tables, page_tables, page_table_cells, separated_text_blocks)`
+- [ ] `pdf_extractor.py` 中 separated_text_blocks 被转换为 TextBlock 对象加入 text_blocks 列表
+- [ ] camelot 分支返回空的 separated_text_blocks
+- [ ] 测试文件适配新的四元组返回值
+- [ ] 诊断日志记录表格标题/脚注的检测和分离过程
+- [ ] PDF 输出中 "Table 5. An example of role prompting" 在表格下方正确位置翻译和渲染
+- [ ] 其他页面的表格正常工作（无回归）

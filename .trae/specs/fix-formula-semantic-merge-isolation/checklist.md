@@ -1,0 +1,9 @@
+- [x] merge_semantic_blocks 中公式块不与文本块合并，单独成块
+- [x] merge_semantic_blocks 中当前合并块首块为公式块时，结束当前合并块
+- [x] merge_semantic_blocks 中第一个块为公式块时的初始化处理
+- [x] merge_semantic_blocks_with_llm 中公式块隔离逻辑
+- [x] merge_semantic_blocks_with_llm 中第一个块为公式块时的初始化处理
+- [x] merge_semantic_blocks_with_llm_two_phase 中公式块隔离逻辑
+- [x] merge_semantic_blocks_with_llm_two_phase 中第一个块为公式块时的初始化处理
+- [x] 语法检查通过
+- [x] 无公式块页面合并逻辑不受影响

@@ -1,0 +1,6 @@
+- [x] translator.py system prompt 包含 "|||" 分隔符保留规则
+- [x] translate_table_row 检测分隔符数量不匹配
+- [x] 不匹配时逐个单元格单独翻译作为 fallback
+- [x] 不匹配时记录警告日志
+- [x] 语法检查和单元测试通过
+- [ ] 第20页表格 Output 单元格翻译正确（不再与第二列重复）

@@ -1,0 +1,7 @@
+- [x] `_add_merged_text` 中非公式文本写入时使用 `translated_item.block_text`（翻译文本）而非 `text_block.block_text`（原始文本），保留 fallback 逻辑
+- [x] `_add_merged_text` 参数 `merged_item` 已重命名为 `translated_item`，方法体内所有引用已更新
+- [x] `_add_paragraph_elements` 中调用 `_add_merged_text` 处的局部变量名无需修改（使用 `block`、`before_block`、`after_block`，本身具描述性）
+- [x] 公式文本块继续使用 `text_block.block_text`，不受影响
+- [x] 对于 `original_blocks` 为空的 MergedBlock，使用 `else` 分支的 `translated_item.block_text` 行为不变
+- [ ] DOCX 输出内容为中文翻译（需端到端运行验证）
+- [ ] DOCX 与 PDF 翻译内容一致（需端到端运行验证）

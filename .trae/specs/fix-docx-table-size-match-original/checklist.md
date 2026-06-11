@@ -1,0 +1,5 @@
+- [x] Word 表格列宽按比例参照原文 PDF 表格的 col_widths 设置
+- [x] Word 表格行高参照原文 PDF 表格的 row_heights 设置
+- [x] Word 表格整体宽度参照原文 PDF 表格的 bbox 设置
+- [x] col_widths/row_heights 为空时，fallback 到单元格 width/height 属性
+- [x] 两者均不可用时，使用 Word 默认等宽分布

@@ -1,0 +1,9 @@
+- [x] _run_ocr_once 中新增停滞检测：30 分钟无进度则终止
+- [x] 停滞检测的 stall_timeout 参数可配置（config.OCR_STALL_TIMEOUT）
+- [x] config.py 中 OCR_MAX_TOTAL_TIME 已改为 86400（24 小时）
+- [x] 降级后的 max_total_time 不再被 config_max_total_time 截断
+- [x] config.py 中新增 OCR_BATCH_SIZE = 5（可配置）
+- [x] pdf_extractor.py 中页数超过 batch_size 时分批处理
+- [x] 分批结果正确合并（text_blocks、tables、formula_blocks、image_regions）
+- [x] 分批处理时报告总体进度
+- [x] 某批失败不影响其他批次，失败批次使用空结果

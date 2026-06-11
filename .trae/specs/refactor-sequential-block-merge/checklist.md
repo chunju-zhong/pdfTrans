@@ -1,0 +1,15 @@
+- [x] `_generate_batch_semantic_analysis_prompt` 接收 `blocks: list[str]` 并生成顺序块列表提示词，每个块只出现一次
+- [x] 提示词中包含上下文参考指引，指示 LLM 判断块 i 与块 i+1 时参考前面块的语义角色
+- [x] `batch_analyze_semantic_relationship` 接收 `blocks` 参数，返回 `len(blocks) - 1` 个合并判断
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 同步适配新接口
+- [x] blocks 长度 ≤ 1 时返回空列表
+- [x] `parallel_batch_analyze` 接收 `blocks` 参数，实现重叠块分批策略
+- [x] 跨批次边界：每批（除第一批外）包含前一批最后 1 个块作为上下文重叠
+- [x] 跨批次边界：重叠块不产生重复判断，合并后结果总数等于 `len(blocks) - 1`
+- [x] `merge_semantic_blocks_with_llm_two_phase` 构建 `block_texts` 列表而非 `text_pairs`
+- [x] `merge_semantic_blocks_with_llm` 构建 `block_texts` 列表而非 `text_pairs`
+- [x] 合并判断结果与块的索引对应关系正确：`merge_decisions[i]` 对应块 i 与块 i+1
+- [x] 单对分析接口 `analyze_semantic_relationship` 保持不变
+- [x] 现有测试适配新接口并通过
+- [x] 新增上下文感知合并判断的测试用例
+- [x] 新增跨批次边界重叠块策略的测试用例

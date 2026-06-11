@@ -1,0 +1,11 @@
+- [x] PdfCell 新增 row_span 和 col_span 字段，默认值为 1
+- [x] PdfCell.from_dict 和 to_dict 支持 row_span/col_span
+- [x] _TableHtmlParser 正确解析 rowspan/colspan 属性
+- [x] _expand_html_table 将稀疏 HTML 表格展开为完整二维矩阵（起始位置 PdfCell，被合并位置 None）
+- [x] _compute_table_grid 为合并单元格分配跨行跨列 bbox
+- [x] _draw_translated_table 跳过被合并位置（None）的背景和文本绘制
+- [x] 合并单元格文本使用跨行跨列 bbox 渲染，字体大小基于完整高度
+- [x] 网格线绘制跳过合并单元格内部（水平线和垂直线均按可见段绘制）
+- [x] _compute_visible_segments 辅助函数正确计算可见线段
+- [x] PyMuPDF 路径正确设置 row_span/col_span，被合并位置设为 None
+- [x] 现有单元测试通过，无回归

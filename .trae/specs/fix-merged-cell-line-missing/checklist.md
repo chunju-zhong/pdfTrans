@@ -1,0 +1,6 @@
+- [x] `_compute_span_from_none_positions` 函数正确从 bbox_matrix 的 None 位置推断 span
+- [x] table_processor.py 不再使用 1.5 倍阈值检测 span
+- [x] table_processor.py 使用 span_map 获取 row_span/col_span
+- [x] 合并覆盖位置仍正确设为 None
+- [x] 普通单元格（无 None 邻居）的 span 为 (1, 1)
+- [x] 编译通过，测试无回归

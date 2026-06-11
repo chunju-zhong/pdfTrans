@@ -1,0 +1,5 @@
+- [x] 翻译服务保留所有页面：text_blocks 为空的页面仍出现在 translated_content['blocks'] 中
+- [x] PDF 生成器包含所有原始页面：输出 PDF 页数与原始 PDF 相同
+- [x] 无翻译内容的页面直接复制原始页面内容
+- [x] _process_page_layout 为每页输出版面分析摘要日志
+- [ ] OCR 翻译 PDF 后，第一页（图像页）出现在输出 PDF 中（需用户实际运行验证）

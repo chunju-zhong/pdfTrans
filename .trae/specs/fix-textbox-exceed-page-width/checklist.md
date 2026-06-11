@@ -1,0 +1,6 @@
+- [x] PDF 生成器溢出重试扩展文本框时右边界不超过页面宽度
+- [x] PDF 生成器溢出重试扩展文本框时下边界不超过页面高度
+- [x] OCR tight bbox 容差从 1.3 降低到 1.1
+- [x] OCR tight bbox 右边界不超出页面宽度
+- [x] 现有测试全部通过
+- [x] test_text_overflow_handling 测试通过

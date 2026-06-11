@@ -1,0 +1,7 @@
+- [x] `_build_bbox_matrix` 正确将 `rows_data` 转为行×列 bbox 矩阵，处理行长度不一致
+- [x] `calculate_row_heights_from_bboxes` 从真实 bbox 推算的行高与 PyMuPDF 原始行高一致
+- [x] `calculate_col_widths_from_bboxes` 正确处理合并单元格的列宽分配
+- [x] `extract_tables_by_pymupdf` 使用真实 bbox 时，PdfCell.bbox 等于 PyMuPDF 提供的原始坐标
+- [x] `extract_tables_by_pymupdf` 在 `table_cell_bboxes` 为空时回退到均匀分割
+- [x] 语法检查和单元测试通过
+- [ ] PDF 输出中非 OCR 模式表格精准还原（合并单元格、不等行高列宽）
