@@ -1,0 +1,7 @@
+- [x] OCR `_build_text_from_textlines` 对所有文本统一替换换行符（不区分标题/正文）
+- [x] PDF `_extract_text_blocks` 创建 TextBlock 后替换换行符
+- [x] 表格单元格文本在创建时替换了换行符
+- [x] 翻译阶段 `_preprocess_text`/`_postprocess_text` 简化了 `\n` 相关逻辑
+- [x] 系统提示词中换行符保持规则已删除
+- [x] CHANGELOG 已更新
+- [x] 所有现有测试通过（30 个相关测试全部通过）

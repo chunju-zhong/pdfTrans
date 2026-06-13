@@ -1,5 +1,28 @@
 # 更新日志
 
+## 2026-06-13
+
+- 在提取阶段集中处理换行符删除——所有换行清理工作移至提取阶段：
+  - `_build_text_from_textlines`：所有文本块中的 `\n` 直接删除（替换为空字符串）
+  - `_extract_text_blocks`：文本块构建过程中直接删除 `\n`
+  - 表格单元格创建：单元格文本中直接删除 `\n`（`coordinate_utils.py`）
+- 移除其他流水线阶段分散的换行处理：
+  - 翻译前/后处理不再处理换行符
+  - 系统提示词不再包含换行相关的指令
+- 从翻译提示词中移除"保持换行符一致性"规则（此前于 2026-06-12 添加）
+- 策略变更：直接删除换行符（替换为空字符串）而非替换为空格——清理更彻底，不会引入额外空白
+- 相关文件：`modules/ocr/paddle_extractor.py`、`modules/pdf_extractor.py`、`modules/extractors/coordinate_utils.py`、`modules/translator.py`
+
+## 2026-06-12
+
+- 翻译提示词添加"保持换行符一致性"规则——解决翻译结果自行添加换行符导致文本框溢出：
+  - `modules/translator.py` `_generate_system_prompt` 方法新增第7条规则
+  - 规则内容：原文有换行符则保留，原文无换行符则不添加，禁止自行调整换行符位置
+  - 使用加粗格式提高大模型关注度
+  - 规则编号调整：原第8条改为第8条，后续规则依次调整
+  - 注：该规则于 2026-06-13 被移除，作为换行符清理集中到提取阶段的一部分。
+
+
 ## 2026-06-11
 
 - 修复第22页 Acknowledgments 跨段落合并导致语序混乱——LLM 提示词增加段落边界检测：
@@ -29,7 +52,7 @@
   - 3个测试文件适配新接口，25个测试全部通过
 - 恢复文本提取时清理换行符功能——修复标题文本包含换行符导致截断的问题：
   - OCR提取时：`modules/ocr/paddle_extractor.py` 添加 `TITLE_LABELS` 常量，在 `_build_text_from_textlines` 方法中清理标题换行符
-  - 非OCR提取时：`modules/pdf_extractor.py` 添加 `_is_title_text` 和 `_clean_title_newlines` 方法
+  - 非OCR提取时：`modules/pdf_extractor.py` 添加 `update_text_block_style` 处理
   - 清理策略：将 `\n` 替换为空格，清理多余空格
   - 影响：提高标题文本渲染质量，避免过度截断
 - 相关文件：

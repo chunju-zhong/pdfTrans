@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-06-13
+
+- Centralized newline deletion at extraction stage — all newline cleanup moved to extraction phase:
+  - `_build_text_from_textlines`: Delete `\n` directly (replace with empty string) for all text blocks
+  - `_extract_text_blocks`: Delete `\n` directly during text block construction
+  - Table cell creation: Delete `\n` directly in cell text (in `coordinate_utils.py`)
+- Removed scattered newline handling from other pipeline stages:
+  - Translation pre/post processing no longer handles newlines
+  - System prompt no longer includes newline-related instructions
+- Removed "Maintain Newline Consistency" rule from translation prompt (previously added 2026-06-12)
+- Changed strategy: delete newlines directly (replace with empty string) rather than replace with spaces — cleaner removal without introducing extra whitespace
+- Files changed: `modules/ocr/paddle_extractor.py`, `modules/pdf_extractor.py`, `modules/extractors/coordinate_utils.py`, `modules/translator.py`
+
+## 2026-06-12
+
+- Added "Maintain Newline Consistency" rule to translation prompts — resolved translation results adding newlines causing text box overflow:
+  - Added 7th rule in `modules/translator.py` `_generate_system_prompt` method
+  - Rule content: Preserve newlines if source has them, don't add newlines if source doesn't, forbid adjusting newline positions
+  - Used bold format to increase LLM attention
+  - Rule numbering adjusted: original 8th rule becomes 8th, subsequent rules shifted accordingly
+  - Note: This rule was later removed on 2026-06-13 as part of centralizing newline cleanup at extraction stage.
+
+
 ## 2026-06-11
 
 - Fixed Page 22 Acknowledgments cross-paragraph merge causing out-of-order text — added paragraph boundary detection to LLM prompts:
@@ -29,7 +52,7 @@
   - 3 test files adapted to new interface, all 25 tests passing
 - Restored newline cleaning during text extraction — fixed title text containing newlines causing truncation:
   - OCR extraction: Added `TITLE_LABELS` constant in `modules/ocr/paddle_extractor.py`, cleaning title newlines in `_build_text_from_textlines` method
-  - Non-OCR extraction: Added `_is_title_text` and `_clean_title_newlines` methods in `modules/pdf_extractor.py`
+  - Non-OCR extraction: Added `update_text_block_style` handling in `modules/pdf_extractor.py`
   - Cleaning strategy: Replace `\n` with space, clean extra spaces
   - Impact: Improved title text rendering quality, avoided excessive truncation
 - Related files:

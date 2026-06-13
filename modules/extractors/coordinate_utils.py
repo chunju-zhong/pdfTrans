@@ -387,7 +387,7 @@ def create_pdf_cell(cell_info, row_span=1, col_span=1):
         PdfCell: PdfCell对象
     """
     try:
-        text = cell_info['text'] if cell_info['text'] else ''
+        text = cell_info['text'].replace('\n', '') if cell_info['text'] else ''
         bbox = cell_info['bbox'] if 'bbox' in cell_info else \
                (cell_info['x0'], cell_info['y0'], cell_info['x1'], cell_info['y1'])
         row_idx = cell_info['top']

@@ -578,7 +578,7 @@ class PaddleOcrExtractor(OcrExtractor):
             block_bbox: 布局区域 bbox (x1,y1,x2,y2) 像素坐标
             textline_boxes: textline bbox 列表
             textline_texts: textline 文本列表
-            is_title: 是否为标题类文本（需要清理换行符）
+            is_title: 保留参数（不再使用）
 
         Returns:
             str | None: 构建的文本，或 None（无法构建时）
@@ -612,16 +612,12 @@ class PaddleOcrExtractor(OcrExtractor):
             lines.append(' '.join(current_parts))
         result = '\n'.join(lines)
 
-        # 对标题类文本清理换行符
-        if is_title and result and '\n' in result:
+        # 统一删除换行符
+        if result and '\n' in result:
             original_text = result
-            # 将换行符替换为空格
-            result = result.replace('\n', ' ')
-            # 清理多余空格
-            result = ' '.join(result.split())
-            # 记录清理日志
+            result = result.replace('\n', '')
             newline_count = original_text.count('\n')
-            logger.info(f"[换行符清理] 标题文本清理换行符: '{original_text[:30]}' -> '{result[:30]}', 换行符数量={newline_count}")
+            logger.info(f"[换行符清理] 文本删除换行符: '{original_text[:30]}' -> '{result[:30]}', 换行符数量={newline_count}")
 
         return result if result.strip() else None
 
@@ -1524,7 +1520,7 @@ class PaddleOcrExtractor(OcrExtractor):
 
                 # 在起始位置放置 PdfCell
                 cell = PdfCell(
-                    text=text,
+                    text=text.replace('\n', ''),
                     bbox=(0, 0, 0, 0),
                     row_idx=row_idx,
                     col_idx=col_idx,

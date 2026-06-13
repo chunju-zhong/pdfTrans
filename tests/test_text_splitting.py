@@ -418,3 +418,45 @@ class TestProportionalSplit:
         # 两个块都不应为空（核心目标：空块也能分到最小字符数）
         assert translated_blocks[0].strip(), "空原始文本块不应得到空翻译"
         assert translated_blocks[1].strip(), "非空块不应为空"
+
+    def test_proportional_split_with_protection_logic(self):
+        """测试智能保护逻辑下的按比例分配
+
+        验证保护逻辑不会过度限制第一个块，同时确保后续块有最小字符数
+        """
+        # 场景1：第一个块原始文本长，后续块短
+        merged_translation = "这是一个很长的翻译结果，包含大量文本内容，需要分配给多个块。第二个块应该分配较少的文本。"
+        original_blocks = [
+            {'block_text': 'This is a very long original text block that should receive most of the translated text'},  # 长块
+            {'block_text': 'Short block'},  # 短块
+            {'block_text': 'Another short block'}  # 短块
+        ]
+
+        translated_blocks = split_translated_result(merged_translation, original_blocks)
+
+        assert len(translated_blocks) == 3
+        # 第一个块应该分配大部分文本（按比例）
+        assert len(translated_blocks[0]) > len(translated_blocks[1])
+        assert len(translated_blocks[0]) > len(translated_blocks[2])
+        # 所有块都不应为空
+        assert translated_blocks[0].strip(), "第一个块不应为空"
+        assert translated_blocks[1].strip(), "第二个块不应为空"
+        assert translated_blocks[2].strip(), "第三个块不应为空"
+
+        # 场景2：第一个块原始文本短，后续块长
+        merged_translation = "短翻译。这是很长的后续翻译内容，应该分配给后续块。"
+        original_blocks = [
+            {'block_text': 'Short'},  # 短块
+            {'block_text': 'This is a very long original text block that should receive most of the translated text'},  # 长块
+            {'block_text': 'Another very long original text block'}  # 长块
+        ]
+
+        translated_blocks = split_translated_result(merged_translation, original_blocks)
+
+        assert len(translated_blocks) == 3
+        # 第一个块应该分配较少文本（按比例）
+        assert len(translated_blocks[0]) < len(translated_blocks[1])
+        # 所有块都不应为空
+        assert translated_blocks[0].strip(), "第一个块不应为空"
+        assert translated_blocks[1].strip(), "第二个块不应为空"
+        assert translated_blocks[2].strip(), "第三个块不应为空"
