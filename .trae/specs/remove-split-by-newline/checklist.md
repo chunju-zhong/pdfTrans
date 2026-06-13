@@ -1,0 +1,6 @@
+- [x] `split_translated_result` 函数恢复为内联的按比例拆分实现，无换行符检测逻辑
+- [x] 4 个辅助函数（`_split_by_newlines`、`_split_by_newlines_and_ratio`、`_split_with_excess_newlines`、`_split_by_ratio`）已删除
+- [x] `tests/test_split_by_newline.py` 文件已删除
+- [x] `_is_title_text` 和 `_clean_title_newlines` 方法已从 `modules/pdf_extractor.py` 删除
+- [x] CHANGELOG 中关于 `_is_title_text` 和 `_clean_title_newlines` 的条目已更新
+- [x] 运行现有测试，验证原有按比例拆分测试全部通过
