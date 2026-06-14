@@ -54,8 +54,14 @@ PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持We
 
 ### 1. 克隆仓库
 
+Gitee仓库地址：https://gitee.com/chunju/pdfTrans
+GitHub仓库地址：https://github.com/chunju-zhong/pdfTrans
+
 ```bash
 git clone https://gitee.com/chunju/pdfTrans.git
+# 或
+git clone https://github.com/chunju-zhong/pdfTrans.git
+
 cd pdfTrans
 ```
 
@@ -135,7 +141,8 @@ python app.py
 #### 安装
 
 ```bash
-# 安装CLI工具
+# 进入项目目录后安装CLI工具
+cd pdfTrans  # 替换为实际的项目路径
 pip install -e .
 
 # 或直接运行，无需安装
@@ -165,7 +172,7 @@ pdftrans translate document.pdf -f markdown --chapter-split -o output/
 # 启用语义合并
 pdftrans translate document.pdf --semantic-merge -o output.pdf
 
-# 启用语合并及LLM语义判断
+# 启用语义合并及LLM语义判断
 pdftrans translate document.pdf -m -l -f docs -o output.pdf
 
 # 启用OCR模式翻译扫描版PDF
@@ -249,7 +256,7 @@ AGPL-3.0
 
 ## 联系方式
 
-如果你在使用过程中有任何问题或建议，欢迎在公众号【智践行】留言，也可以通过Gitee仓库提交Issue或Pull Request，我们期待与大家一起，把PDF翻译工具打磨得更贴合实际需求！
+如果你在使用过程中有任何问题或建议，欢迎在公众号【智践行】或小红书【智践行的小芝】里留言，也可以通过Gitee仓库提交Issue或Pull Request，我们期待与大家一起，把PDF翻译工具打磨得更贴合实际需求！
 
 ## 更新日志
 

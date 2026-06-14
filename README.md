@@ -4,7 +4,7 @@
 
 PDF Translation Tool is a PDF document translation tool that supports multiple translation APIs. It can be called through Web service/CLI command line/SKILL methods, accurately extract PDF content, translate using multiple translation services, and generate well-formatted translated PDF/Word documents.
 
-If you have any questions or suggestions during use, welcome to leave a message on the WeChat public account 【智践行】, or submit Issues or Pull Requests on the Gitee repository. We look forward to working with everyone to refine the PDF translation tool to better meet practical needs!
+If you have any questions or suggestions during use, welcome to leave a message on the WeChat public account 【智践行】or RED 【智践行的小芝】, or submit Issues or Pull Requests on the Gitee repository. We look forward to working with everyone to refine the PDF translation tool to better meet practical needs!
 
 ## Features
 
@@ -54,8 +54,14 @@ If you have any questions or suggestions during use, welcome to leave a message 
 
 ### 1. Clone Repository
 
+Gitee: https://gitee.com/chunju/pdfTrans
+GitHub: https://github.com/chunju-zhong/pdfTrans
+
 ```bash
 git clone https://gitee.com/chunju/pdfTrans.git
+# or
+git clone https://github.com/chunju-zhong/pdfTrans.git
+
 cd pdfTrans
 ```
 
@@ -69,7 +75,7 @@ conda activate pdfTrans
 ### 3. Configure Environment Variables
 
 - Copy `.env.example` file to `.env`
-- Configure API keys for translation or model calling in the `.env` file
+- In `.env` file, configure API keys for translation or model calling
 
 ```bash
 cp .env.example .env
@@ -135,7 +141,8 @@ The tool now supports command line interface (CLI) for batch processing and auto
 #### Installation
 
 ```bash
-# Install the CLI tool
+# Navigate to project directory first, then install CLI tool
+cd pdfTrans  # Replace with your actual project path
 pip install -e .
 
 # Or use directly without installation
