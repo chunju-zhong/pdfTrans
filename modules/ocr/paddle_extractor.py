@@ -615,7 +615,7 @@ class PaddleOcrExtractor(OcrExtractor):
         # 统一删除换行符
         if result and '\n' in result:
             original_text = result
-            result = result.replace('\n', '')
+            result = result.replace('\n', ' ')
             newline_count = original_text.count('\n')
             logger.info(f"[换行符清理] 文本删除换行符: '{original_text[:30]}' -> '{result[:30]}', 换行符数量={newline_count}")
 
@@ -1520,7 +1520,7 @@ class PaddleOcrExtractor(OcrExtractor):
 
                 # 在起始位置放置 PdfCell
                 cell = PdfCell(
-                    text=text.replace('\n', ''),
+                    text=text.replace('\n', ' '),
                     bbox=(0, 0, 0, 0),
                     row_idx=row_idx,
                     col_idx=col_idx,

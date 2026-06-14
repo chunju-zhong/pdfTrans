@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-14
+
+- Translation prompt optimizations (3 changes):
+  - **Extended Rule 10 to "Code Block Preservation & Formatting"**: Added code formatting requirements (preserve indentation, spacing, newlines, alignment), code feature detection with keywords and symbols, and comment non-translation rule
+  - **Fixed Rule 10 feature description**: Removed "consecutive multi-line indented text" and "special indentation structures" (newlines are already stripped at extraction stage, multi-line structure no longer exists in LLM input); kept only keyword and symbol features for code detection
+  - **Strengthened Rule 14 to "No Meta-Comments or Source Text Output"**: Added "strictly forbid outputting source text" and "do not retain original text" to prevent LLM from outputting both original and translated text
+- Refined newline cleanup strategy: Changed `\n` replacement from empty string to space across all extraction paths (`text.replace('\n', '')` → `text.replace('\n', ' ')`), preventing adjacent word concatenation after newline removal
+- Updated test assertion to match new rule text
+- Files changed: `modules/translator.py`, `modules/ocr/paddle_extractor.py`, `modules/pdf_extractor.py`, `modules/extractors/coordinate_utils.py`, `tests/test_newline_preservation.py`
+
 ## 2026-06-13
 
 - Centralized newline deletion at extraction stage — all newline cleanup moved to extraction phase:

@@ -191,7 +191,7 @@ class TestNewlinePreservationIntegration:
             "语法正确",
             "技术精准",
             "不要翻译URL",
-            "不要翻译代码段",
+            "代码段保留与格式化",
             "长度控制",
             "不要翻译公式",
             "不要解释缩写",

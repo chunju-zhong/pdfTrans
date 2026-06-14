@@ -426,7 +426,7 @@ class PdfExtractor:
                     )
                     # 删除换行符
                     if '\n' in text:
-                        text_block.block_text = text_block.block_text.replace('\n', '')
+                        text_block.block_text = text_block.block_text.replace('\n', ' ')
                     # 检测文本块对齐方式
                     page_width = page.rect.width
                     text_block.alignment = detect_text_block_alignment((x0, y0, x1, y1), page_width)
