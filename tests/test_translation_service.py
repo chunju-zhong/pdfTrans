@@ -153,3 +153,40 @@ class TestTranslationService:
         # 验证batch_size设置为10
         assert 'batch_size = 10' in source, "批处理大小未设置为10"
 
+
+class TestIsTranslationUnchanged:
+    """_is_translation_unchanged 检测逻辑测试"""
+
+    def setup_method(self):
+        """创建 TranslationService 实例用于测试"""
+        from services.translation_service import TranslationService
+        self.service = TranslationService()
+
+    def test_pipe_untranslated_with_separator(self):
+        """原文 'Effluent standard Separation option' + 结果含 ||| 但未翻译 → True"""
+        original = "Effluent standard Separation option"
+        translated = "Effluent standard ||| Separation option"
+        assert self.service._is_translation_unchanged(translated, original) is True
+
+    def test_exact_same_returns_true(self):
+        """翻译结果与原文完全相同 → True"""
+        original = "Hello world"
+        translated = "Hello world"
+        assert self.service._is_translation_unchanged(translated, original) is True
+
+    def test_normal_translation_returns_false(self):
+        """正常翻译结果（目标语言）→ False"""
+        original = "Effluent standard"
+        translated = "排放标准"
+        assert self.service._is_translation_unchanged(translated, original) is False
+
+    def test_normal_translation_with_separator_returns_false(self):
+        """含 ||| 的正常翻译（各分段已翻译）→ False"""
+        original = "Effluent standard Separation option"
+        translated = "排放标准 ||| 分离选项"
+        assert self.service._is_translation_unchanged(translated, original) is False
+
+    def test_empty_string(self):
+        """空字符串 → True（视为相同）"""
+        assert self.service._is_translation_unchanged("", "") is True
+

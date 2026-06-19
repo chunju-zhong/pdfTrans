@@ -103,5 +103,12 @@ class Config:
     OCR_RETRY_BACKOFF = float(os.environ.get('OCR_RETRY_BACKOFF', '5.0'))  # 重试间隔(秒)，每次递增1.5倍
     OCR_DYNAMIC_PARAMS = os.environ.get('OCR_DYNAMIC_PARAMS', 'true').lower() == 'true'  # 根据系统负载动态调整OCR参数
 
+    # LLM OCR配置
+    AIPING_OCR_LLM_MODEL = os.environ.get('AIPING_OCR_LLM_MODEL') or 'DeepSeek-OCR-2'
+    SILICON_FLOW_OCR_LLM_MODEL = os.environ.get('SILICON_FLOW_OCR_LLM_MODEL') or 'deepseek-ai/DeepSeek-OCR'
+    OCR_LLM_MAX_TOKENS = int(os.environ.get('OCR_LLM_MAX_TOKENS', '8192'))
+    OCR_LLM_TEMPERATURE = float(os.environ.get('OCR_LLM_TEMPERATURE', '0.1'))
+    OCR_LLM_DPI = int(os.environ.get('OCR_LLM_DPI', '150'))  # LLM OCR渲染DPI（比PaddleOCR略低，节省token）
+
 # 创建配置实例
 config = Config()

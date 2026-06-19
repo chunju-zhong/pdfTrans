@@ -1,0 +1,4 @@
+- [x] 选择 LLM OCR 引擎时，系统使用 `LlmOcrExtractor` 而非 PaddleOCR
+- [x] 选择 PaddleOCR 引擎时，行为不变（走子进程隔离）
+- [x] LLM OCR 提取结果正确映射为 PdfExtraction 对象
+- [x] 现有测试无回归

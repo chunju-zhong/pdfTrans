@@ -122,8 +122,8 @@
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
 | 1 | 传统OCR集成 | 集成PaddleOCR，添加OCR模式开关 | done | 2026-05-21 | - | `.claude/PRPs/plans/pdf-ocr-extraction.plan.md` |
-| 2 | LLM-based OCR | 集成DeepSeek OCR/Qwen3-VL，通过OpenAI兼容API调用 | pending | - | 1 | - |
-| 3 | 混合策略 | 根据文档复杂度自动选择OCR引擎 | pending | - | 1, 2 | - |
+| 2 | LLM-based OCR | 集成DeepSeek OCR/Qwen3-VL，通过OpenAI兼容API调用 | pending | - | 1 | `.claude/PRPs/plans/pdf-ocr-extraction.plan.md` |
+| 3 | 混合策略 | 根据文档复杂度自动选择OCR引擎 | pending | - | 1, 2 | `.claude/PRPs/plans/pdf-ocr-extraction.plan.md` |
 
 ### Phase Details
 

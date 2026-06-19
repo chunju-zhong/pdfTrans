@@ -1,0 +1,4 @@
+- [x] LLM OCR 模式下 title/sub_title 文本块被翻译
+- [x] 非 OCR 模式下仅翻译正文块（行为不变）
+- [x] LLM OCR 字体大小估算考虑行数，避免大 bbox 直接命中 36pt 上限
+- [x] 全部测试通过

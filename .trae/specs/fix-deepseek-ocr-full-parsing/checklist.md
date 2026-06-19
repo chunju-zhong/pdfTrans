@@ -1,0 +1,5 @@
+- [x] DeepSeek-OCR 完整格式解析：提取类型标签、bbox 坐标和实际文本
+- [x] 类型标签正确映射 is_body_text（title/sub_title → False, text → True）
+- [x] image 类型创建 PdfImage 而非 TextBlock
+- [x] bbox 坐标从 `<|det|>` 标签提取
+- [x] 全部测试通过

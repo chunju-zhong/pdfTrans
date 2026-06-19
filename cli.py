@@ -191,7 +191,7 @@ def create_parser():
     translate_parser.add_argument(
         '--ocr-engine',
         default='paddleocr',
-        choices=['paddleocr'],
+        choices=['paddleocr', 'llm'],
         help='OCR引擎类型（默认：paddleocr）'
     )
     translate_parser.add_argument(

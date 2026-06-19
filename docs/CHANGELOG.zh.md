@@ -1,5 +1,15 @@
 # 更新日志
 
+## 2026-06-18
+
+- 修复短文本未翻译检测缺失——LLM 自行添加 `|||` 分隔符导致未翻译文本绕过检测：
+  - **降低 aiping 翻译器温度**：`temperature` 从 `0.7` 降至 `0.1`，`top_p` 从 `0.8` 调整为 `0.9`，与 siliconflow 翻译器参数一致，减少 LLM 创造性输出（自行添加非预期格式符号）
+  - **新增智能未翻译检测函数**：`_is_translation_unchanged()` —— 识别 LLM 在原文基础上添加 `|||` 但未实际翻译的场景（如 `"Effluent standard Separation option"` → `"Effluent standard ||| Separation option"`），通过剥离分隔符后逐段检查是否来自原文
+  - **升级两处检测点**：`translate_original_block()` 和 `translate_merged_block()` 的翻译后验证从简单 `==` 比较升级为新函数调用，日志增强输出结果前200字符便于排查
+  - **新增单元测试**：5个测试用例覆盖 `|||` 包装未翻译、正常翻译、含 `|||` 的正常翻译、完全相同、空字符串五种场景，11/11 测试全部通过
+  - 根因分析：三因素叠加——系统提示词规则16的 `|||` 概念泄漏 + temperature=0.7 过高 + 输入文本为两个裸名词短语的特殊结构
+  - 相关文件：`modules/aiping_translator.py`、`services/translation_service.py`、`tests/test_translation_service.py`
+
 ## 2026-06-14
 
 - 翻译提示词优化（3项）：

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-18
+
+- Fixed short text untranslated detection bypass — LLM self-added `|||` separator causing untranslated text to evade detection:
+  - **Lowered aiping translator temperature**: `temperature` reduced from `0.7` to `0.1`, `top_p` adjusted from `0.8` to `0.9`, matching siliconflow translator parameters to reduce LLM creative output (self-adding unexpected format symbols)
+  - **Added smart untranslated detection function**: `_is_translation_unchanged()` — detects scenarios where LLM adds `|||` to original text without actually translating (e.g., `"Effluent standard Separation option"` → `"Effluent standard ||| Separation option"`), by stripping separators and checking each segment against source text
+  - **Upgraded two detection points**: `translate_original_block()` and `translate_merged_block()` post-translation verification upgraded from simple `==` comparison to new function call, with enhanced logging showing first 200 chars of result for easier debugging
+  - **Added unit tests**: 5 test cases covering `|||`-wrapped untranslated, normal translation, normal translation with `|||`, exact match, and empty string scenarios — all 11/11 tests passing
+  - Root cause: Three factors combined — system prompt Rule 16 `|||` concept leakage + temperature=0.7 too high + input text being two bare noun phrases with special structure
+  - Files changed: `modules/aiping_translator.py`, `services/translation_service.py`, `tests/test_translation_service.py`
+
 ## 2026-06-14
 
 - Translation prompt optimizations (3 changes):

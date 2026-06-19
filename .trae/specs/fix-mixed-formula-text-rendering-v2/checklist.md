@@ -1,0 +1,5 @@
+- [x] `_preprocess_latex_for_mathtext` 能将 `$$...$$` 转换为 `$...$`
+- [x] 多个 display math 块 + 英文文本的混合公式能成功渲染为图片
+- [x] matplotlib 配置了 CJK 字体（PingFang SC / SimHei 等）
+- [x] 中文+公式混合文本中的中文正确显示（非方块）
+- [x] 所有测试通过（78个）

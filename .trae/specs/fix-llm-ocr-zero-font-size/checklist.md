@@ -1,0 +1,4 @@
+- [x] font_size == 0 且 bbox_height > 0 时，自动估算字体大小（bbox_height * 0.75，上限36pt）
+- [x] font_size == 0 且 bbox_height == 0 时，使用默认字体大小 12pt
+- [x] 估算过程有日志记录
+- [ ] LLM OCR 翻译后的 PDF 文本可见

@@ -959,3 +959,1254 @@ EXPECT: Translated markdown output with OCR-extracted content
 4. **mark_non_body_text调整**: OCR模式下通过PP-StructureV3的label直接判断是否为正文（header/footer/page_number标记为非正文），无需依赖字体样式分析
 5. **Phase 2扩展点**: `create_ocr_extractor()` 工厂函数已预留扩展，添加 `elif ocr_type == 'llm':` 分支即可
 6. **PPDocTranslation发现**: PaddleOCR 3.1.0新增了 `PPDocTranslation` 产线（PP-StructureV3 + ERNIE 4.5），未来可考虑集成，但当前保留自建翻译管线以支持多种翻译引擎
+
+---
+---
+
+# Plan: LLM-based OCR（Phase 2）
+
+## Summary
+
+集成LLM视觉模型（DeepSeek OCR / Qwen3-VL）作为第二种OCR引擎，通过OpenAI兼容API调用，将PDF页面图像发送给视觉模型，获取结构化JSON输出（文本块+坐标+表格+图表），映射为现有TextBlock/PdfTable/PdfImage模型。LLM OCR擅长理解复杂布局、混合内容、低质量扫描，是PaddleOCR的互补方案。
+
+## User Story
+
+As a 需要翻译复杂排版扫描版PDF的技术人员,
+I want 使用LLM视觉模型提取PDF内容,
+So that 复杂排版、多栏、图文混排的扫描文档也能被准确提取和翻译。
+
+## Problem → Solution
+
+**Current (Phase 1)**: PaddleOCR对标准排版扫描PDF效果好，但对复杂布局（多栏、图文混排、倾斜扫描、低分辨率）识别率下降 → **Desired**: 添加LLM视觉模型作为备选OCR引擎，利用其强大的布局理解能力提升复杂文档的提取准确率
+
+## Metadata
+- **Complexity**: Medium
+- **Source PRD**: `.claude/PRPs/prds/pdf-ocr-extraction.prd.md`
+- **PRD Phase**: Phase 2 - LLM-based OCR
+- **Depends on**: Phase 1（已完成）
+- **Estimated Files**: 7
+
+---
+
+## UX Design
+
+### CLI Usage
+```
+# 使用LLM OCR（通过--ocr-engine指定）
+python cli.py translate input.pdf --ocr --ocr-engine llm --source en --target zh
+
+# 指定LLM OCR提供商
+python cli.py translate input.pdf --ocr --ocr-engine llm --ocr-llm-provider aiping --source en --target zh
+```
+
+### Web界面
+```
+勾选"启用OCR提取" → 显示引擎选择下拉框：
+  ○ PaddleOCR（本地引擎，需安装）
+  ○ LLM OCR（云端引擎，需API Key）
+```
+
+### Interaction Changes
+
+| Touchpoint | Phase 1 | Phase 2 | Notes |
+|---|---|---|---|
+| `--ocr-engine` | 仅`paddleocr` | 新增`llm`选项 | choices列表扩展 |
+| `--ocr-llm-provider` | 无 | 新增参数 | 选择aiping/silicon_flow |
+| Web OCR引擎选择 | 无选择 | 下拉框 | 仅OCR开启时显示 |
+| Config | 无LLM OCR配置 | 新增LLM OCR配置 | API Key/URL/Model |
+
+---
+
+## Mandatory Reading
+
+| Priority | File | Lines | Why |
+|---|---|---|---|
+| P0 (critical) | `modules/ocr/base.py` | all | OcrExtractor接口契约 |
+| P0 (critical) | `modules/ocr/factory.py` | all | 工厂扩展点 |
+| P0 (critical) | `modules/ocr/paddle_extractor.py` | 1-100 | 提取器实现模式参照 |
+| P1 (important) | `modules/aiping_translator.py` | 1-80 | OpenAI兼容API调用模式 |
+| P1 (important) | `modules/glossary_extractor.py` | 1-50, 338-360 | ABC+工厂+多提供商模式 |
+| P1 (important) | `config.py` | 22-48 | API配置模式（AIPing/SiliconFlow） |
+| P2 (reference) | `cli.py` | 186-200 | CLI参数定义模式 |
+| P2 (reference) | `app.py` | 73-74, 104-105 | Web参数传递模式 |
+
+## External Documentation
+
+| Topic | Source | Key Takeaway |
+|---|---|---|
+| OpenAI Vision API | OpenAI docs | `messages[].content[].image_url.url` 支持 `data:image/png;base64,...` |
+| DeepSeek OCR | DeepSeek docs | 3B参数，96-97%准确率，通过OpenAI兼容API调用 |
+| Qwen3-VL | Qwen docs | MoE架构，32种语言OCR，OCRBench 875分 |
+| AIPing视觉模型 | AIPing docs | 支持Qwen3-VL等视觉模型，OpenAI兼容接口 |
+| Silicon Flow视觉模型 | SiliconFlow docs | 支持Qwen3-VL等，OpenAI兼容接口 |
+
+---
+
+## Patterns to Mirror
+
+### OPENAI_VISION_API
+// SOURCE: modules/aiping_translator.py (API调用模式)
+```python
+from openai import OpenAI
+import base64
+
+# 创建客户端（复用现有模式）
+client = OpenAI(base_url=api_url, api_key=api_key, timeout=60.0)
+
+# 发送图像+文本的多模态请求
+response = client.chat.completions.create(
+    model=model,
+    messages=[
+        {
+            "role": "system",
+            "content": system_prompt
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": user_prompt
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}"
+                    }
+                }
+            ]
+        }
+    ],
+    temperature=0.1,  # 低温度保证提取稳定性
+    max_tokens=8192,
+)
+result_text = response.choices[0].message.content
+```
+
+### STRUCTURED_OUTPUT_PARSING
+// SOURCE: modules/aiping_semantic_analyzer.py (JSON解析模式)
+```python
+import json
+
+# LLM返回JSON字符串，需解析
+result = json.loads(response_text)
+# 容错：尝试从markdown代码块中提取JSON
+if not result:
+    match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+    if match:
+        result = json.loads(match.group(1))
+```
+
+### PROVIDER_PATTERN
+// SOURCE: modules/glossary_extractor.py (多提供商模式)
+```python
+# 工厂函数根据provider创建不同实例
+def create_ocr_extractor(ocr_type='paddleocr', **kwargs):
+    if ocr_type == 'paddleocr':
+        from modules.ocr.paddle_extractor import PaddleOcrExtractor
+        return PaddleOcrExtractor(**kwargs)
+    elif ocr_type == 'llm':
+        from modules.ocr.llm_extractor import LlmOcrExtractor
+        return LlmOcrExtractor(**kwargs)
+    else:
+        raise ValueError(...)
+```
+
+---
+
+## Files to Change
+
+| File | Action | Justification |
+|---|---|---|
+| `modules/ocr/llm_extractor.py` | CREATE | LlmOcrExtractor实现 |
+| `modules/ocr/factory.py` | UPDATE | 添加'llm'引擎类型 |
+| `modules/ocr/__init__.py` | UPDATE | 导出新类（可选） |
+| `config.py` | UPDATE | 添加LLM OCR配置项 |
+| `cli.py` | UPDATE | --ocr-engine添加'llm'，新增--ocr-llm-provider |
+| `app.py` | UPDATE | Web端接收ocr_llm_provider参数 |
+| `templates/index.html` | UPDATE | OCR引擎选择UI |
+| `tests/test_llm_ocr.py` | CREATE | LLM OCR模块测试 |
+
+## NOT Building
+
+- 混合策略自动选择 — 属于Phase 3
+- 本地LLM推理（如Ollama） — 仅支持云端API
+- 自定义prompt模板UI — 使用内置prompt
+- 多模型并行投票 — 单模型提取即可
+
+---
+
+## Step-by-Step Tasks
+
+### Task 1: 扩展Config添加LLM OCR配置
+- **ACTION**: 在 `config.py` 的 OCR配置区域添加LLM OCR专用配置
+- **IMPLEMENT**: 在 `OCR_DYNAMIC_PARAMS` 之后添加：
+  ```python
+  # LLM OCR配置
+  OCR_LLM_PROVIDER = os.environ.get('OCR_LLM_PROVIDER') or 'aiping'  # 默认提供商
+  OCR_LLM_MODEL_AIPING = os.environ.get('OCR_LLM_MODEL_AIPING') or 'Qwen/Qwen3-VL-8B'
+  OCR_LLM_MODEL_SILICON_FLOW = os.environ.get('OCR_LLM_MODEL_SILICON_FLOW') or 'Qwen/Qwen3-VL-8B'
+  OCR_LLM_MAX_TOKENS = int(os.environ.get('OCR_LLM_MAX_TOKENS', '8192'))
+  OCR_LLM_TEMPERATURE = float(os.environ.get('OCR_LLM_TEMPERATURE', '0.1'))
+  OCR_LLM_DPI = int(os.environ.get('OCR_LLM_DPI', '150'))  # LLM OCR渲染DPI（比PaddleOCR略低，节省token）
+  ```
+- **MIRROR**: `AIPING_MODEL_GLOSSARY`、`SILICON_FLOW_MODEL_GLOSSARY` 的按提供商配置模式
+- **IMPORTS**: 无新增
+- **GOTCHA**:
+  - LLM OCR复用现有AIPing/SiliconFlow的API Key和URL配置，无需单独配置API Key
+  - 模型名称需包含提供商前缀（如 `Qwen/Qwen3-VL-8B`），这是SiliconFlow的命名约定
+  - DPI设150而非200，因为LLM模型对图像分辨率的敏感度不同于传统OCR，且更低DPI减少base64传输量
+- **VALIDATE**: `from config import config; print(config.OCR_LLM_PROVIDER)` 输出 `aiping`
+
+### Task 2: 实现LlmOcrExtractor
+- **ACTION**: 创建 `modules/ocr/llm_extractor.py`，实现LLM视觉模型OCR
+- **IMPLEMENT**:
+  ```python
+  # modules/ocr/llm_extractor.py
+  import os
+  import re
+  import json
+  import base64
+  import logging
+  import fitz
+  from openai import OpenAI
+
+  from models.text_block import TextBlock
+  from models.extraction import PdfPage, PdfTable, PdfCell, PdfImage, PdfExtraction
+  from modules.ocr.base import OcrExtractor
+  from config import config
+
+  logger = logging.getLogger(__name__)
+
+  # LLM OCR系统提示词
+  OCR_SYSTEM_PROMPT = """你是一个专业的文档OCR引擎。分析提供的PDF页面图像，提取所有文字内容、表格和图表信息。
+
+输出严格的JSON格式，结构如下：
+{
+  "text_blocks": [
+    {
+      "id": 0,
+      "text": "提取的文字内容",
+      "bbox": [x1, y1, x2, y2],
+      "type": "text|title|section_title|header|footer|footnote",
+      "is_body": true
+    }
+  ],
+  "tables": [
+    {
+      "id": 0,
+      "bbox": [x1, y1, x2, y2],
+      "html": "<table><tr><td>单元格</td></tr></table>"
+    }
+  ],
+  "images": [
+    {
+      "id": 0,
+      "bbox": [x1, y1, x2, y2],
+      "description": "图表简要描述"
+    }
+  ]
+}
+
+规则：
+1. bbox坐标为图像像素坐标 [左上x, 左上y, 右下x, 右下y]
+2. 按阅读顺序（从上到下、从左到右）排列text_blocks
+3. 保持原文内容，不要翻译或修改
+4. type为title/section_title时is_body为false
+5. type为header/footer/footnote/page_number时is_body为false
+6. 如果某类内容为空，对应数组为空列表
+7. 仅输出JSON，不要输出其他内容"""
+
+  class LlmOcrExtractor(OcrExtractor):
+      """基于LLM视觉模型的OCR提取器"""
+
+      def __init__(self, provider='aiping', lang='ch', **kwargs):
+          self.provider = provider
+          self.lang = lang
+          self._client = None
+          self._model = None
+
+      @property
+      def client(self):
+          """延迟初始化OpenAI客户端"""
+          if self._client is None:
+              if self.provider == 'aiping':
+                  self._client = OpenAI(
+                      base_url=config.AIPING_API_URL,
+                      api_key=config.AIPING_API_KEY,
+                      timeout=120.0
+                  )
+                  self._model = config.OCR_LLM_MODEL_AIPING
+              elif self.provider == 'silicon_flow':
+                  self._client = OpenAI(
+                      base_url=config.SILICON_FLOW_API_URL,
+                      api_key=config.SILICON_FLOW_API_KEY,
+                      timeout=120.0
+                  )
+                  self._model = config.OCR_LLM_MODEL_SILICON_FLOW
+              else:
+                  raise ValueError(f"不支持的LLM OCR提供商: {self.provider}")
+          return self._client
+
+      @property
+      def model(self):
+          if self._model is None:
+              _ = self.client  # 触发初始化
+          return self._model
+
+      def extract_from_pdf(self, pdf_path, pages=None, temp_images_dir=None):
+          if not os.path.exists(pdf_path):
+              raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
+
+          if temp_images_dir is None:
+              temp_images_dir = os.path.join(os.getcwd(), 'temp_images')
+          os.makedirs(temp_images_dir, exist_ok=True)
+
+          pdf_pages = []
+          pdf_tables = []
+          pdf_images = []
+
+          with fitz.open(pdf_path) as doc:
+              total_pages = len(doc)
+              target_pages = pages if pages else list(range(1, total_pages + 1))
+
+              for page_num in target_pages:
+                  page_idx = page_num - 1
+                  if page_idx >= total_pages:
+                      continue
+                  page = doc[page_idx]
+
+                  # 渲染页面为图像
+                  pix = page.get_pixmap(dpi=config.OCR_LLM_DPI)
+                  img_path = os.path.join(temp_images_dir, f"llm_ocr_page_{page_num}.png")
+                  pix.save(img_path)
+
+                  # 编码为base64
+                  with open(img_path, 'rb') as f:
+                      img_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+                  # 调用LLM视觉模型
+                  result = self._extract_page(img_base64, page_num)
+
+                  if result:
+                      text_blocks, tables, images = result
+                      pdf_pages.append(PdfPage(
+                          page_num=page_num,
+                          text_blocks=text_blocks
+                      ))
+                      pdf_tables.extend(tables)
+                      pdf_images.extend(images)
+                  else:
+                      # 提取失败，添加空页面
+                      pdf_pages.append(PdfPage(
+                          page_num=page_num,
+                          text_blocks=[]
+                      ))
+
+          return PdfExtraction(
+              total_pages=total_pages,
+              pages=pdf_pages,
+              tables=pdf_tables,
+              images=pdf_images
+          )
+
+      def _extract_page(self, img_base64, page_num):
+          """调用LLM视觉模型提取单页内容"""
+          try:
+              response = self.client.chat.completions.create(
+                  model=self.model,
+                  messages=[
+                      {"role": "system", "content": OCR_SYSTEM_PROMPT},
+                      {
+                          "role": "user",
+                          "content": [
+                              {
+                                  "type": "text",
+                                  "text": f"请提取第{page_num}页PDF中的所有文字、表格和图表信息。"
+                              },
+                              {
+                                  "type": "image_url",
+                                  "image_url": {
+                                      "url": f"data:image/png;base64,{img_base64}"
+                                  }
+                              }
+                          ]
+                      }
+                  ],
+                  temperature=config.OCR_LLM_TEMPERATURE,
+                  max_tokens=config.OCR_LLM_MAX_TOKENS,
+              )
+
+              result_text = response.choices[0].message.content
+              return self._parse_response(result_text, page_num)
+
+          except Exception as e:
+              logger.error(f"LLM OCR提取第{page_num}页失败: {e}", exc_info=True)
+              return None
+
+      def _parse_response(self, result_text, page_num):
+          """解析LLM返回的JSON为TextBlock/PdfTable/PdfImage"""
+          # 解析JSON（容错：从markdown代码块中提取）
+          data = self._extract_json(result_text)
+          if data is None:
+              logger.warning(f"第{page_num}页LLM OCR结果JSON解析失败")
+              return None
+
+          text_blocks = []
+          tables = []
+          images = []
+
+          # 解析文本块
+          for item in data.get('text_blocks', []):
+              tb = TextBlock(
+                  block_no=item.get('id', len(text_blocks)),
+                  text=item.get('text', ''),
+                  bbox=tuple(item.get('bbox', [0, 0, 0, 0])),
+                  block_type=0,
+                  page_num=page_num
+              )
+              tb.is_body_text = item.get('is_body', True)
+              text_blocks.append(tb)
+
+          # 解析表格
+          from html.parser import HTMLParser
+          for item in data.get('tables', []):
+              html = item.get('html', '')
+              if html:
+                  cells = self._parse_html_table(html)
+                  if cells:
+                      tables.append(PdfTable(
+                          page_num=page_num,
+                          table_idx=len(tables),
+                          cells=cells,
+                          bbox=tuple(item.get('bbox', [0, 0, 0, 0]))
+                      ))
+
+          # 解析图表（LLM OCR无法裁剪图片，仅记录位置）
+          for item in data.get('images', []):
+              images.append(PdfImage(
+                  page_num=page_num,
+                  image_idx=len(images),
+                  image_path='',  # LLM OCR不生成裁剪图片
+                  bbox=tuple(item.get('bbox', [0, 0, 0, 0]))
+              ))
+
+          return text_blocks, tables, images
+
+      def _extract_json(self, text):
+          """从LLM响应中提取JSON（容错处理）"""
+          # 尝试直接解析
+          try:
+              return json.loads(text)
+          except json.JSONDecodeError:
+              pass
+
+          # 尝试从markdown代码块中提取
+          match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
+          if match:
+              try:
+                  return json.loads(match.group(1))
+              except json.JSONDecodeError:
+                  pass
+
+          # 尝试找到第一个 { 和最后一个 } 之间的内容
+          start = text.find('{')
+          end = text.rfind('}')
+          if start != -1 and end != -1 and end > start:
+              try:
+                  return json.loads(text[start:end + 1])
+              except json.JSONDecodeError:
+                  pass
+
+          return None
+
+      def _parse_html_table(self, html):
+          """解析HTML表格为PdfCell二维列表（复用PaddleOcrExtractor的模式）"""
+          from modules.ocr.paddle_extractor import _TableHtmlParser
+
+          parser = _TableHtmlParser()
+          parser.feed(html)
+
+          cells = []
+          for row_idx, row in enumerate(parser.rows):
+              cell_row = []
+              col_idx = 0
+              for cell_text, rowspan, colspan in row:
+                  cell_row.append(PdfCell(
+                      text=cell_text,
+                      bbox=(0, 0, 0, 0),
+                      row_idx=row_idx,
+                      col_idx=col_idx,
+                      rowspan=rowspan,
+                      colspan=colspan
+                  ))
+                  col_idx += colspan
+              cells.append(cell_row)
+
+          return cells if cells else None
+  ```
+- **MIRROR**: `modules/aiping_translator.py` 的 OpenAI 客户端创建模式，`modules/glossary_extractor.py` 的多提供商模式
+- **IMPORTS**: `openai.OpenAI`, `base64`, `json`, `re`, `fitz`, `models.text_block.TextBlock`, `models.extraction.*`
+- **GOTCHA**:
+  - LLM OCR不需要子进程隔离（API调用，非本地重计算）
+  - base64编码的图像可能很大（150DPI的A4页约2-5MB base64），注意API的request size限制
+  - JSON解析需要容错：LLM可能在JSON外包裹markdown代码块或额外文字
+  - LLM返回的bbox是图像像素坐标，与PaddleOCR一致，下游管线已兼容
+  - LLM OCR无法直接裁剪图片区域，图表的image_path为空
+  - 复用 `_TableHtmlParser` 从 `paddle_extractor.py` 解析HTML表格
+- **VALIDATE**: mock OpenAI API响应，验证 `_parse_response()` 正确解析为TextBlock/PdfTable/PdfImage
+
+### Task 3: 更新OCR工厂函数
+- **ACTION**: 在 `modules/ocr/factory.py` 中添加 `'llm'` 引擎类型
+- **IMPLEMENT**:
+  ```python
+  # 更新 SUPPORTED_OCR_ENGINES
+  SUPPORTED_OCR_ENGINES = ['paddleocr', 'llm']
+
+  # 在 create_ocr_extractor 中添加 elif 分支
+  elif ocr_type == 'llm':
+      from modules.ocr.llm_extractor import LlmOcrExtractor
+      return LlmOcrExtractor(**kwargs)
+  ```
+- **MIRROR**: 现有 `paddleocr` 分支的延迟导入模式
+- **IMPORTS**: 延迟导入 `from modules.ocr.llm_extractor import LlmOcrExtractor`
+- **GOTCHA**: `**kwargs` 会传递 `provider`、`lang` 等参数给 `LlmOcrExtractor`
+- **VALIDATE**: `create_ocr_extractor('llm', provider='aiping')` 返回 `LlmOcrExtractor` 实例
+
+### Task 4: 修改CLI添加LLM OCR参数
+- **ACTION**: 在 `cli.py` 中扩展 `--ocr-engine` 和添加 `--ocr-llm-provider`
+- **IMPLEMENT**:
+  1. 修改 `--ocr-engine` 的 `choices`：
+     ```python
+     translate_parser.add_argument(
+         '--ocr-engine',
+         default='paddleocr',
+         choices=['paddleocr', 'llm'],
+         help='OCR引擎类型（默认：paddleocr）'
+     )
+     ```
+  2. 新增 `--ocr-llm-provider`：
+     ```python
+     translate_parser.add_argument(
+         '--ocr-llm-provider',
+         default=None,
+         choices=['aiping', 'silicon_flow'],
+         help='LLM OCR提供商（仅--ocr-engine=llm时有效，默认：aiping）'
+     )
+     ```
+  3. 在 `cli/translate_command.py` 中传递 `ocr_llm_provider`：
+     ```python
+     # 构建OCR参数
+     ocr_kwargs = {}
+     if args.ocr_engine == 'llm':
+         ocr_kwargs['provider'] = args.ocr_llm_provider or 'aiping'
+
+     result = translation_service.process_translation_sync(
+         ...,
+         ocr_mode=args.ocr,
+         ocr_engine=args.ocr_engine,
+         ocr_lang=ocr_lang,
+     )
+     ```
+- **MIRROR**: `--ocr-engine` 的 `choices` 模式
+- **IMPORTS**: 无新增
+- **GOTCHA**: `--ocr-llm-provider` 仅在 `--ocr-engine=llm` 时有意义，但不需要条件验证（argparse不支持条件参数）
+- **VALIDATE**: `python cli.py translate test.pdf --ocr --ocr-engine llm --source en --target zh` 无报错
+
+### Task 5: 修改Web界面添加LLM OCR引擎选择
+- **ACTION**: 在 `app.py` 和 `templates/index.html` 中添加LLM OCR引擎选择
+- **IMPLEMENT**:
+  1. 在 `app.py` 中读取 `ocr_llm_provider`：
+     ```python
+     ocr_llm_provider = request.form.get('ocr_llm_provider', 'aiping')
+     ```
+  2. 传递到 `process_translation` 的参数中（通过kwargs或新增参数）
+  3. 在 `templates/index.html` 中，OCR复选框下方添加引擎选择（默认隐藏，勾选OCR后显示）：
+     ```html
+     <div id="ocr_engine_group" style="display:none;">
+         <label>OCR引擎：</label>
+         <select name="ocr_engine" id="ocr_engine">
+             <option value="paddleocr">PaddleOCR（本地引擎）</option>
+             <option value="llm">LLM OCR（云端引擎）</option>
+         </select>
+         <div id="llm_provider_group" style="display:none;">
+             <label>LLM提供商：</label>
+             <select name="ocr_llm_provider">
+                 <option value="aiping">AIPing</option>
+                 <option value="silicon_flow">SiliconFlow</option>
+             </select>
+         </div>
+     </div>
+     ```
+  4. JavaScript控制显示/隐藏逻辑
+- **MIRROR**: `semantic_merge` 复选框模式
+- **IMPORTS**: 无新增
+- **GOTCHA**: Web界面需要JavaScript联动：勾选OCR → 显示引擎选择 → 选择LLM → 显示提供商选择
+- **VALIDATE**: Web界面勾选OCR → 选择LLM OCR → 选择提供商 → 提交翻译
+
+### Task 6: 编写LLM OCR测试
+- **ACTION**: 创建 `tests/test_llm_ocr.py`
+- **IMPLEMENT**:
+  ```python
+  import pytest
+  import json
+  from unittest.mock import patch, MagicMock
+  from modules.ocr.llm_extractor import LlmOcrExtractor
+  from modules.ocr.factory import create_ocr_extractor
+
+  class TestLlmOcrExtractor:
+      def test_create_llm_extractor_via_factory(self):
+          extractor = create_ocr_extractor('llm', provider='aiping')
+          assert isinstance(extractor, LlmOcrExtractor)
+
+      def test_create_llm_extractor_silicon_flow(self):
+          extractor = create_ocr_extractor('llm', provider='silicon_flow')
+          assert isinstance(extractor, LlmOcrExtractor)
+
+      def test_parse_response_text_blocks(self):
+          extractor = LlmOcrExtractor(provider='aiping')
+          response = json.dumps({
+              "text_blocks": [
+                  {"id": 0, "text": "Hello World", "bbox": [10, 10, 200, 50],
+                   "type": "text", "is_body": True}
+              ],
+              "tables": [],
+              "images": []
+          })
+          result = extractor._parse_response(response, page_num=1)
+          text_blocks, tables, images = result
+          assert len(text_blocks) == 1
+          assert text_blocks[0].text == "Hello World"
+          assert text_blocks[0].is_body_text is True
+
+      def test_parse_response_with_markdown_wrapper(self):
+          extractor = LlmOcrExtractor(provider='aiping')
+          response = '```json\n{"text_blocks": [], "tables": [], "images": []}\n```'
+          result = extractor._parse_response(response, page_num=1)
+          assert result is not None
+
+      def test_parse_response_invalid_json(self):
+          extractor = LlmOcrExtractor(provider='aiping')
+          result = extractor._parse_response("not json at all", page_num=1)
+          assert result is None
+
+      def test_extract_json_direct(self):
+          extractor = LlmOcrExtractor()
+          data = extractor._extract_json('{"key": "value"}')
+          assert data == {"key": "value"}
+
+      def test_extract_json_markdown_block(self):
+          extractor = LlmOcrExtractor()
+          data = extractor._extract_json('```json\n{"key": "value"}\n```')
+          assert data == {"key": "value"}
+
+      def test_extract_json_embedded(self):
+          extractor = LlmOcrExtractor()
+          data = extractor._extract_json('Here is the result: {"key": "value"} done')
+          assert data == {"key": "value"}
+
+      @patch('modules.ocr.llm_extractor.OpenAI')
+      def test_client_lazy_init(self, mock_openai):
+          extractor = LlmOcrExtractor(provider='aiping')
+          assert extractor._client is None
+          _ = extractor.client
+          mock_openai.assert_called_once()
+  ```
+- **MIRROR**: `tests/test_ocr_extractor.py` 的测试结构
+- **IMPORTS**: `pytest`, `unittest.mock`, `json`
+- **GOTCHA**: 所有测试必须mock OpenAI客户端，不能真实调用API
+- **VALIDATE**: `pytest tests/test_llm_ocr.py -v` 全部通过
+
+### Task 7: 集成测试和回归验证
+- **ACTION**: 运行完整测试套件，验证无回归
+- **IMPLEMENT**:
+  1. `pytest tests/ -v` — 全部测试通过
+  2. `pytest tests/test_llm_ocr.py -v` — LLM OCR测试通过
+  3. `pytest tests/test_ocr_extractor.py -v` — Phase 1测试仍通过
+  4. 验证 `--ocr-engine llm` CLI参数正确传递
+- **VALIDATE**: 全部测试通过，无回归
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+| Test | Input | Expected Output | Edge Case? |
+|---|---|---|---|
+| create_ocr_extractor('llm') | llm类型 | LlmOcrExtractor实例 | No |
+| LlmOcrExtractor(provider='aiping') | aiping提供商 | 实例创建成功 | No |
+| LlmOcrExtractor(provider='silicon_flow') | silicon_flow提供商 | 实例创建成功 | No |
+| _parse_response 正常JSON | 完整JSON | TextBlock列表 | No |
+| _parse_response markdown包裹 | ```json...``` | TextBlock列表 | Yes |
+| _parse_response 无效JSON | 非JSON文本 | None | Yes |
+| _extract_json 直接解析 | `{"key":"val"}` | dict | No |
+| _extract_json 嵌入文本 | `text {"key":"val"} text` | dict | Yes |
+| client延迟初始化 | 新建实例 | _client初始为None | No |
+| _extract_page API失败 | mock API异常 | None（优雅降级） | Yes |
+
+### Edge Cases Checklist
+- [x] LLM返回非JSON响应（容错解析）
+- [x] LLM返回空text_blocks（空页面）
+- [x] API调用超时（timeout=120s）
+- [x] API Key未配置（OpenAI初始化报错）
+- [x] 图像base64过大（DPI控制）
+- [x] LLM返回的bbox格式异常（缺字段、非数字）
+- [x] HTML表格解析失败（容错跳过）
+
+---
+
+## Validation Commands
+
+### Static Analysis
+```bash
+python -m py_compile modules/ocr/llm_extractor.py
+```
+EXPECT: Zero compilation errors
+
+### Unit Tests
+```bash
+pytest tests/test_llm_ocr.py -v
+```
+EXPECT: All tests pass
+
+### Full Test Suite
+```bash
+pytest tests/ -v
+```
+EXPECT: No regressions
+
+### Integration Test (requires API key)
+```bash
+python cli.py translate tests/data/scanned_test.pdf --ocr --ocr-engine llm --source en --target zh -f markdown
+```
+EXPECT: Translated markdown output with LLM-extracted content
+
+---
+
+## Acceptance Criteria
+- [ ] All tasks completed
+- [ ] All validation commands pass
+- [ ] Tests written and passing
+- [ ] LLM OCR模式可成功提取文字并翻译
+- [ ] 现有PaddleOCR功能不受影响
+- [ ] CLI --ocr-engine llm 参数正常工作
+- [ ] Web界面LLM OCR引擎选择正常工作
+- [ ] JSON解析容错覆盖各种LLM输出格式
+
+## Completion Checklist
+- [x] Code follows discovered patterns (OpenAI客户端、工厂模式、JSON容错解析)
+- [x] Error handling matches codebase style (logger.error + 优雅降级)
+- [x] Logging follows codebase conventions (logging.getLogger(__name__))
+- [x] Tests follow test patterns (pytest + mock)
+- [x] No hardcoded values (配置从config.py读取)
+- [x] No unnecessary scope additions (混合策略留给Phase 3)
+- [x] Self-contained — no questions needed during implementation
+
+## Risks
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| LLM OCR API调用成本高 | H | M | 默认DPI=150减少token消耗，提供模型选择 |
+| LLM返回JSON格式不稳定 | H | M | 三级容错解析（直接→markdown→嵌入提取） |
+| LLM OCR速度慢（vs PaddleOCR） | H | L | API调用延迟高但不占用本地资源，可接受 |
+| 视觉模型不支持某些语言 | L | M | 选择多语言支持的模型（Qwen3-VL支持32种语言） |
+| base64图像超过API限制 | L | H | 控制DPI=150，A4页约2-5MB，大多数API限制10MB+ |
+
+---
+---
+
+# Plan: 混合策略（Phase 3）
+
+## Summary
+
+实现混合OCR策略，根据文档特征（页面文本密度、布局复杂度、图像占比等）自动选择PaddleOCR或LLM OCR引擎，支持逐页引擎选择和失败回退机制。目标是结合PaddleOCR的速度优势和LLM OCR的复杂布局理解能力，实现最优的提取质量和效率平衡。
+
+## User Story
+
+As a 使用PDF翻译工具的技术人员,
+I want 系统自动选择最适合的OCR引擎,
+So that 无需手动判断文档复杂度即可获得最优的OCR提取效果。
+
+## Problem → Solution
+
+**Current (Phase 1+2)**: 用户需手动选择PaddleOCR或LLM OCR → **Desired**: 系统自动评估文档复杂度，选择最优引擎，简单页面用PaddleOCR（快），复杂页面用LLM OCR（准）
+
+## Metadata
+- **Complexity**: Medium
+- **Source PRD**: `.claude/PRPs/prds/pdf-ocr-extraction.prd.md`
+- **PRD Phase**: Phase 3 - 混合策略
+- **Depends on**: Phase 1（已完成）, Phase 2（需完成）
+- **Estimated Files**: 5
+
+---
+
+## UX Design
+
+### CLI Usage
+```
+# 混合模式（自动选择引擎）
+python cli.py translate input.pdf --ocr --ocr-engine hybrid --source en --target zh
+
+# 指定回退行为
+python cli.py translate input.pdf --ocr --ocr-engine hybrid --ocr-hybrid-fallback llm --source en --target zh
+```
+
+### Interaction Changes
+
+| Touchpoint | Phase 2 | Phase 3 | Notes |
+|---|---|---|---|
+| `--ocr-engine` | paddleocr, llm | 新增`hybrid` | choices列表扩展 |
+| Web OCR引擎选择 | PaddleOCR, LLM | 新增"自动选择" | 下拉框新增选项 |
+| 进度消息 | 单一引擎进度 | 显示每页引擎选择 | "第3页: 使用LLM OCR（复杂布局）" |
+
+---
+
+## Mandatory Reading
+
+| Priority | File | Lines | Why |
+|---|---|---|---|
+| P0 (critical) | `modules/ocr/base.py` | all | OcrExtractor接口契约 |
+| P0 (critical) | `modules/ocr/factory.py` | all | 工厂扩展点 |
+| P0 (critical) | `modules/ocr/paddle_extractor.py` | 1-100 | PaddleOCR提取器接口 |
+| P0 (critical) | `modules/ocr/llm_extractor.py` | 1-100 | LLM OCR提取器接口 |
+| P1 (important) | `modules/pdf_extractor.py` | 206-220 | OCR模式入口 |
+| P2 (reference) | `modules/ocr/system_profiler.py` | 1-50 | 系统检测模式参照 |
+
+---
+
+## Patterns to Mirror
+
+### STRATEGY_COMPOSITION
+// SOURCE: modules/ocr/factory.py (组合模式)
+```python
+# HybridOcrExtractor内部持有PaddleOcrExtractor和LlmOcrExtractor
+class HybridOcrExtractor(OcrExtractor):
+    def __init__(self, **kwargs):
+        self._paddle = None  # 延迟初始化
+        self._llm = None     # 延迟初始化
+
+    @property
+    def paddle(self):
+        if self._paddle is None:
+            from modules.ocr.paddle_extractor import PaddleOcrExtractor
+            self._paddle = PaddleOcrExtractor(**self._paddle_kwargs)
+        return self._paddle
+
+    @property
+    def llm(self):
+        if self._llm is None:
+            from modules.ocr.llm_extractor import LlmOcrExtractor
+            self._llm = LlmOcrExtractor(**self._llm_kwargs)
+        return self._llm
+```
+
+---
+
+## Files to Change
+
+| File | Action | Justification |
+|---|---|---|
+| `modules/ocr/hybrid_extractor.py` | CREATE | HybridOcrExtractor实现 |
+| `modules/ocr/factory.py` | UPDATE | 添加'hybrid'引擎类型 |
+| `config.py` | UPDATE | 添加混合策略配置 |
+| `cli.py` | UPDATE | --ocr-engine添加'hybrid' |
+| `templates/index.html` | UPDATE | 引擎选择添加"自动"选项 |
+| `tests/test_hybrid_ocr.py` | CREATE | 混合策略测试 |
+
+## NOT Building
+
+- 用户自定义引擎选择规则（当前使用内置启发式规则）
+- 基于训练的分类器（使用简单启发式规则即可）
+- 多引擎并行执行（串行选择即可）
+- 引擎选择结果缓存（每页独立评估）
+
+---
+
+## Step-by-Step Tasks
+
+### Task 1: 扩展Config添加混合策略配置
+- **ACTION**: 在 `config.py` 中添加混合策略配置
+- **IMPLEMENT**:
+  ```python
+  # 混合OCR策略配置
+  OCR_HYBRID_COMPLEXITY_THRESHOLD = float(os.environ.get('OCR_HYBRID_COMPLEXITY_THRESHOLD', '0.6'))  # 复杂度阈值，超过则使用LLM OCR
+  OCR_HYBRID_FALLBACK = os.environ.get('OCR_HYBRID_FALLBACK') or 'paddleocr'  # 失败回退引擎
+  OCR_HYBRID_PREFER = os.environ.get('OCR_HYBRID_PREFER') or 'paddleocr'  # 默认偏好引擎（速度优先）
+  ```
+- **MIRROR**: 现有OCR配置的 `os.environ.get() + 默认值` 模式
+- **GOTCHA**:
+  - 复杂度阈值0.6表示60%以上的页面复杂度使用LLM OCR
+  - 默认偏好PaddleOCR（速度快、无API成本），仅复杂页面使用LLM
+  - 回退引擎默认为PaddleOCR（LLM OCR失败时回退到本地引擎）
+- **VALIDATE**: `from config import config; print(config.OCR_HYBRID_COMPLEXITY_THRESHOLD)` 输出 `0.6`
+
+### Task 2: 实现HybridOcrExtractor
+- **ACTION**: 创建 `modules/ocr/hybrid_extractor.py`
+- **IMPLEMENT**:
+  ```python
+  # modules/ocr/hybrid_extractor.py
+  import os
+  import logging
+  import fitz
+
+  from models.text_block import TextBlock
+  from models.extraction import PdfPage, PdfTable, PdfImage, PdfExtraction
+  from modules.ocr.base import OcrExtractor
+  from config import config
+
+  logger = logging.getLogger(__name__)
+
+  class HybridOcrExtractor(OcrExtractor):
+      """混合OCR提取器：根据页面复杂度自动选择引擎"""
+
+      def __init__(self, fallback_engine=None, prefer=None, **kwargs):
+          self.fallback_engine = fallback_engine or config.OCR_HYBRID_FALLBACK
+          self.prefer = prefer or config.OCR_HYBRID_PREFER
+          self.threshold = config.OCR_HYBRID_COMPLEXITY_THRESHOLD
+          self._paddle = None
+          self._llm = None
+          self._paddle_kwargs = kwargs.get('paddle_kwargs', {})
+          self._llm_kwargs = kwargs.get('llm_kwargs', {})
+
+      @property
+      def paddle(self):
+          if self._paddle is None:
+              from modules.ocr.paddle_extractor import PaddleOcrExtractor
+              self._paddle = PaddleOcrExtractor(**self._paddle_kwargs)
+          return self._paddle
+
+      @property
+      def llm(self):
+          if self._llm is None:
+              from modules.ocr.llm_extractor import LlmOcrExtractor
+              self._llm = LlmOcrExtractor(**self._llm_kwargs)
+          return self._llm
+
+      def extract_from_pdf(self, pdf_path, pages=None, temp_images_dir=None):
+          if not os.path.exists(pdf_path):
+              raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
+
+          if temp_images_dir is None:
+              temp_images_dir = os.path.join(os.getcwd(), 'temp_images')
+          os.makedirs(temp_images_dir, exist_ok=True)
+
+          pdf_pages = []
+          pdf_tables = []
+          pdf_images = []
+
+          with fitz.open(pdf_path) as doc:
+              total_pages = len(doc)
+              target_pages = pages if pages else list(range(1, total_pages + 1))
+
+              for page_num in target_pages:
+                  page_idx = page_num - 1
+                  if page_idx >= total_pages:
+                      continue
+
+                  # 评估页面复杂度
+                  complexity = self._assess_page_complexity(doc, page_idx)
+                  use_llm = complexity >= self.threshold
+
+                  engine_name = "LLM OCR" if use_llm else "PaddleOCR"
+                  logger.info(f"第{page_num}页 复杂度={complexity:.2f} → {engine_name}")
+
+                  # 选择引擎提取
+                  primary = self.llm if use_llm else self.paddle
+                  fallback = self.paddle if use_llm else self.llm
+
+                  try:
+                      result = primary.extract_from_pdf(
+                          pdf_path, pages=[page_num], temp_images_dir=temp_images_dir
+                      )
+                  except Exception as e:
+                      logger.warning(f"第{page_num}页 {engine_name} 提取失败: {e}，回退到 {self.fallback_engine}")
+                      try:
+                          result = fallback.extract_from_pdf(
+                              pdf_path, pages=[page_num], temp_images_dir=temp_images_dir
+                          )
+                      except Exception as e2:
+                          logger.error(f"第{page_num}页 回退引擎也失败: {e2}")
+                          result = PdfExtraction(
+                              total_pages=total_pages,
+                              pages=[PdfPage(page_num=page_num, text_blocks=[])],
+                              tables=[], images=[]
+                          )
+
+                  pdf_pages.extend(result.pages)
+                  pdf_tables.extend(result.tables)
+                  pdf_images.extend(result.images)
+
+          return PdfExtraction(
+              total_pages=total_pages,
+              pages=pdf_pages,
+              tables=pdf_tables,
+              images=pdf_images
+          )
+
+      def _assess_page_complexity(self, doc, page_idx):
+          """评估页面复杂度（0.0-1.0）
+
+          基于以下启发式指标：
+          1. 文本密度：PyMuPDF可提取的文本量 vs 页面面积
+          2. 图像占比：页面中图像区域的比例
+          3. 布局特征：是否存在多栏、嵌套表格等
+          """
+          page = doc[page_idx]
+          page_area = page.rect.width * page.rect.height
+
+          # 指标1：文本密度（可提取文本越少，越可能是扫描版/复杂版）
+          text = page.get_text("text")
+          text_len = len(text.strip())
+          text_density = min(text_len / 2000.0, 1.0)  # 2000字符为满页
+
+          # 指标2：图像占比
+          image_list = page.get_images(full=True)
+          image_area_ratio = 0.0
+          if image_list:
+              total_image_area = 0
+              for img in image_list:
+                  xref = img[0]
+                  try:
+                      img_rects = page.get_image_rects(xref)
+                      for rect in img_rects:
+                          total_image_area += rect.width * rect.height
+                  except Exception:
+                      pass
+              image_area_ratio = min(total_image_area / page_area, 1.0) if page_area > 0 else 0
+
+          # 指标3：文本块数量（多块可能意味着复杂布局）
+          blocks = page.get_text("blocks")
+          block_count = len(blocks) if blocks else 0
+          block_complexity = min(block_count / 20.0, 1.0)  # 20个块为高复杂度
+
+          # 综合复杂度评分
+          # 文本少 + 图像多 + 块多 = 高复杂度（倾向LLM OCR）
+          complexity = (
+              (1.0 - text_density) * 0.4 +  # 文本越少越复杂
+              image_area_ratio * 0.3 +        # 图像越多越复杂
+              block_complexity * 0.3           # 块越多越复杂
+          )
+
+          return round(complexity, 3)
+  ```
+- **MIRROR**: `modules/ocr/factory.py` 的组合模式，`modules/ocr/system_profiler.py` 的系统评估模式
+- **IMPORTS**: `fitz`, `modules.ocr.base.OcrExtractor`, `models.extraction.*`
+- **GOTCHA**:
+  - 复杂度评估使用PyMuPDF（轻量级），不依赖OCR引擎
+  - 延迟初始化两个引擎，仅在实际需要时才加载
+  - 逐页评估和提取，不是整文档一次性评估
+  - 回退机制：主引擎失败时自动切换到备选引擎
+  - `extract_from_pdf` 对单页调用时，PaddleOCR和LLM OCR都支持 `pages=[page_num]` 参数
+- **VALIDATE**: mock两个引擎，验证复杂度评估和引擎选择逻辑
+
+### Task 3: 更新OCR工厂函数
+- **ACTION**: 在 `modules/ocr/factory.py` 中添加 `'hybrid'` 引擎类型
+- **IMPLEMENT**:
+  ```python
+  SUPPORTED_OCR_ENGINES = ['paddleocr', 'llm', 'hybrid']
+
+  elif ocr_type == 'hybrid':
+      from modules.ocr.hybrid_extractor import HybridOcrExtractor
+      return HybridOcrExtractor(**kwargs)
+  ```
+- **VALIDATE**: `create_ocr_extractor('hybrid')` 返回 `HybridOcrExtractor` 实例
+
+### Task 4: 修改CLI添加hybrid选项
+- **ACTION**: 在 `cli.py` 中扩展 `--ocr-engine` 的 choices
+- **IMPLEMENT**:
+  ```python
+  translate_parser.add_argument(
+      '--ocr-engine',
+      default='paddleocr',
+      choices=['paddleocr', 'llm', 'hybrid'],
+      help='OCR引擎类型（默认：paddleocr）'
+  )
+  ```
+- **VALIDATE**: `python cli.py translate test.pdf --ocr --ocr-engine hybrid --source en --target zh` 无报错
+
+### Task 5: 更新Web界面引擎选择
+- **ACTION**: 在 `templates/index.html` 的引擎选择下拉框中添加"自动选择"选项
+- **IMPLEMENT**:
+  ```html
+  <option value="hybrid">自动选择（推荐）</option>
+  ```
+- **GOTCHA**: 选择"自动选择"时，LLM提供商选择框应隐藏（由系统自动决定）
+- **VALIDATE**: Web界面选择"自动选择" → 提交翻译 → 使用混合策略
+
+### Task 6: 编写混合策略测试
+- **ACTION**: 创建 `tests/test_hybrid_ocr.py`
+- **IMPLEMENT**:
+  ```python
+  import pytest
+  from unittest.mock import patch, MagicMock
+  from modules.ocr.hybrid_extractor import HybridOcrExtractor
+  from modules.ocr.factory import create_ocr_extractor
+  from models.extraction import PdfExtraction, PdfPage
+
+  class TestHybridOcrExtractor:
+      def test_create_via_factory(self):
+          extractor = create_ocr_extractor('hybrid')
+          assert isinstance(extractor, HybridOcrExtractor)
+
+      def test_complexity_assessment_empty_page(self):
+          """空页面（无文本）应评估为高复杂度"""
+          extractor = HybridOcrExtractor()
+          mock_doc = MagicMock()
+          mock_page = MagicMock()
+          mock_page.rect.width = 595
+          mock_page.rect.height = 842
+          mock_page.get_text.return_value = ''
+          mock_page.get_images.return_value = []
+          mock_page.get_text.side_effect = ['', []]  # text返回空, blocks返回空
+          mock_doc.__getitem__ = MagicMock(return_value=mock_page)
+
+          complexity = extractor._assess_page_complexity(mock_doc, 0)
+          assert complexity > 0.5  # 空页面应该是高复杂度
+
+      def test_complexity_assessment_text_page(self):
+          """纯文本页面应评估为低复杂度"""
+          extractor = HybridOcrExtractor()
+          mock_doc = MagicMock()
+          mock_page = MagicMock()
+          mock_page.rect.width = 595
+          mock_page.rect.height = 842
+          mock_page.get_text.side_effect = ['A' * 3000, [('text', (0,0,100,100,'text','font'))] * 5]
+          mock_page.get_images.return_value = []
+          mock_doc.__getitem__ = MagicMock(return_value=mock_page)
+
+          complexity = extractor._assess_page_complexity(mock_doc, 0)
+          assert complexity < 0.4  # 纯文本页面应该是低复杂度
+
+      def test_engine_selection_low_complexity(self):
+          """低复杂度页面应使用PaddleOCR"""
+          extractor = HybridOcrExtractor()
+          extractor.threshold = 0.6
+
+          mock_paddle = MagicMock()
+          mock_paddle.extract_from_pdf.return_value = PdfExtraction(
+              total_pages=1, pages=[PdfPage(page_num=1, text_blocks=[])],
+              tables=[], images=[]
+          )
+          extractor._paddle = mock_paddle
+
+          with patch.object(extractor, '_assess_page_complexity', return_value=0.3):
+              with patch('fitz.open') as mock_fitz:
+                  # ... mock fitz context manager
+                  pass  # 验证paddle被调用
+
+      def test_fallback_on_primary_failure(self):
+          """主引擎失败时应回退到备选引擎"""
+          extractor = HybridOcrExtractor(fallback_engine='paddleocr')
+          # ... mock primary failure, verify fallback called
+  ```
+- **VALIDATE**: `pytest tests/test_hybrid_ocr.py -v` 全部通过
+
+### Task 7: 集成测试和回归验证
+- **ACTION**: 运行完整测试套件
+- **IMPLEMENT**:
+  1. `pytest tests/ -v` — 全部测试通过
+  2. `pytest tests/test_hybrid_ocr.py -v` — 混合策略测试通过
+  3. `pytest tests/test_ocr_extractor.py tests/test_llm_ocr.py -v` — Phase 1+2测试仍通过
+- **VALIDATE**: 全部测试通过，无回归
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+| Test | Input | Expected Output | Edge Case? |
+|---|---|---|---|
+| create_ocr_extractor('hybrid') | hybrid类型 | HybridOcrExtractor实例 | No |
+| _assess_page_complexity 空页面 | 无文本 | 高复杂度(>0.5) | Yes |
+| _assess_page_complexity 纯文本 | 大量文本 | 低复杂度(<0.4) | No |
+| _assess_page_complexity 图文混排 | 文本+图像 | 中等复杂度 | No |
+| 引擎选择 低复杂度 | complexity<阈值 | PaddleOCR | No |
+| 引擎选择 高复杂度 | complexity>=阈值 | LLM OCR | No |
+| 回退机制 | 主引擎异常 | 调用备选引擎 | Yes |
+| 双引擎失败 | 两个引擎都异常 | 空PdfPage | Yes |
+
+### Edge Cases Checklist
+- [x] 页面复杂度恰好在阈值边界
+- [x] PaddleOCR未安装时hybrid模式的行为
+- [x] LLM API Key未配置时hybrid模式的行为
+- [x] 全部页面都是低复杂度（仅用PaddleOCR）
+- [x] 全部页面都是高复杂度（仅用LLM OCR）
+- [x] 单页PDF
+- [x] 超大PDF（数百页）的内存管理
+
+---
+
+## Validation Commands
+
+### Static Analysis
+```bash
+python -m py_compile modules/ocr/hybrid_extractor.py
+```
+EXPECT: Zero compilation errors
+
+### Unit Tests
+```bash
+pytest tests/test_hybrid_ocr.py -v
+```
+EXPECT: All tests pass
+
+### Full Test Suite
+```bash
+pytest tests/ -v
+```
+EXPECT: No regressions
+
+### Integration Test
+```bash
+python cli.py translate tests/data/scanned_test.pdf --ocr --ocr-engine hybrid --source en --target zh -f markdown
+```
+EXPECT: 进度消息显示每页使用的引擎，翻译结果正确
+
+---
+
+## Acceptance Criteria
+- [ ] All tasks completed
+- [ ] All validation commands pass
+- [ ] Tests written and passing
+- [ ] 混合策略可自动选择引擎
+- [ ] 回退机制正常工作
+- [ ] 现有PaddleOCR和LLM OCR功能不受影响
+- [ ] 进度消息显示每页引擎选择信息
+
+## Completion Checklist
+- [x] Code follows discovered patterns (延迟初始化、工厂模式、回退机制)
+- [x] Error handling matches codebase style (logger.warning + fallback)
+- [x] Logging follows codebase conventions
+- [x] Tests follow test patterns (pytest + mock)
+- [x] No hardcoded values (阈值从config.py读取)
+- [x] Self-contained — no questions needed during implementation
+
+## Risks
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| 复杂度评估不准确 | M | M | 提供可配置阈值，用户可根据实际效果调整 |
+| 混合模式同时加载两个引擎 | M | H | 延迟初始化，仅在实际需要时加载 |
+| 逐页切换引擎增加延迟 | L | M | PaddleOCR预加载，LLM仅复杂页面使用 |
+| 回退机制掩盖引擎bug | L | L | 回退时记录warning日志 |
+
+---
+---
+
+# Phase Summary
+
+| Phase | Description | Status | Key Files |
+|---|---|---|---|
+| 1 | 传统OCR集成（PaddleOCR） | **done** | `modules/ocr/paddle_extractor.py`, `ocr_worker.py`, `system_profiler.py` |
+| 2 | LLM-based OCR | **pending** | `modules/ocr/llm_extractor.py` |
+| 3 | 混合策略 | **pending** | `modules/ocr/hybrid_extractor.py` |
+
+## Dependency Graph
+```
+Phase 1 (done)
+    ├── Phase 2 (LLM OCR)
+    │       └── Phase 3 (混合策略)
+    └── Phase 3 (depends on Phase 2)
+```
+
+Phase 2 独立于 Phase 1，可直接开始。Phase 3 依赖 Phase 2（需要 LlmOcrExtractor 存在）。

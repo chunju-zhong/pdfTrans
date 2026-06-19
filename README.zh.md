@@ -4,14 +4,16 @@
 
 PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持Web服务/CLI命令行/SKILL方式调用，能够准确提取PDF内容，使用多种翻译服务进行翻译，并生成格式良好的翻译后PDF/Word文档。
 
-如果你在使用过程中有任何问题或建议，欢迎在公众号【智践行】留言，也可以通过Gitee仓库提交Issue或Pull Request，期待与大家一起，把PDF翻译工具打磨得更贴合实际需求！
+如果你在使用过程中有任何问题或建议，欢迎在公众号【智践行】或小红书【智践行的小芝】留言，也可以通过Gitee仓库提交Issue或Pull Request，期待与大家一起，把PDF翻译工具打磨得更贴合实际需求！
 
 ## 功能特点
 
 ### 核心功能
 
 - **PDF文本提取**：支持提取普通文本和表格内容，保留位置信息
-- **OCR支持**：通过 PaddleOCR（PP-StructureV3）支持扫描版PDF文档，包括版面分析、文字识别、公式识别和表格提取
+- **OCR支持**：支持两种 OCR 引擎
+  - **PaddleOCR**（本地引擎）：基于 PP-StructureV3，支持扫描版 PDF 的版面分析、文字识别、公式识别和表格提取，需安装 PaddlePaddle
+  - **LLM OCR**（云端引擎）：基于 DeepSeek-OCR 等视觉大模型，通过翻译服务 API 调用，无需本地安装 PaddlePaddle，适合无 GPU 或需要更好版面理解的场景
 - **多翻译API支持**：
   - aiping 模型调用API
   - 硅基流动 模型调用API
@@ -75,16 +77,46 @@ conda activate pdfTrans
 ### 3. 配置环境变量
 
 - 复制`.env.example`文件为`.env`
-- 在`.env`文件中配置各翻译或模型调用API的密钥
+- 注册Aiping账号：https://aiping.cn
+- 或者，注册硅基流动账号：https://cloud.siliconflow.cn/i/OFUfQfNj
+- 获得成API密钥
+- 在`.env`文件中配置平台模型名称及API的密钥
 
 ```bash
 cp .env.example .env
-# 编辑.env文件，添加API密钥
+```
+
+- 编辑.env文件，添加API密钥并配置平台模型名称
+
+```
+# aiping API配置
+AIPING_API_KEY=your-secret-key
+AIPING_API_URL=https://aiping.cn/api/v1
+# 指定翻译模型
+AIPING_MODEL_TRANSLATION=Qwen3-32B
+# 指定Markdown排版模型
+AIPING_MODEL_LAYOUT=Qwen3-32B
+# 指定术语提取模型
+AIPING_MODEL_GLOSSARY=Qwen3-32B
+
+# 硅基流动API配置
+SILICON_FLOW_API_KEY=your-secret-key
+SILICON_FLOW_API_URL=https://api.siliconflow.cn/v1/
+# 指定翻译模型
+SILICON_FLOW_MODEL_TRANSLATION=tencent/Hunyuan-MT-7B
+# 指定Markdown排版模型
+SILICON_FLOW_MODEL_LAYOUT=Qwen/Qwen3-32B
+# 指定术语提取模型
+SILICON_FLOW_MODEL_GLOSSARY=Qwen/Qwen3-32B
+
+# LLM OCR配置（复用翻译引擎的API Key，仅需指定模型）
+AIPING_OCR_LLM_MODEL=DeepSeek-OCR-2
+SILICON_FLOW_OCR_LLM_MODEL=deepseek-ai/DeepSeek-OCR
 ```
 
 ### 4. 安装依赖
 
-```bash
+```bash 
 pip install -r requirements.txt
 ```
 
@@ -106,17 +138,41 @@ pip install paddlepaddle>=3.0.0
 pip install paddlepaddle-gpu>=3.0.0
 ```
 
-> **注意**：OCR功能需要安装 PaddlePaddle。如未安装，仅支持非扫描版PDF文档。
+> **注意**：OCR功能需要安装 PaddlePaddle（PaddleOCR引擎）或配置 LLM OCR 模型（LLM OCR引擎）。如两者均未配置，仅支持非扫描版PDF文档。
+
+### 6. 安装 LaTeX（可选，公式高质量渲染）
+
+LaTeX 用于公式的高质量渲染（usetex 模式）。如不安装，系统将自动降级使用 matplotlib mathtext 渲染公式（功能可用，但复杂公式效果较差）。
+
+```bash
+# macOS
+brew install --cask mactex
+
+# 或仅安装基础版（体积更小）
+brew install --cask basictex
+
+# Linux (Ubuntu/Debian)
+sudo apt-get install texlive-full
+
+# 或仅安装基础版（体积更小）
+sudo apt-get install texlive-latex-base texlive-fonts-recommended
+```
+
+> **注意**：安装完成后请确保 `latex` 命令可在终端中直接调用。
 
 ## 使用方法
 
-### 启动Web服务
+本工具提供 **Web 界面** 和 **命令行（CLI）** 两种独立的使用方式。无需启动 Web 服务即可直接使用命令行。
+
+### 方式一：Web 界面（图形化操作）
+
+#### 启动服务
 
 ```bash
 python app.py
 ```
 
-### 访问Web界面
+#### 访问界面
 
 - 打开浏览器，访问 `http://localhost:5000`
 - 上传PDF文件
@@ -129,14 +185,18 @@ python app.py
 - 选择输出格式（PDF、Word、Markdown或任意组合）
 - 启用OCR模式（可选，用于扫描版PDF）
   - 勾选"启用OCR"可从扫描版/图片型PDF中提取文字
-  - 选择OCR引擎（当前仅支持PaddleOCR）
-  - 系统自动检测GPU，可用时使用GPU加速
+  - 选择OCR引擎：
+    - **PaddleOCR**（本地引擎）：需安装 PaddlePaddle，适合有 GPU 的本地环境
+    - **LLM OCR**（云端引擎）：通过 API 调用视觉大模型，无需 PaddlePaddle，适合无 GPU 环境
+  - 系统自动检测GPU（PaddleOCR引擎），可用时使用GPU加速
 - 点击"翻译"按钮
 - 等待翻译完成，下载翻译后的PDF和/或Word文件
 
-### 命令行使用
+---
 
-该工具现已支持命令行界面（CLI），可用于批量处理和自动化工作流。
+### 方式二：命令行（CLI，独立使用，无需启动Web服务）
+
+CLI 可用于批量处理和自动化工作流，**不依赖 Web 服务**，可直接在终端运行。
 
 #### 安装
 
@@ -181,6 +241,9 @@ pdftrans translate document.pdf --ocr -o output.pdf
 # 指定OCR引擎和识别语言
 pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o output.pdf
 
+# 使用 LLM OCR 云端引擎（无需安装 PaddlePaddle）
+pdftrans translate document.pdf --ocr --ocr-engine llm -o output.pdf
+
 # 翻译时使用术语表
 pdftrans translate document.pdf -g glossary.txt -o output.pdf
 
@@ -191,42 +254,7 @@ pdftrans glossary document.pdf -o glossary.txt
 pdftrans list-languages
 ```
 
-#### 技能集成
-
-PDF翻译工具包含技能集成，并提供增强功能：
-
-- **智能默认值**：自动从输入文件的前100行检测源语言，默认目标语言为中文
-- **优化输出**：默认为Markdown格式，启用章节拆分、语义合并和LLM语义判断
-- **错误处理**：为常见问题（如权限错误）提供清晰的错误信息
-
-#### 技能使用方法
-
-可以通过**自然语言使用**（在支持skill的AI IDE中，如Trae）：你可以使用自然语言与技能交互，例如：
-   - "将这个PDF翻译成中文"
-   - "将这个PDF翻译成中文，输出为word文档"
-   - "从这个PDF中提取术语表"
-   - "列出PDF翻译工具支持的语言"
-
-#### API密钥配置
-
-工具需要翻译服务的API密钥才能正常工作。在 `.env` 文件中配置：
-
-```bash
-# .env 文件示例
-
-# aiping API 配置
-AIPING_API_KEY=your_aiping_api_key
-
-# 硅基流动 API 配置
-SILICON_FLOW_API_KEY=your_silicon_flow_api_key
-
-# OCR GPU加速（可选，默认：自动检测）
-OCR_USE_GPU=true
-```
-
-只需配置其中一种翻译服务的API密钥即可使用工具。工具默认使用 aiping 大模型服务。
-
-#### CLI选项
+#### CLI 选项参考
 
 **全局选项：**
 - `-v, --verbose` - 显示详细输出
@@ -247,8 +275,51 @@ OCR_USE_GPU=true
 - `-l, --llm-merge` - 使用LLM语义判断
 - `-c, --chapter-split` - 按章节拆分输出（仅Markdown格式）
 - `--ocr` - 启用OCR模式（用于扫描版PDF）
-- `--ocr-engine` - OCR引擎类型（默认：paddleocr）
+- `--ocr-engine` - OCR引擎类型：`paddleocr`（本地，需PaddlePaddle）或 `llm`（云端，需API Key），默认：paddleocr
 - `--ocr-lang` - OCR识别语言（默认：根据源语言自动选择）
+
+---
+
+### 方式三：AI IDE 技能（自然语言调用，无需手动输入命令）
+
+如果你使用支持 Skill 的 AI IDE（如 **Trae**），可以通过**自然语言**直接调用 PDF 翻译工具，AI 会自动帮你组装并执行 CLI 命令。
+
+#### 安装与配置（以 Trae 为例）
+
+1. **安装 Trae IDE**：访问 https://www.trae.com 下载并安装
+2. **安装技能**：将本仓库（pdfTrans）下载到你的项目的技能目录下：
+   ```
+   你的项目/
+   └── .trae/
+       └── skills/
+           └── pdftrans/    ← 将 pdfTrans 代码放入此目录
+               ├── SKILL.md   ← Trae 通过此文件识别并激活技能
+               ├── cli.py
+               └── ...
+   ```
+3. **激活技能**：Trae 会自动识别 `SKILL.md` 文件，在对话窗口中即可直接使用 PDF 翻译技能
+
+> **说明**：技能通过 `SKILL.md` 调用 CLI 命令来执行翻译任务。只需确保 `.env` 中已配置 API 密钥（见上方「**3. 配置环境变量**」）。
+
+#### 使用方式
+
+在 AI IDE 的对话窗口中，用自然语言描述你的需求即可，例如：
+
+- "将这个 PDF 翻译成中文"
+- "将这个 PDF 翻译成中文，输出为 Word 文档"
+- "翻译第 1-10 页，使用 silicon_flow 翻译服务"
+- "从这个 PDF 中提取术语表"
+- "列出 PDF 翻译工具支持的语言"
+
+#### 技能增强功能
+
+通过技能调用时，AI 会自动提供以下增强：
+
+- **智能默认值**：自动从输入文件的前 100 行检测源语言，默认目标语言为中文
+- **优化输出**：默认为 Markdown 格式，启用章节拆分、语义合并和 LLM 语义判断
+- **错误处理**：为常见问题（如权限错误）提供清晰的错误信息
+
+> **说明**：技能模式通过 `SKILL.md` 调用 CLI 命令执行翻译，请确保已按上方**安装步骤**完成环境配置（conda 环境、依赖安装、API 密钥），并能正常运行 `pdftrans --help` 命令。
 
 ## 许可证
 

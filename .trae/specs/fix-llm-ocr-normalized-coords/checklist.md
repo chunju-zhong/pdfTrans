@@ -1,0 +1,9 @@
+- [ ] `_pixel_to_pdf_coords` 方法支持 `is_normalized` 参数
+- [ ] 归一化坐标转换公式正确：`coord / 999 * page_size`
+- [ ] `_parse_ref_tags_response` 调用时传入 `is_normalized=True`
+- [ ] 非归一化坐标（其他 OCR 引擎）仍使用像素坐标转换
+- [ ] 测试用例通过
+- [ ] "Lesson:" 翻译文本显示在正确位置（x≈505pt）
+- [ ] "在初选中，你能期望删除的内容量存在很大差异" 显示在正确位置
+- [ ] "在主要部分中，去除什么比去除多少更为重要。" 显示在正确位置
+- [ ] "原水特性决定了主去除物的去除。" 右方不再露出 "water characteristics"

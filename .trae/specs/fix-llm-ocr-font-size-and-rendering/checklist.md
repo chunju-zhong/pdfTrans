@@ -1,0 +1,9 @@
+- [x] LLM OCR 字体大小估算同时使用行数法和面积法，取较小值
+- [x] `_parse_ref_tags_response` 和 `_parse_json_response` 均已应用面积法
+- [x] 面积法公式正确：`sqrt(bbox_width * bbox_height / (text_length * 0.66))`
+- [x] 水平 redaction padding 增大至 `max(5, min(font_size * 0.5, 12))`
+- [x] 垂直 redaction padding 调整为 `max(3, min(font_size * 0.3, 6))`
+- [ ] "Lesson:" 翻译文本可见（font_size 不再因面积法而过高估算）
+- [ ] "There are large variations..." 翻译文本可见（font_size 不再命中 36pt 上限）
+- [ ] "Removal of the primary depends on..." 右方不再露出原文本
+- [ ] "Removal of the primary depends on..." 下方不再压住其它文本

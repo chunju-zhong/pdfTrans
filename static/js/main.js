@@ -604,6 +604,21 @@ document.addEventListener('DOMContentLoaded', function() {
         updateChapterSplitOptionVisibility();
     });
     
+    // OCR引擎选择联动
+    const ocrModeCheckbox = document.getElementById('ocr_mode');
+    const ocrEngineGroup = document.getElementById('ocr_engine_group');
+    
+    function updateOcrEngineVisibility() {
+        if (ocrModeCheckbox && ocrEngineGroup) {
+            ocrEngineGroup.style.display = ocrModeCheckbox.checked ? 'block' : 'none';
+        }
+    }
+    
+    if (ocrModeCheckbox) {
+        ocrModeCheckbox.addEventListener('change', updateOcrEngineVisibility);
+        updateOcrEngineVisibility();
+    }
+    
     // 取消按钮事件处理
     cancelBtn.addEventListener('click', function() {
         if (confirm('确定要取消翻译吗？')) {

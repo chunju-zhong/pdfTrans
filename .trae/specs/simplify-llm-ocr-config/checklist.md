@@ -1,0 +1,8 @@
+- [x] `config.py` 中 `OCR_LLM_PROVIDER`、`OCR_LLM_MODEL_AIPING`、`OCR_LLM_MODEL_SILICON_FLOW` 已移除，新增 `OCR_LLM_MODEL`
+- [x] `LlmOcrExtractor` 使用 `translator_type` 参数，复用翻译引擎的 API Key/URL
+- [x] CLI 中 `--ocr-llm-provider` 参数已移除
+- [x] Web 界面中 LLM 提供商下拉框已移除
+- [x] `app.py` 中 `ocr_llm_provider` 相关代码已移除
+- [x] `TranslationService` 中 `ocr_llm_provider` 参数已移除
+- [x] `tests/test_llm_ocr.py` 全部测试通过
+- [x] 全部测试无回归

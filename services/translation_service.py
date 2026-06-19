@@ -135,7 +135,7 @@ class TranslationService:
 
 
 
-    def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True, output_path=None, tmp_dir=None, ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch'):
+    def extract_pdf_content(self, task, input_filepath, page_range, extract_chapter=True, output_path=None, tmp_dir=None, ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch', translator_type='aiping'):
         """提取PDF内容
         
         Args:
@@ -161,7 +161,8 @@ class TranslationService:
             input_filepath,
             ocr_mode=ocr_mode,
             ocr_engine=ocr_engine,
-            ocr_lang=ocr_lang
+            ocr_lang=ocr_lang,
+            translator_type=translator_type
         )
         total_pages = pdf_extractor.total_pages
         logger.info(f"任务 {task.task_id} 获取总页数完成: {total_pages}")
@@ -356,8 +357,8 @@ class TranslationService:
         )
         merged_translation = translation_result.content
         logger.info(f'合并翻译结果: 结果前200字符="{merged_translation[:200]}", 长度={len(merged_translation)}')
-        if merged_translation == merged_text:
-            logger.warning(f'合并翻译结果与原文相同，可能翻译失败: 原文前100字符="{merged_text[:100]}"')
+        if self._is_translation_unchanged(merged_translation, merged_text):
+            logger.warning(f'合并翻译结果与原文实质相同（可能未翻译）: 原文前100字符="{merged_text[:100]}", 结果前200字符="{merged_translation[:200]}"')
         logger.info(f"任务 {task.task_id} 合并块 {index+1} 翻译结果: {merged_translation}")
         
         # 检查是否被截断
@@ -522,6 +523,49 @@ class TranslationService:
         
         return page_translated_blocks_dict, merged_translations, translated_blocks
 
+    def _is_translation_unchanged(self, translated_text: str, original_text: str) -> bool:
+        """判断翻译结果是否实质上未翻译（含 LLM 自行添加 ||| 等格式符的情况）
+        
+        Args:
+            translated_text: LLM 返回的翻译结果
+            original_text: 原始文本
+        
+        Returns:
+            True 表示实质上未翻译，False 表示已翻译
+        """
+        import re
+        
+        # 快速路径：完全相同
+        if translated_text == original_text:
+            return True
+        
+        # 检测 LLM 是否在原文基础上自行添加了 ||| 分隔符但未翻译
+        # 例如: 原文 "A B" → 结果 "A ||| B"
+        if '|||' in translated_text:
+            # 剥离 ||| 及其前后空白
+            parts = re.split(r'\s*\|\|\|\s*', translated_text)
+            parts = [p.strip() for p in parts if p.strip()]
+            
+            if not parts:
+                return False
+            
+            # 将原文按空白拆分为候选词
+            original_words = set(original_text.split())
+            
+            # 检查每个分段是否都来自原文（允许微小空白差异）
+            for part in parts:
+                part_clean = part.strip()
+                if not part_clean:
+                    continue
+                # 分段必须在原文中能找到（作为子串或词）
+                if part_clean not in original_text and part_clean not in original_words:
+                    return False
+            
+            # 所有分段都来自原文 → 未翻译（只是被 ||| 分隔了）
+            return True
+        
+        return False
+
     def translate_original_block(self, task, block_info, index, translator, source_lang, target_lang, doc_type, glossary, total_blocks):
         """翻译单个原始块
 
@@ -578,8 +622,8 @@ class TranslationService:
         )
         translated_text = translation_result.content
         logger.info(f'翻译结果: 结果前200字符="{translated_text[:200]}", 长度={len(translated_text)}')
-        if translated_text == text_block.block_text:
-            logger.warning(f'翻译结果与原文相同，可能翻译失败: 原文前100字符="{text_block.block_text[:100]}"')
+        if self._is_translation_unchanged(translated_text, text_block.block_text):
+            logger.warning(f'翻译结果与原文实质相同（可能未翻译）: 原文前100字符="{text_block.block_text[:100]}", 结果前200字符="{translated_text[:200]}"')
         logger.info(f"任务 {task.task_id} 原始块 {index+1} 翻译结果: {translated_text}")
         
         # 检查是否被截断
@@ -1606,6 +1650,7 @@ class TranslationService:
             extract_result = self.extract_pdf_content(
                 task, input_filepath, page_range,
                 ocr_mode=ocr_mode, ocr_engine=ocr_engine, ocr_lang=ocr_lang,
+                translator_type=translator_type,
                 extract_chapter=chapter_split
             )
             if not extract_result:
@@ -1866,6 +1911,7 @@ class TranslationService:
             extract_result = self.extract_pdf_content(
                 task, input_filepath, page_range,
                 ocr_mode=ocr_mode, ocr_engine=ocr_engine, ocr_lang=ocr_lang,
+                translator_type=translator_type,
                 extract_chapter=chapter_split
             )
             if not extract_result:

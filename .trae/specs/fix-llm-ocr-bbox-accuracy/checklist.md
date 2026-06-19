@@ -1,0 +1,10 @@
+- [ ] TextBlock 模型包含 original_text 属性
+- [ ] 翻译服务在翻译完成后保存原始文本到 original_text
+- [ ] PDF 生成器对有 original_text 的文本块使用 page.search_for() 搜索实际位置
+- [ ] 搜索成功时使用实际 bbox 进行 redaction 和文本渲染
+- [ ] 搜索失败时回退到 OCR bbox
+- [ ] 使用实际 bbox 重新估算 font_size
+- [ ] "Lesson:" 翻译文本 "课程：" 显示在正确位置（x≈505pt）
+- [ ] "在初选中，你能期望删除的内容量存在很大差异" 显示在正确位置
+- [ ] "在主要部分中，去除什么比去除多少更为重要。" 显示在正确位置
+- [ ] "原水特性决定了主去除物的去除。" 右方不再露出 "water characteristics"

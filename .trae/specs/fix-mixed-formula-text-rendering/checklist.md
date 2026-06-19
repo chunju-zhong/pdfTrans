@@ -1,0 +1,7 @@
+- [x] `_preprocess_latex_for_mathtext` 能处理希腊字母（\alpha → α 等）
+- [x] `_preprocess_latex_for_mathtext` 能处理数学符号（\circ → °, \cdot → · 等）
+- [x] `_preprocess_latex_for_mathtext` 能转换 `\(...\)` → `$...$`，`\[...\]` → `$$...$$`
+- [x] `is_formula=True` 渲染失败时先尝试预处理后重新渲染，而非直接降级为纯文本
+- [x] 非公式文本块中的 LaTeX 公式片段被提取并渲染为图片
+- [x] 混合文本（中文前缀+公式）正确渲染：中文用文本，公式用图片
+- [x] 所有测试通过

@@ -1,0 +1,7 @@
+- [x] DeepSeek-OCR 使用原生 prompt 格式（`<image>\n<|grounding|>...`）
+- [x] 原始响应被记录到日志（前 500 字符）
+- [x] JSON 解析失败时记录原始响应
+- [x] 支持 Markdown 段落格式响应解析
+- [x] 支持 `<|ref|>...<|/ref|>` 标签格式响应解析
+- [x] 现有 JSON 解析逻辑不受影响
+- [x] 全部测试通过

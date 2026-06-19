@@ -2,7 +2,12 @@ import fitz  # PyMuPDF
 import os
 import sys
 import logging
+import threading
 from PIL import ImageFont
+
+# 在模块级别设置 matplotlib 后端（仅调用一次）
+import matplotlib
+matplotlib.use('Agg')
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -20,6 +25,9 @@ class PdfGenerator:
         
         # 字体缓存，避免重复加载
         self.font_cache = {}
+
+        # 系统字体列表缓存（避免重复遍历文件系统）
+        self._system_fonts_cache = None
         
         # 确保字体目录存在
         os.makedirs(self.fonts_dir, exist_ok=True)
@@ -152,22 +160,248 @@ class PdfGenerator:
             logger.error(f"生成PDF时出错: {str(e)}", exc_info=True)
             raise Exception(f"生成PDF时出错: {str(e)}")
     
+    # 类级别缓存：LaTeX 可用性检测结果
+    _latex_available = None
+    _latex_lock = threading.Lock()
+
+    @classmethod
+    def _check_latex_available(cls):
+        """检测系统是否安装了 LaTeX 引擎（用于 usetex 渲染，线程安全）"""
+        if cls._latex_available is not None:
+            return cls._latex_available
+        with cls._latex_lock:
+            # double-check locking
+            if cls._latex_available is not None:
+                return cls._latex_available
+            try:
+                import subprocess
+                result = subprocess.run(['latex', '--version'], capture_output=True, timeout=5)
+                cls._latex_available = result.returncode == 0
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                cls._latex_available = False
+            logger.info(f"LaTeX 可用性检测: {'可用' if cls._latex_available else '不可用'}")
+            return cls._latex_available
+
+    @staticmethod
+    def _setup_matplotlib_cjk():
+        """配置 matplotlib 的 CJK 字体支持（统一入口，避免重复配置）"""
+        import matplotlib.pyplot as plt
+        plt.rcParams['font.sans-serif'] = ['PingFang SC', 'Heiti SC', 'STHeiti', 'SimHei', 'Arial Unicode MS', 'DejaVu Sans']
+        plt.rcParams['axes.unicode_minus'] = False
+
+    @staticmethod
+    def _preprocess_latex_for_mathtext(latex):
+        """预处理 LaTeX，去除 mathtext 不支持的命令，用于降级渲染
+
+        处理步骤：
+        1. 将 \\(...\\) → $...$，\\[...\\] → $$...$$（mathtext 不识别 \\(\\) \\[\\] 定界符）
+        2. 将 \\text{content} → content, \\mathrm{content} → content 等
+        3. 希腊字母替换（mathtext 不支持 \\alpha 等）
+        4. 数学符号替换
+        5. 去除 \\left 和 \\right 命令
+        """
+        import re
+        # 转换 LaTeX 定界符为 mathtext 支持的格式
+        latex = re.sub(r'\\\(', '$', latex)
+        latex = re.sub(r'\\\)', '$', latex)
+        latex = re.sub(r'\\\[', '$$', latex)
+        latex = re.sub(r'\\\]', '$$', latex)
+        # 将 $$...$$ 转换为 $...$（mathtext display math 不支持与文本混排）
+        latex = re.sub(r'\$\$', '$', latex)
+        # 去除数学字体命令
+        prev = None
+        while prev != latex:
+            prev = latex
+            latex = re.sub(
+                r'\\(?:text|mathrm|mathbf|mathit|mathsf|mathtt|textbf|textrm)\{([^}]*)\}',
+                r'\1', latex
+            )
+        # 希腊字母替换
+        greek_letters = {
+            r'\alpha': 'α', r'\beta': 'β', r'\gamma': 'γ', r'\delta': 'δ',
+            r'\epsilon': 'ε', r'\zeta': 'ζ', r'\eta': 'η', r'\theta': 'θ',
+            r'\iota': 'ι', r'\kappa': 'κ', r'\lambda': 'λ', r'\mu': 'μ',
+            r'\nu': 'ν', r'\xi': 'ξ', r'\pi': 'π', r'\rho': 'ρ',
+            r'\sigma': 'σ', r'\tau': 'τ', r'\upsilon': 'υ', r'\phi': 'φ',
+            r'\chi': 'χ', r'\psi': 'ψ', r'\omega': 'ω',
+            r'\Alpha': 'Α', r'\Beta': 'Β', r'\Gamma': 'Γ', r'\Delta': 'Δ',
+            r'\Epsilon': 'Ε', r'\Zeta': 'Ζ', r'\Eta': 'Η', r'\Theta': 'Θ',
+            r'\Iota': 'Ι', r'\Kappa': 'Κ', r'\Lambda': 'Λ', r'\Mu': 'Μ',
+            r'\Nu': 'Ν', r'\Xi': 'Ξ', r'\Pi': 'Π', r'\Rho': 'Ρ',
+            r'\Sigma': 'Σ', r'\Tau': 'Τ', r'\Upsilon': 'Υ', r'\Phi': 'Φ',
+            r'\Chi': 'Χ', r'\Psi': 'Ψ', r'\Omega': 'Ω',
+        }
+        for cmd, char in greek_letters.items():
+            latex = latex.replace(cmd, char)
+        # 数学符号替换
+        math_symbols = {
+            r'\circ': '°', r'\cdot': '·', r'\times': '×', r'\div': '÷',
+            r'\pm': '±', r'\leq': '≤', r'\geq': '≥', r'\neq': '≠',
+            r'\approx': '≈', r'\infty': '∞', r'\partial': '∂',
+            r'\nabla': '∇', r'\forall': '∀', r'\exists': '∃',
+            r'\in': '∈', r'\notin': '∉', r'\subset': '⊂', r'\supset': '⊃',
+            r'\cup': '∪', r'\cap': '∩', r'\emptyset': '∅',
+            r'\%': '%', r'\&': '&', r'\#': '#', r'\$': '$',
+        }
+        for cmd, char in math_symbols.items():
+            latex = latex.replace(cmd, char)
+        # 去除 \left 和 \right 命令
+        latex = re.sub(r'\\left\b', '', latex)
+        latex = re.sub(r'\\right\b', '', latex)
+        return latex
+
     def _render_formula_image(self, latex, fontsize=12):
-        import matplotlib
-        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         import io
+
+        # 配置 CJK 字体
+        self._setup_matplotlib_cjk()
+
+        # 优先使用 usetex（支持完整 LaTeX 命令如 \text{}）
+        if self._check_latex_available():
+            try:
+                plt.rcParams['text.usetex'] = True
+                fig, ax = plt.subplots(figsize=(0.01, 0.01))
+                ax.axis('off')
+                text = ax.text(0, 0, f'${latex}$', fontsize=fontsize, ha='left', va='bottom')
+                fig.canvas.draw()
+                bbox = text.get_window_extent()
+                fig.set_size_inches(bbox.width / fig.dpi + 0.1, bbox.height / fig.dpi + 0.05)
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', pad_inches=0.02, transparent=True)
+                plt.close(fig)
+                buf.seek(0)
+                return buf
+            except Exception as e:
+                logger.warning(f'usetex 渲染失败: {e}，降级为 mathtext')
+                plt.rcParams['text.usetex'] = False
+
+        # 降级1：用原始 LaTeX 尝试 mathtext 渲染
+        try:
+            buf = self._try_mathtext_render(latex, fontsize)
+            if buf:
+                return buf
+        except Exception:
+            pass
+
+        # 降级2：预处理 LaTeX 后用 mathtext 渲染
+        processed = self._preprocess_latex_for_mathtext(latex)
+        try:
+            buf = self._try_mathtext_render(processed, fontsize)
+            if buf:
+                return buf
+        except Exception:
+            pass
+
+        # 降级3：返回 None 表示渲染失败
+        logger.warning(f'公式渲染完全失败: {latex[:50]}...')
+        return None
+
+    def _try_mathtext_render(self, latex, fontsize=12, is_mixed=False):
+        """尝试用 mathtext 渲染公式，成功返回 BytesIO，失败返回 None
+
+        Args:
+            latex: LaTeX 文本
+            fontsize: 字体大小
+            is_mixed: 是否为混合文本（中文+公式），混合文本不包裹 $...$
+        """
+        import matplotlib.pyplot as plt
+        import io
+
+        # 配置 CJK 字体
+        self._setup_matplotlib_cjk()
+
         fig, ax = plt.subplots(figsize=(0.01, 0.01))
         ax.axis('off')
-        text = ax.text(0, 0, f'${latex}$', fontsize=fontsize, ha='left', va='bottom')
-        fig.canvas.draw()
-        bbox = text.get_window_extent()
-        fig.set_size_inches(bbox.width / fig.dpi + 0.1, bbox.height / fig.dpi + 0.05)
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', pad_inches=0.02, transparent=True)
-        plt.close(fig)
-        buf.seek(0)
-        return buf
+        try:
+            if is_mixed:
+                # 混合文本：文本本身包含 $...$，不需要额外包裹
+                display_text = latex
+            else:
+                display_text = f'${latex}$'
+            text = ax.text(0, 0, display_text, fontsize=fontsize, ha='left', va='bottom')
+            fig.canvas.draw()
+            bbox = text.get_window_extent()
+            if bbox.width < 1 or bbox.height < 1:
+                plt.close(fig)
+                return None
+            fig.set_size_inches(bbox.width / fig.dpi + 0.1, bbox.height / fig.dpi + 0.05)
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', pad_inches=0.02, transparent=True)
+            plt.close(fig)
+            buf.seek(0)
+            return buf
+        except Exception:
+            plt.close(fig)
+            return None
+
+    @staticmethod
+    def _contains_latex_formula(text):
+        """检测文本是否包含 LaTeX 公式片段（$...$、$$...$$、\\(...\\)、\\[...\\]）"""
+        import re
+        # 检测 $...$ （非 $$...$$）
+        if re.search(r'(?<!\$)\$(?!\$).+?\$(?!\$)', text):
+            return True
+        # 检测 $$...$$
+        if re.search(r'\$\$.+?\$\$', text):
+            return True
+        # 检测 \(...\)
+        if re.search(r'\\\(.*?\\\)', text):
+            return True
+        # 检测 \[...\]
+        if re.search(r'\\\[.*?\\\]', text):
+            return True
+        return False
+
+    def _render_mixed_text_formula_image(self, text, fontsize=12):
+        """将混合文本（中文+LaTeX公式）渲染为图片
+
+        使用 matplotlib 的 mathtext 功能，在文本中嵌入 $...$ 公式。
+        先预处理 LaTeX 命令，然后整体渲染。
+        """
+        import matplotlib.pyplot as plt
+        import io
+
+        # 配置 CJK 字体
+        self._setup_matplotlib_cjk()
+
+        # 预处理 LaTeX 命令
+        processed = self._preprocess_latex_for_mathtext(text)
+
+        # 如果有 usetex，优先使用
+        if self._check_latex_available():
+            try:
+                plt.rcParams['text.usetex'] = True
+                fig, ax = plt.subplots(figsize=(0.01, 0.01))
+                ax.axis('off')
+                # usetex 模式下需要用 LaTeX 语法
+                text_obj = ax.text(0, 0, processed, fontsize=fontsize, ha='left', va='bottom')
+                fig.canvas.draw()
+                bbox = text_obj.get_window_extent()
+                if bbox.width < 1 or bbox.height < 1:
+                    plt.close(fig)
+                    plt.rcParams['text.usetex'] = False
+                    raise ValueError("rendered size too small")
+                fig.set_size_inches(bbox.width / fig.dpi + 0.1, bbox.height / fig.dpi + 0.05)
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', pad_inches=0.02, transparent=True)
+                plt.close(fig)
+                buf.seek(0)
+                return buf
+            except Exception as e:
+                logger.warning(f'混合文本 usetex 渲染失败: {e}，降级为 mathtext')
+                plt.rcParams['text.usetex'] = False
+
+        # mathtext 渲染
+        try:
+            buf = self._try_mathtext_render(processed, fontsize, is_mixed=True)
+            if buf:
+                return buf
+        except Exception:
+            pass
+
+        logger.warning(f'混合公式文本渲染失败: {text[:50]}...')
+        return None
 
     def _draw_translated_text(self, page, translated_blocks, target_lang="zh"):
         """在页面上绘制翻译后的文本，使用块级关联实现样式保留
@@ -196,15 +430,16 @@ class PdfGenerator:
             original_font_size = full_block.font_size
             rect = fitz.Rect(block_bbox[0], block_bbox[1], block_bbox[2], block_bbox[3])
 
-            bg_padding = max(3, min(original_font_size * 0.4, 8))
+            h_padding = max(5, min(original_font_size * 0.5, 12))
+            v_padding = max(3, min(original_font_size * 0.3, 6))
             bg_rect = fitz.Rect(
-                max(rect.x0 - bg_padding, 0),
-                max(rect.y0 - bg_padding, 0),
-                min(rect.x1 + bg_padding, page.rect.width),
-                min(rect.y1 + bg_padding, page.rect.height)
+                max(rect.x0 - h_padding, 0),
+                max(rect.y0 - v_padding, 0),
+                min(rect.x1 + h_padding, page.rect.width),
+                min(rect.y1 + v_padding, page.rect.height)
             )
             page.add_redact_annot(bg_rect, fill=(1, 1, 1))
-            logger.debug(f"添加 redaction 标注，区域: {bg_rect} (padding={bg_padding:.1f})")
+            logger.debug(f"添加 redaction 标注，区域: {bg_rect} (h_padding={h_padding:.1f}, v_padding={v_padding:.1f})")
 
         # 一次性执行 redaction，真正删除原文（不删除图片）
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
@@ -227,11 +462,20 @@ class PdfGenerator:
             color = full_block.color
             bold = full_block.bold
             italic = full_block.italic
-            
+
+            # 字体大小为0时（LLM OCR等无样式信息的TextBlock），根据bbox估算
+            bbox_height = block_bbox[3] - block_bbox[1]
+            if original_font_size == 0:
+                if bbox_height > 0:
+                    original_font_size = min(bbox_height * 0.75, 36)
+                    logger.info(f"字体大小为0，根据bbox高度估算: {original_font_size:.1f}pt (bbox_height={bbox_height:.1f})")
+                else:
+                    original_font_size = 12
+                    logger.info(f"字体大小为0且bbox高度为0，使用默认字体大小: {original_font_size:.1f}pt")
+
             logger.info(f"使用文本块自带样式: 字体='{original_font}', 大小={original_font_size}, 粗体={bold}, 斜体={italic}")
 
             # 计算原文行高倍率，确保翻译文本行高与原文一致
-            bbox_height = block_bbox[3] - block_bbox[1]
             if original_font_size > 0 and bbox_height > 0:
                 # 保守估算：假设原文只有1行（适用于标题等短文本）
                 # 对于长文本，bbox_height 通常足够容纳多行
@@ -248,17 +492,12 @@ class PdfGenerator:
                 original_lineheight = 1.2  # 默认值
                 estimated_lines = 0
 
-            # 修复颜色转换逻辑
-            if color > 0xFFFFFF:  # 带alpha通道的ARGB格式 0xAARRGGBB
-                r = (color >> 16) & 0xFF
-                g = (color >> 8) & 0xFF
-                b = color & 0xFF
-                logger.debug(f"ARGB颜色: {color:#x} -> R={r}, G={g}, B={b}")
-            else:  # 只有RGB值 0xRRGGBB
-                r = (color >> 16) & 0xFF
-                g = (color >> 8) & 0xFF
-                b = color & 0xFF
-                logger.debug(f"RGB颜色: {color:#x} -> R={r}, G={g}, B={b}")
+            # 颜色转换：ARGB(0xAARRGGBB) 和 RGB(0xRRGGBB) 的 R/G/B 位位置相同
+            # 统一取低 24 位后提取，避免冗余分支
+            r = (color >> 16) & 0xFF
+            g = (color >> 8) & 0xFF
+            b = color & 0xFF
+            logger.debug(f"颜色: {color:#x} -> R={r}, G={g}, B={b}")
             
             # 转换为0-1范围
             rgb_color = (r / 255.0, g / 255.0, b / 255.0)
@@ -283,11 +522,27 @@ class PdfGenerator:
             if getattr(full_block, 'is_formula', False) and full_block.block_text:
                 try:
                     img_buf = self._render_formula_image(full_block.block_text, fontsize=original_font_size)
-                    page.insert_image(rect, stream=img_buf.getvalue())
-                    continue
+                    if img_buf is not None:
+                        page.insert_image(rect, stream=img_buf.getvalue())
+                        continue
+                    else:
+                        logger.warning('公式渲染返回 None，降级为文本')
                 except Exception as e:
-                    logger.warning(f'公式渲染失败，降级为文本: {e}')
-            
+                    logger.warning(f'公式渲染异常，降级为文本: {e}')
+
+            # 检测非公式文本块中是否包含 LaTeX 公式片段
+            if not getattr(full_block, 'is_formula', False) and self._contains_latex_formula(translated_text):
+                try:
+                    img_buf = self._render_mixed_text_formula_image(translated_text, fontsize=original_font_size)
+                    if img_buf is not None:
+                        page.insert_image(rect, stream=img_buf.getvalue())
+                        logger.info(f'混合公式文本渲染成功: {translated_text[:50]}...')
+                        continue
+                    else:
+                        logger.warning('混合公式文本渲染返回 None，降级为纯文本')
+                except Exception as e:
+                    logger.warning(f'混合公式文本渲染异常，降级为文本: {e}')
+
             # 使用文本块的对齐方式
             alignment = getattr(full_block, 'alignment', 0)
             logger.info(f"使用对齐方式: {alignment} (0=左对齐, 1=居中, 2=右对齐)")
@@ -338,8 +593,6 @@ class PdfGenerator:
                     # 文本溢出，需要调整
                     logger.warning(f"[WARN] 文本溢出，返回值: {result}，当前字体大小: {adjusted_font_size}，文本框: {current_rect}")
                     logger.warning(f"溢出文本: '{translated_text[:100]}...' (完整长度={len(translated_text)})")
-                    
-                    # 调整文本框大小（仅前3次尝试）
                 except Exception as e:
                     logger.warning(f"[FAIL] 绘制失败: {e}")
                     break
@@ -395,10 +648,12 @@ class PdfGenerator:
                 logger.warning(f"[智能截断] 所有尝试失败，开始智能截断")
                 logger.warning(f"[智能截断] 文本框尺寸: 宽度={current_rect.width:.1f}, 高度={current_rect.height:.1f}")
                 logger.warning(f"[智能截断] 使用最小字体大小: {min_font_size:.1f}, 行高倍率: {original_lineheight:.3f}")
-                
-                # 按单词边界截断，而不是机械按比例
+
+                # 按单词边界截断（适用于有空格分隔的文本）
                 words = translated_text.split()
+                word_truncation_tried = False
                 if len(words) > 1:
+                    word_truncation_tried = True
                     for word_count in range(len(words) - 1, max(1, len(words) // 10), -1):
                         truncated_text = ' '.join(words[:word_count]) + '...'
                         logger.info(f"[智能截断] 尝试保留{word_count}个单词: '{truncated_text[:50]}...'")
@@ -422,6 +677,35 @@ class PdfGenerator:
                                 break
                         except Exception as e:
                             logger.warning(f"智能截断绘制失败: {e}")
+                            break
+
+                # CJK 文本按字符数截断降级（中文/日文/韩文无空格分隔，split()返回单元素）
+                if not success and not word_truncation_tried:
+                    total_chars = len(translated_text)
+                    # 保留至少30%字符，逐步减少尝试
+                    for char_ratio in [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3]:
+                        keep_chars = max(1, int(total_chars * char_ratio))
+                        truncated_text = translated_text[:keep_chars] + '...'
+                        logger.info(f"[CJK截断] 尝试保留{keep_chars}/{total_chars}字符({char_ratio:.0%}): '{truncated_text[:50]}...'")
+                        try:
+                            result = page.insert_textbox(
+                                current_rect,
+                                truncated_text,
+                                fontname=suitable_font,
+                                fontsize=min_font_size,
+                                color=rgb_color,
+                                align=alignment,
+                                lineheight=original_lineheight
+                            )
+                            if result >= 0:
+                                logger.warning(
+                                    f"[CJK截断成功] 截断后渲染成功: 原始字符数={total_chars}, "
+                                    f"截断后字符数={keep_chars}, 截断比例={char_ratio:.0%}"
+                                )
+                                success = True
+                                break
+                        except Exception as e:
+                            logger.warning(f"CJK截断绘制失败: {e}")
                             break
                 
                 # 如果智能截断也失败，回退到机械截断（但限制最小比例）
@@ -972,11 +1256,14 @@ class PdfGenerator:
         logger.info("表格绘制完成")
     
     def _get_system_fonts(self):
-        """从系统中获取可用字体列表
-        
+        """从系统中获取可用字体列表（带缓存，避免重复遍历文件系统）
+
         Returns:
             list: 系统可用字体完整路径列表
         """
+        if self._system_fonts_cache is not None:
+            return self._system_fonts_cache
+
         system_fonts = []
         try:
             # 获取系统字体目录
@@ -1015,8 +1302,54 @@ class PdfGenerator:
         except Exception as e:
             logger.warning(f"获取系统字体列表失败: {e}")
             system_fonts = []
-        
+
+        self._system_fonts_cache = system_fonts
         return system_fonts
+
+    @staticmethod
+    def _find_font_file(fontname, system_font_paths):
+        """在系统字体列表中查找匹配的字体文件
+
+        匹配策略（按优先级）：
+        1. 精确匹配（去除扩展名后）
+        2. 前缀匹配（字体家族名 + 变体后缀，如 Arial-Bold → ArialBold.ttf）
+        3. 子串匹配（兜底）
+
+        Args:
+            fontname (str): 目标字体名称
+            system_font_paths (list): 系统字体路径列表
+
+        Returns:
+            str|None: 匹配的字体文件路径，未找到返回 None
+        """
+        if not fontname or not system_font_paths:
+            return None
+
+        norm_target = fontname.lower().replace('-', '').replace(' ', '')
+
+        for font_path in system_font_paths:
+            filename = os.path.basename(font_path)
+            name_without_ext = os.path.splitext(filename)[0]
+            norm_filename = name_without_ext.lower().replace('-', '').replace(' ', '')
+
+            # 1. 精确匹配
+            if norm_target == norm_filename:
+                return font_path
+
+            # 2. 前缀匹配：目标字体是文件名的前缀（如 "Arial" 匹配 "ArialBold"，不匹配 "ArialUnicodeMS"）
+            if norm_filename.startswith(norm_target + '-') or norm_filename.startswith(norm_target + '_') or \
+               norm_filename.startswith(norm_target + 'bold') or norm_filename.startswith(norm_target + 'italic'):
+                return font_path
+
+        # 3. 兜底子串匹配（原逻辑，优先返回第一个匹配）
+        for font_path in system_font_paths:
+            filename = os.path.basename(font_path)
+            name_without_ext = os.path.splitext(filename)[0]
+            norm_filename = name_without_ext.lower().replace('-', '').replace(' ', '')
+            if norm_target in norm_filename:
+                return font_path
+
+        return None
 
     def _check_embedded_font_support(self, page, fontname, target_lang):
         """检查PDF内嵌字体是否支持目标语言字符
@@ -1059,22 +1392,20 @@ class PdfGenerator:
         if target_lang in latin_langs:
             # 尝试从系统字体中查找该字体文件进行精确检测
             system_font_paths = self._get_system_fonts()
-            for font_path in system_font_paths:
-                font_filename = os.path.basename(font_path)
-                if fontname.lower().replace('-', '').replace(' ', '') in font_filename.lower().replace('-', '').replace(' ', ''):
-                    return self._check_font_support(font_path, target_lang)
+            matched_path = self._find_font_file(fontname, system_font_paths)
+            if matched_path:
+                return self._check_font_support(matched_path, target_lang)
             # 找不到字体文件，拉丁语言默认支持
             logger.debug(f"拉丁语言 '{target_lang}'，内嵌字体 '{fontname}' 默认支持")
             return True
 
         # 非拉丁语言：尝试从系统字体中查找该字体文件进行检测
         system_font_paths = self._get_system_fonts()
-        for font_path in system_font_paths:
-            font_filename = os.path.basename(font_path)
-            if fontname.lower().replace('-', '').replace(' ', '') in font_filename.lower().replace('-', '').replace(' ', ''):
-                result = self._check_font_support(font_path, target_lang)
-                logger.debug(f"内嵌字体 '{fontname}' 系统文件检测: {result}")
-                return result
+        matched_path = self._find_font_file(fontname, system_font_paths)
+        if matched_path:
+            result = self._check_font_support(matched_path, target_lang)
+            logger.debug(f"内嵌字体 '{fontname}' 系统文件检测: {result}")
+            return result
 
         # 无法找到字体文件，非拉丁语言默认不支持
         logger.debug(f"内嵌字体 '{fontname}' 未找到系统文件，非拉丁语言 '{target_lang}' 默认不支持")

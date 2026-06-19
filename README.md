@@ -11,7 +11,9 @@ If you have any questions or suggestions during use, welcome to leave a message 
 ### Core Features
 
 - **PDF Text Extraction**: Supports extracting plain text and table content while preserving position information
-- **OCR Support**: Supports scanned PDF documents via PaddleOCR (PP-StructureV3), including layout analysis, text recognition, formula recognition, and table extraction
+- **OCR Support**: Supports two OCR engines
+  - **PaddleOCR** (local engine): Based on PP-StructureV3, supports layout analysis, text recognition, formula recognition and table extraction for scanned PDFs. Requires PaddlePaddle installation.
+  - **LLM OCR** (cloud engine): Based on DeepSeek-OCR and other vision LLMs, called via translation service API. No PaddlePaddle installation needed. Ideal for machines without GPU or when better layout understanding is required.
 - **Multiple Translation API Support**:
   - aiping Model API
   - Silicon Flow Model API
@@ -75,11 +77,41 @@ conda activate pdfTrans
 ### 3. Configure Environment Variables
 
 - Copy `.env.example` file to `.env`
-- In `.env` file, configure API keys for translation or model calling
+- Register for an Aiping account: https://aiping.cn
+- Or, register for a Silicon Flow account: https://cloud.siliconflow.cn/i/OFUfQfNj
+- Obtain your API key
+- Configure platform model names and API keys in the `.env` file
 
 ```bash
 cp .env.example .env
-# Edit .env file to add API keys
+```
+
+- Edit `.env` file to add API keys and configure model names
+
+```bash
+# aiping API configuration
+AIPING_API_KEY=your-secret-key
+AIPING_API_URL=https://aiping.cn/api/v1
+# Specify translation model
+AIPING_MODEL_TRANSLATION=Qwen3-32B
+# Specify Markdown layout model
+AIPING_MODEL_LAYOUT=Qwen3-32B
+# Specify glossary extraction model
+AIPING_MODEL_GLOSSARY=Qwen3-32B
+
+# Silicon Flow API configuration
+SILICON_FLOW_API_KEY=your-secret-key
+SILICON_FLOW_API_URL=https://api.siliconflow.cn/v1/
+# Specify translation model
+SILICON_FLOW_MODEL_TRANSLATION=tencent/Hunyuan-MT-7B
+# Specify Markdown layout model
+SILICON_FLOW_MODEL_LAYOUT=Qwen/Qwen3-32B
+# Specify glossary extraction model
+SILICON_FLOW_MODEL_GLOSSARY=Qwen/Qwen3-32B
+
+# LLM OCR configuration (reuses translation engine API Key, only need to specify model)
+AIPING_OCR_LLM_MODEL=DeepSeek-OCR-2
+SILICON_FLOW_OCR_LLM_MODEL=deepseek-ai/DeepSeek-OCR
 ```
 
 ### 4. Install Dependencies
@@ -106,17 +138,41 @@ pip install paddlepaddle>=3.0.0
 pip install paddlepaddle-gpu>=3.0.0
 ```
 
-> **Note**: OCR features require PaddlePaddle. If not installed, only non-scanned PDFs can be processed.
+> **Note**: OCR requires PaddlePaddle (for PaddleOCR engine) or LLM OCR model configuration (for LLM OCR engine). If neither is configured, only non-scanned PDFs can be processed.
+
+### 6. Install LaTeX (Optional, for High-Quality Formula Rendering)
+
+LaTeX is used for high-quality formula rendering (usetex mode). If not installed, the system will automatically fall back to matplotlib mathtext for formula rendering (functional but with reduced quality for complex formulas).
+
+```bash
+# macOS
+brew install --cask mactex
+
+# Or install minimal version (smaller footprint)
+brew install --cask basictex
+
+# Linux (Ubuntu/Debian)
+sudo apt-get install texlive-full
+
+# Or install minimal version (smaller footprint)
+sudo apt-get install texlive-latex-base texlive-fonts-recommended
+```
+
+> **Note**: After installation, ensure `latex` command is available in your terminal.
 
 ## Usage
 
-### Start Web Service
+This tool provides two **independent** usage methods: **Web Interface** and **Command Line (CLI)**. No need to start the Web service to use CLI.
+
+### Method 1: Web Interface (GUI)
+
+#### Start Service
 
 ```bash
 python app.py
 ```
 
-### Access Web Interface
+#### Access Interface
 
 - Open browser and visit `http://localhost:5000`
 - Upload PDF file
@@ -128,15 +184,19 @@ python app.py
 - Select translation service and target language
 - Select output format (PDF, Word, Markdown, or any combination)
 - Enable OCR mode (optional, for scanned PDFs)
-  - Check "Enable OCR" to extract text from scanned/IMAGE-based PDFs
-  - Select OCR engine (currently supports PaddleOCR only)
-  - System automatically detects GPU and uses GPU acceleration when available
+  - Check "Enable OCR" to extract text from scanned/image-based PDFs
+  - Select OCR engine:
+    - **PaddleOCR** (local engine): Requires PaddlePaddle, suitable for local environments with GPU
+    - **LLM OCR** (cloud engine): Uses vision LLM via API, no PaddlePaddle needed, suitable for environments without GPU
+  - System auto-detects GPU and uses GPU acceleration when available (PaddleOCR engine)
 - Click "Translate" button
 - Wait for translation to complete, download translated PDF and/or Word files
 
-### Command Line Usage
+---
 
-The tool now supports command line interface (CLI) for batch processing and automation workflows.
+### Method 2: Command Line (CLI, Standalone, No Web Service Required)
+
+CLI is ideal for batch processing and automation workflows. It runs **independently without the Web service**.
 
 #### Installation
 
@@ -181,6 +241,9 @@ pdftrans translate document.pdf --ocr -o output.pdf
 # Specify OCR engine and language
 pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o output.pdf
 
+# Use LLM OCR cloud engine (no PaddlePaddle required)
+pdftrans translate document.pdf --ocr --ocr-engine llm -o output.pdf
+
 # Use glossary during translation
 pdftrans translate document.pdf -g glossary.txt -o output.pdf
 
@@ -191,42 +254,7 @@ pdftrans glossary document.pdf -o glossary.txt
 pdftrans list-languages
 ```
 
-#### Skill Integration
-
-PDF translation tool includes skill integration and provides enhanced features:
-
-- **Smart Defaults**: Automatically detects source language from the first 100 lines of the input file, defaults to Chinese as target language
-- **Optimized Output**: Defaults to Markdown format with chapter split, semantic merge, and LLM semantic judgment enabled
-- **Error Handling**: Provides clear error messages for common issues like permission errors
-
-#### Skill Usage
-
-You can use **Natural Language Usage** (in AI IDEs like Trae): You can use natural language to interact with the skill, for example:
-   - "Translate this PDF to Chinese"
-   - "Translate this PDF to Chinese and output as Word document"
-   - "Extract glossary from this PDF"
-   - "List languages supported by PDF translation tool"
-
-#### API Key Configuration
-
-The tool requires API keys for translation services. Configure them in the `.env` file:
-
-```bash
-# .env file example
-
-# aiping API configuration
-AIPING_API_KEY=your_aiping_api_key
-
-# Silicon Flow API configuration
-SILICON_FLOW_API_KEY=your_silicon_flow_api_key
-
-# OCR GPU acceleration (optional, default: auto-detect)
-OCR_USE_GPU=true
-```
-
-Only one translation service API key is required to use the tool. The tool defaults to using aiping model service.
-
-#### CLI Options
+#### CLI Options Reference
 
 **Global Options:**
 - `-v, --verbose` - Show detailed output
@@ -247,8 +275,51 @@ Only one translation service API key is required to use the tool. The tool defau
 - `-l, --llm-merge` - Use LLM semantic judgment
 - `-c, --chapter-split` - Split output by chapter (Markdown only)
 - `--ocr` - Enable OCR mode for scanned PDFs
-- `--ocr-engine` - OCR engine type (default: paddleocr)
+- `--ocr-engine` - OCR engine type: `paddleocr` (local, requires PaddlePaddle) or `llm` (cloud, requires API Key), default: paddleocr
 - `--ocr-lang` - OCR recognition language (default: auto-detect from source language)
+
+---
+
+### Method 3: AI IDE Skill (Natural Language Invocation, No Manual Commands)
+
+If you use an AI IDE that supports Skills (such as **Trae**), you can invoke the PDF translation tool through **natural language**. The AI will automatically assemble and execute CLI commands for you.
+
+#### Installation & Setup (Using Trae as Example)
+
+1. **Install Trae IDE**: Visit https://www.trae.com to download and install
+2. **Install Skill**: Download this repository (pdfTrans) into your project's skill directory:
+   ```
+   your-project/
+   └── .trae/
+       └── skills/
+           └── pdftrans/    ← Place pdfTrans code here
+               ├── SKILL.md   ← Trae identifies and activates the skill via this file
+               ├── cli.py
+               └── ...
+   ```
+3. **Activate Skill**: Trae will automatically detect the `SKILL.md` file, and you can use the PDF translation skill directly in the chat window
+
+> **Note**: The skill invokes CLI commands via `SKILL.md` to execute translation tasks. Just ensure API keys are configured in `.env` (see "**Step 3: Configure Environment Variables**" above).
+
+#### How to Use
+
+Simply describe your needs in natural language within the AI IDE's chat window, for example:
+
+- "Translate this PDF to Chinese"
+- "Translate this PDF to Chinese and output as a Word document"
+- "Translate pages 1-10 using silicon_flow translation service"
+- "Extract glossary from this PDF"
+- "List languages supported by PDF translation tool"
+
+#### Skill Enhanced Features
+
+When invoked via Skill, the AI automatically provides these enhancements:
+
+- **Smart Defaults**: Automatically detects source language from the first 100 lines of the input file, defaults to Chinese as target language
+- **Optimized Output**: Defaults to Markdown format with chapter split, semantic merge, and LLM semantic judgment enabled
+- **Error Handling**: Provides clear error messages for common issues like permission errors
+
+> **Note**: The skill mode invokes CLI commands via `SKILL.md` to execute translations. Please ensure you have completed the **Installation Steps** above (conda environment, dependencies, API keys) and can successfully run `pdftrans --help`.
 
 ## License
 
@@ -256,7 +327,7 @@ AGPL-3.0
 
 ## Contact
 
-If you have any questions or suggestions during use, welcome to leave a message on the WeChat public account 【智践行】, or submit Issues or Pull Requests on the Gitee repository. We look forward to working with everyone to refine the PDF translation tool to better meet practical needs!
+If you have any questions or suggestions during use, welcome to leave a message on the WeChat public account 【智践行】or RED/Xiaohongshu 【智践行的小芝】, or submit Issues or Pull Requests on the Gitee repository. We look forward to working with everyone to refine the PDF translation tool to better meet practical needs!
 
 ## Changelog
 

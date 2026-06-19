@@ -25,7 +25,8 @@ class PdfExtractor:
     """
     
     def __init__(self, pdf_path=None, table_extractor='pymupdf',
-                 ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch'):
+                 ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch',
+                 translator_type='aiping'):
         """初始化PdfExtractor对象
 
         Args:
@@ -34,6 +35,7 @@ class PdfExtractor:
             ocr_mode (bool, optional): 是否启用OCR模式提取扫描版PDF. Defaults to False.
             ocr_engine (str, optional): OCR引擎类型. Defaults to 'paddleocr'.
             ocr_lang (str, optional): OCR识别语言. Defaults to 'ch'.
+            translator_type (str, optional): 翻译引擎类型. Defaults to 'aiping'.
         """
         self.pdf_path = pdf_path
         self.metadata = None
@@ -43,6 +45,7 @@ class PdfExtractor:
         self.ocr_mode = ocr_mode
         self.ocr_engine = ocr_engine
         self.ocr_lang = ocr_lang
+        self.translator_type = translator_type
         self._ocr_extractor = None
 
         if pdf_path:
@@ -87,10 +90,15 @@ class PdfExtractor:
             from modules.ocr.factory import create_ocr_extractor
             from config import config
             logger.info(f"初始化OCR提取器: engine={self.ocr_engine}, lang={self.ocr_lang}")
+            ocr_kwargs = {
+                'lang': self.ocr_lang,
+                'use_gpu': config.OCR_USE_GPU,
+            }
+            if self.ocr_engine == 'llm':
+                ocr_kwargs['translator_type'] = self.translator_type
             self._ocr_extractor = create_ocr_extractor(
                 self.ocr_engine,
-                lang=self.ocr_lang,
-                use_gpu=config.OCR_USE_GPU,
+                **ocr_kwargs
             )
         return self._ocr_extractor
 
@@ -204,16 +212,26 @@ class PdfExtractor:
 
             # OCR模式：使用OCR引擎提取，跳过PyMuPDF文本提取
             if self.ocr_mode:
-                logger.info(f"OCR模式: 使用 {self.ocr_engine} 提取PDF内容（子进程隔离）")
-                from modules.ocr.ocr_worker import run_ocr_in_subprocess
-                from config import config as app_config
+                if self.ocr_engine == 'llm':
+                    # LLM OCR：API调用，无需子进程隔离
+                    logger.info(f"OCR模式: 使用 LLM 提取PDF内容")
+                    extractor = self.ocr_extractor
+                    result = extractor.extract_from_pdf(
+                        self.pdf_path, pages=pages,
+                        temp_images_dir=temp_images_dir,
+                    )
+                else:
+                    # PaddleOCR：子进程隔离（内存管理）
+                    logger.info(f"OCR模式: 使用 PaddleOCR 提取PDF内容（子进程隔离）")
+                    from modules.ocr.ocr_worker import run_ocr_in_subprocess
+                    from config import config as app_config
 
-                result = run_ocr_in_subprocess(
-                    self.pdf_path, pages=pages,
-                    temp_images_dir=temp_images_dir,
-                    lang=self.ocr_lang, use_gpu=app_config.OCR_USE_GPU,
-                    progress_callback=progress_callback
-                )
+                    result = run_ocr_in_subprocess(
+                        self.pdf_path, pages=pages,
+                        temp_images_dir=temp_images_dir,
+                        lang=self.ocr_lang, use_gpu=app_config.OCR_USE_GPU,
+                        progress_callback=progress_callback
+                    )
                 self.chapter_identifier.reset()
                 if extract_chapter:
                     self._associate_ocr_result_with_chapters(result)

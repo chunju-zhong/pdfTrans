@@ -11,7 +11,7 @@ from modules.ocr.base import OcrExtractor
 logger = logging.getLogger(__name__)
 
 # 支持的OCR引擎类型
-SUPPORTED_OCR_ENGINES = ['paddleocr']
+SUPPORTED_OCR_ENGINES = ['paddleocr', 'llm']
 
 
 def create_ocr_extractor(ocr_type='paddleocr', **kwargs):
@@ -20,6 +20,7 @@ def create_ocr_extractor(ocr_type='paddleocr', **kwargs):
     Args:
         ocr_type (str): OCR引擎类型，可选值:
             - 'paddleocr': PaddleOCR PP-StructureV3
+            - 'llm': LLM视觉模型（Qwen3-VL等）
         **kwargs: 传递给提取器构造函数的参数
 
     Returns:
@@ -35,6 +36,9 @@ def create_ocr_extractor(ocr_type='paddleocr', **kwargs):
     if ocr_type == 'paddleocr':
         from modules.ocr.paddle_extractor import PaddleOcrExtractor
         return PaddleOcrExtractor(**kwargs)
+    elif ocr_type == 'llm':
+        from modules.ocr.llm_extractor import LlmOcrExtractor
+        return LlmOcrExtractor(**kwargs)
     else:
         raise ValueError(
             f"不支持的OCR引擎类型: {ocr_type}，"

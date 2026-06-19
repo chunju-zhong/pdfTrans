@@ -1,0 +1,7 @@
+- [x] `_render_formula_image` 优先使用 `usetex=True` 渲染公式
+- [x] LaTeX 环境检测在首次调用时执行，结果缓存到类属性
+- [x] usetex 不可用时，预处理 LaTeX 去除 `\text{}`、`\mathrm{}` 等命令后用 mathtext 渲染
+- [x] 预处理后 mathtext 仍无法渲染时，降级为纯文本输出
+- [x] `_detect_formula` 支持高 LaTeX 密度文本检测（LaTeX 命令占比 > 30% 且无 CJK 字符）
+- [x] 包含中文的混合文本不被标记为公式
+- [x] 所有测试通过

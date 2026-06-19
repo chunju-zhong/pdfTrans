@@ -89,8 +89,8 @@ class AipingTranslator(Translator):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=True,  # 保持流式调用，兼容现有测试
-                    temperature=0.7,  # Qwen3 非思考模式推荐参数
-                    top_p=0.8,  # Qwen3 非思考模式推荐参数
+                    temperature=0.1,  # Qwen3 非思考模式推荐参数
+                    top_p=0.9,  # Qwen3 非思考模式推荐参数
                     max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[

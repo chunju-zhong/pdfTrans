@@ -1,0 +1,12 @@
+- [x] 纯公式文本（`$...$`）被正确标记为 `is_formula=True`，定界符被清理
+- [x] 纯公式文本（`$$...$$`）被正确标记为 `is_formula=True`，定界符被清理
+- [x] 纯公式文本（`\(...\)`）被正确标记为 `is_formula=True`，定界符被清理
+- [x] 纯公式文本（`\[...\]`）被正确标记为 `is_formula=True`，定界符被清理
+- [x] 混合文本（中文说明 + 公式）不被标记为公式，`is_formula=False`
+- [x] 多公式混合文本（多个 `$...$` 间隔说明文字）不被标记为公式
+- [x] 普通文本（无 LaTeX）不被标记为公式
+- [x] `_parse_ref_tags_response` 中公式块正确标记并清理定界符
+- [x] `_parse_json_response` 中公式块正确标记并清理定界符
+- [x] 标记为公式的文本块在翻译流程中被跳过（由现有 `translation_service.py` 逻辑保证）
+- [x] 标记为公式的文本块在 PDF 渲染时用 matplotlib 渲染为图片（由现有 `pdf_generator.py` 逻辑保证）
+- [x] 所有测试通过
