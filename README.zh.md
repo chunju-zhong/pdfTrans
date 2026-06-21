@@ -12,7 +12,7 @@ PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持We
 
 - **PDF文本提取**：支持提取普通文本和表格内容，保留位置信息
 - **OCR支持**：支持两种 OCR 引擎
-  - **PaddleOCR**（本地引擎）：基于 PP-StructureV3，支持扫描版 PDF 的版面分析、文字识别、公式识别和表格提取，需安装 PaddlePaddle
+  - **PaddleOCR**（本地引擎）：基于 PP-StructureV3，支持版面分析、文字识别、公式识别和表格提取，需安装 PaddlePaddle
   - **LLM OCR**（云端引擎）：基于 DeepSeek-OCR 等视觉大模型，通过翻译服务 API 调用，无需本地安装 PaddlePaddle，适合无 GPU 或需要更好版面理解的场景
 - **多翻译API支持**：
   - aiping 模型调用API
@@ -138,7 +138,7 @@ pip install paddlepaddle>=3.0.0
 pip install paddlepaddle-gpu>=3.0.0
 ```
 
-> **注意**：OCR功能需要安装 PaddlePaddle（PaddleOCR引擎）或配置 LLM OCR 模型（LLM OCR引擎）。如两者均未配置，仅支持非扫描版PDF文档。
+> **注意**：OCR功能需要安装 PaddlePaddle（PaddleOCR引擎）或配置 LLM OCR 模型（LLM OCR引擎）。如两者均未配置，OCR提取功能将不可用。
 
 ### 6. 安装 LaTeX（可选，公式高质量渲染）
 
@@ -183,8 +183,8 @@ python app.py
   - 可以混合使用（如：1-3,5,7-9）
 - 选择翻译服务和目标语言
 - 选择输出格式（PDF、Word、Markdown或任意组合）
-- 启用OCR模式（可选，用于扫描版PDF）
-  - 勾选"启用OCR"可从扫描版/图片型PDF中提取文字
+- 启用OCR模式（可选）
+  - 勾选"启用OCR"可使用OCR引擎提取文字
   - 选择OCR引擎：
     - **PaddleOCR**（本地引擎）：需安装 PaddlePaddle，适合有 GPU 的本地环境
     - **LLM OCR**（云端引擎）：通过 API 调用视觉大模型，无需 PaddlePaddle，适合无 GPU 环境
@@ -235,7 +235,7 @@ pdftrans translate document.pdf --semantic-merge -o output.pdf
 # 启用语义合并及LLM语义判断
 pdftrans translate document.pdf -m -l -f docs -o output.pdf
 
-# 启用OCR模式翻译扫描版PDF
+# 启用OCR模式
 pdftrans translate document.pdf --ocr -o output.pdf
 
 # 指定OCR引擎和识别语言
@@ -274,7 +274,7 @@ pdftrans list-languages
 - `-m, --semantic-merge` - 启用语义合并
 - `-l, --llm-merge` - 使用LLM语义判断
 - `-c, --chapter-split` - 按章节拆分输出（仅Markdown格式）
-- `--ocr` - 启用OCR模式（用于扫描版PDF）
+- `--ocr` - 启用OCR模式
 - `--ocr-engine` - OCR引擎类型：`paddleocr`（本地，需PaddlePaddle）或 `llm`（云端，需API Key），默认：paddleocr
 - `--ocr-lang` - OCR识别语言（默认：根据源语言自动选择）
 
@@ -339,7 +339,7 @@ AGPL-3.0
 
 ## 注意事项
 
-1. 扫描版PDF通过OCR模式支持（需安装PaddlePaddle）。非扫描版PDF无需OCR即可使用
+1. OCR模式提供增强的文字提取，支持版面分析、公式和表格识别（需安装PaddlePaddle或配置LLM OCR）
 2. 翻译质量取决于所选翻译API的质量
 3. 处理大型PDF文档可能需要较长时间，可使用指定翻译页功能分次翻译
 4. 请确保正确配置API密钥，否则翻译功能将无法使用

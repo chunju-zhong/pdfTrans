@@ -12,7 +12,7 @@ If you have any questions or suggestions during use, welcome to leave a message 
 
 - **PDF Text Extraction**: Supports extracting plain text and table content while preserving position information
 - **OCR Support**: Supports two OCR engines
-  - **PaddleOCR** (local engine): Based on PP-StructureV3, supports layout analysis, text recognition, formula recognition and table extraction for scanned PDFs. Requires PaddlePaddle installation.
+  - **PaddleOCR** (local engine): Based on PP-StructureV3, supports layout analysis, text recognition, formula recognition and table extraction. Requires PaddlePaddle installation.
   - **LLM OCR** (cloud engine): Based on DeepSeek-OCR and other vision LLMs, called via translation service API. No PaddlePaddle installation needed. Ideal for machines without GPU or when better layout understanding is required.
 - **Multiple Translation API Support**:
   - aiping Model API
@@ -43,7 +43,7 @@ If you have any questions or suggestions during use, welcome to leave a message 
   - camelot-py[cv]: Used for table extraction
   - opencv-python: Dependency for camelot-py[cv]
 - **OCR Engine**:
-  - PaddleOCR 3.0+ (PP-StructureV3): Used for scanned PDF text extraction, layout analysis, formula recognition
+  - PaddleOCR 3.0+ (PP-StructureV3): Used for PDF text extraction, layout analysis, formula recognition
   - PaddlePaddle 3.0+: Deep learning framework (CPU/GPU auto-detection)
 - **Document Processing**:
   - python-docx: Used for Word document generation
@@ -183,8 +183,8 @@ python app.py
   - Can mix both (e.g., 1-3,5,7-9)
 - Select translation service and target language
 - Select output format (PDF, Word, Markdown, or any combination)
-- Enable OCR mode (optional, for scanned PDFs)
-  - Check "Enable OCR" to extract text from scanned/image-based PDFs
+- Enable OCR mode (optional)
+  - Check "Enable OCR" to use OCR engine for text extraction
   - Select OCR engine:
     - **PaddleOCR** (local engine): Requires PaddlePaddle, suitable for local environments with GPU
     - **LLM OCR** (cloud engine): Uses vision LLM via API, no PaddlePaddle needed, suitable for environments without GPU
@@ -235,7 +235,7 @@ pdftrans translate document.pdf --semantic-merge -o output.pdf
 # Enable semantic merge and LLM semantic judgment
 pdftrans translate document.pdf -m -l -f docs -o output.pdf
 
-# Enable OCR mode for scanned PDFs
+# Enable OCR mode
 pdftrans translate document.pdf --ocr -o output.pdf
 
 # Specify OCR engine and language
@@ -274,7 +274,7 @@ pdftrans list-languages
 - `-m, --semantic-merge` - Enable semantic merge
 - `-l, --llm-merge` - Use LLM semantic judgment
 - `-c, --chapter-split` - Split output by chapter (Markdown only)
-- `--ocr` - Enable OCR mode for scanned PDFs
+- `--ocr` - Enable OCR mode
 - `--ocr-engine` - OCR engine type: `paddleocr` (local, requires PaddlePaddle) or `llm` (cloud, requires API Key), default: paddleocr
 - `--ocr-lang` - OCR recognition language (default: auto-detect from source language)
 
@@ -339,7 +339,7 @@ The project task list is available in [docs/TODO.md](docs/TODO.md) file.
 
 ## Notes
 
-1. Scanned PDFs are supported via OCR mode (requires PaddlePaddle installation). Non-scanned PDFs work without OCR
+1. OCR mode provides enhanced text extraction with layout analysis, formula and table recognition (requires PaddlePaddle or LLM OCR configuration)
 2. Translation quality depends on the selected translation API
 3. Processing large PDF documents may take a long time, you can use the page-specific translation feature to translate in batches
 4. Please ensure API keys are correctly configured, otherwise translation functionality will not work

@@ -1,5 +1,41 @@
 # AI 开发进度记录
 
+### 2026-06-19
+- **当前状态**：已完成 LLM OCR 模式表格渲染、定位、翻译、进度条等多项修复
+- **已完成任务**：
+  - 修复表格 HTML 被当作纯文本渲染：
+    - `modules/ocr/llm_extractor.py` — JSON/ref 标签/Markdown 三种响应格式中添加过滤逻辑，跳过含 `<table>` 的文本块
+  - 修复表格内容未翻译：
+    - `_extract_tables_from_text` 中 `if not cells:` 逻辑反转 bug，修复为 `if not cells: continue`
+  - 修复 `table_x0` 未定义错误：
+    - `modules/pdf_generator.py` `_draw_translated_table` 添加 else 分支，`table_bbox` 为 None 时使用页面区域作为 fallback
+  - 修复表格位置固定不随原 PDF：
+    - `_parse_ref_tags_response` 中保留 DeepSeek-OCR `<|det|>` 坐标，通过 `table_bbox_map` 传入 `_extract_tables_from_text`
+    - `_extract_tables_from_text` 新增 `table_bbox_map` 参数，优先使用外部 bbox
+  - 修复多表格叠放：
+    - 同一页多个表格基于前一个表格底部 y 坐标向下偏移
+  - 修复 LLM OCR 提取进度条不更新：
+    - `extract_from_pdf` 新增 `progress_callback` 参数，逐页发送回调
+    - `pdf_extractor.py` LLM OCR 分支传递 `progress_callback`
+  - 代码审查优化（4项）：
+    - `table_bbox_map` 从 HTML 全文 key 改为整数索引 key
+    - `_parse_html_table` 消除重复解构
+    - `_extract_tables_from_text` 消除重复 bbox 检查
+    - `'<table'` 提取为模块级常量 `TABLE_HTML_MARKER`
+- **技术实现**：
+  - DeepSeek-OCR `<|ref|>` 标签中的 `<|det|>` 坐标为归一化 0-999 值，通过 `_pixel_to_pdf_coords(is_normalized=True)` 转换为 PDF 点坐标
+  - `table_bbox_map` 使用整数索引（第几个 `<table>`）作为 key，两端（`_parse_ref_tags_response` 和 `_extract_tables_from_text`）通过 enumerate 顺序一致
+  - 进度回调格式与 PaddleOCR 路径一致（`msg_type` + `payload` 含 `step`/`step_name`/`pages_done`/`total_pages`）
+- **影响**：
+  - LLM OCR 模式下表格正确绘制在原 PDF 位置，内容正确翻译
+  - 提取过程进度条正常更新
+  - 代码质量提升，消除冗余逻辑
+- **遇到的问题**：
+  - 表格位置问题经历多轮迭代：初始只修复了单元格坐标全零 → 发现 HTML 被当作纯文本 → 发现内容未翻译（逻辑反转 bug）→ 发现 det 坐标被丢弃 → 代码审查发现 key 匹配问题
+- **后续计划**：
+  - 实际运行验证表格位置和翻译效果
+  - 考虑基于单元格内容自适应列宽
+
 ### 2026-06-18
 - **当前状态**：已完成短文本未翻译检测缺失修复
 - **已完成任务**：
