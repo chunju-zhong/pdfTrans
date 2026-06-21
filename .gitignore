@@ -44,14 +44,6 @@ trae-sandbox-
 .trae/README.zh-CN.md
 
 .claude/reviews/
-.claude/PRPs/
-.claude/settings.json
-
-# MCP config (local only)
-.mcp.json
-
-# Spec working files
-.trae/specs/
         
 # Temporary images
 temp_images/

@@ -1,0 +1,10 @@
+- [x] `_check_latex_available()` 能检测到 `/Library/TeX/texbin/latex` 等非 PATH 路径下的 LaTeX 安装
+- [x] LaTeX 检测成功后，`os.environ['PATH']` 被更新，后续 usetex 渲染可用
+- [x] 日志记录 LaTeX 检测结果和实际使用的路径
+- [x] `_detect_formula()` 能识别以 `\begin{aligned}` 等数学环境开头的公式文本，返回 `is_formula=True`
+- [x] `_detect_formula()` 对非数学环境（如 `\begin{figure}`）不误判
+- [x] `_preprocess_latex_for_mathtext()` 能将 `\begin{aligned}...\end{aligned}` 转换为 mathtext 可渲染的单行格式
+- [x] 多行 `\\` 分隔的 aligned 内容被正确合并为单行
+- [x] 行首 `&` 对齐标记被正确去除
+- [x] `\begin{gathered}` 和 `\begin{cases}` 环境也能被正确处理
+- [x] 用户提供的公式 `\begin{aligned}&=34+44+\left(3*23/3*2\right)\\&=34+44+\left(69/3*2\right)\\&=34+44+\left(23*2\right)\\&=34+44+46\end{aligned}` 能在 PDF 中正确渲染为公式图像

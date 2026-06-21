@@ -1,0 +1,12 @@
+- [x] PdfCell模型包含`estimated_lines`字段，默认值0
+- [x] PdfCell的`to_dict()`输出`estimated_lines`字段
+- [x] PdfCell的`from_dict()`读取`estimated_lines`字段，默认0
+- [x] `_parse_html_table`使用"先行高后列宽"迭代优化：先估算行数行高→钳位行高→反推列宽→迭代
+- [x] 行高钳位到原始bbox范围内（超出缩小，不足放大）
+- [x] 列宽根据行高反推：每单元格所需最小列宽 = display_width / available_lines
+- [x] 列宽仍满足最小10%、最大50%钳位约束
+- [x] 迭代最多3次，行高变化<0.5pt时提前退出
+- [x] 每个有文本的单元格的`estimated_lines`被正确设置
+- [x] 空单元格的`estimated_lines`为0
+- [x] `_draw_translated_table`利用`estimated_lines`预判单元格容量并优化字体大小选择
+- [x] `estimated_lines`为0时绘制行为与修改前一致（向后兼容）

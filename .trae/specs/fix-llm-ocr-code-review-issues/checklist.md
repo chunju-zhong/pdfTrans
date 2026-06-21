@@ -1,0 +1,5 @@
+- [x] `table_bbox_map` 使用整数索引作为 key，不再使用 HTML 全文字符串
+- [x] `_parse_html_table` 中 `table_bbox` 只解构一次
+- [x] `_extract_tables_from_text` 中 bbox 有效性检查只执行一次
+- [x] `'<table'` 提取为模块级常量 `TABLE_HTML_MARKER`，替换所有硬编码
+- [x] 现有测试通过

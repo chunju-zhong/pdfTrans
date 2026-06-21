@@ -1,0 +1,14 @@
+- [x] LaTeX 环境正则使用反向引用，`\begin{aligned}...\end{cases}` 不被错误匹配
+- [x] 相同环境名的 `\begin{aligned}...\end{aligned}` 被正确去除环境标记
+- [x] 兜底 `\\` 替换仅在检测到残留行分隔符时执行，不破坏合法内容
+- [x] 兜底 `&` 替换仅在检测到残留对齐标记时执行，不破坏合法内容
+- [x] `_preprocess_latex_for_mathtext` 幂等性：对已处理结果再次调用输出不变
+- [x] `_check_latex_available` 中 PATH 修改在 `_latex_lock` 锁内完成
+- [x] `llm_extractor.py` 中 `fix_line_break_hyphens` import 保留（函数仍被调用）
+- [x] `_compute_table_layout` docstring 标注了修改 `matrix` 参数的副作用
+- [x] `_map_ocr_blocks_to_models` 中使用 `if cells is not None:` 检查返回值
+- [x] `_estimate_text_display_width` 覆盖日文平假名、片假名、韩文
+- [x] 表格单元格截断使用二分查找而非线性遍历
+- [x] `docx_generator.py` 合并单元格异常捕获为 `(ValueError, KeyError)`
+- [x] `llm_extractor.py` 模块级 import 顺序正确（常量在 import 之后）
+- [x] `_check_latex_available` 路径探测包含 Linux 和 Windows 常见路径

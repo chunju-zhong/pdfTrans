@@ -1,0 +1,6 @@
+- [x] `LlmOcrExtractor.extract_from_pdf` 接受 `progress_callback` 参数
+- [x] 逐页提取时每完成一页调用 `progress_callback('step_progress', ...)` 更新进度
+- [x] 提取开始时调用 `progress_callback('step_start', ...)`
+- [x] 提取完成时调用 `progress_callback('step_complete', ...)`
+- [x] `PdfExtractor.extract` LLM OCR 分支传递 `progress_callback` 给 `extract_from_pdf`
+- [x] 非 OCR 模式和 PaddleOCR 模式进度不受影响

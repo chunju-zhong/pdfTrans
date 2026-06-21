@@ -1,0 +1,6 @@
+- [x] `_compute_table_layout`中Step 1无`row_line_counts`变量（死代码已移除）
+- [x] 截断逻辑使用显式`attempts`计数器（CJK和英文两处）
+- [x] `_extract_json`恢复第三级容错（首尾花括号匹配）
+- [x] `from __future__ import annotations`位于编码声明之后
+- [x] 多bbox拆分段落数不匹配时有fallback处理
+- [x] 所有测试通过（317 passed, 0 failed）

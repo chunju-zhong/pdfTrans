@@ -1,0 +1,5 @@
+- [x] `_parse_ref_tags_response` 中表格的 `<|det|>` 坐标被保留并用于 PdfTable bbox
+- [x] `_extract_tables_from_text` 接受 `table_bbox_map` 参数，优先使用外部提供的 bbox
+- [x] 同一页多个表格不叠放在同一 y 坐标
+- [x] 无 det 坐标时回退到估算位置（不报错）
+- [x] 现有测试通过

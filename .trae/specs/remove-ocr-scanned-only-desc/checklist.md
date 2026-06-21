@@ -1,0 +1,5 @@
+- [x] `templates/index.html` 中 OCR 复选框标签不含"扫描版PDF"限定
+- [x] `templates/index.html` 中 OCR 提示文字不含"扫描版PDF"限定
+- [x] `README.md` 中所有 OCR 相关描述不再限定为"scanned PDFs"
+- [x] `README.zh.md` 中所有 OCR 相关描述不再限定为"扫描版PDF"
+- [x] `SKILL.md` 中 OCR 模式说明不再限定为仅处理扫描版 PDF

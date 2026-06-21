@@ -1,0 +1,7 @@
+- [x] 截断逻辑中`max_truncation_attempts`不再遮蔽外层`max_attempts`
+- [x] `_parse_html_table`中Step 1无用的`row_line_counts`已移除
+- [x] LaTeX环境正则正确匹配`gather*`、`align*`、`equation*`（星号为字面量）
+- [x] 迭代优化逻辑提取为`_compute_table_layout`独立方法
+- [x] `fix_line_break_hyphens`函数添加了TODO注释
+- [x] LaTeX检测路径移除了硬编码TeX Live年份
+- [x] `pdf_generator.py`新增注释统一为中文

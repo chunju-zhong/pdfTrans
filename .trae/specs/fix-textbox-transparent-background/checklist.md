@@ -1,0 +1,3 @@
+- [x] 文本块 redaction 使用 `fill=None` 而非 `fill=(1, 1, 1)`
+- [x] 表格单元格 redaction 使用 `fill=None` 而非 `fill=(1, 1, 1)`
+- [x] 生成的PDF中文本框区域无白色背景方块

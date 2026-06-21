@@ -1,0 +1,8 @@
+- [x] LLM OCR `_parse_html_table` 返回矩形矩阵（每行长度 = 逻辑列数），合并覆盖位置为 None
+- [x] LLM OCR `_parse_html_table` 裁剪 rowspan/colspan 不超出表格边界
+- [x] `_add_table` 使用所有行最大逻辑列数计算 num_cols（非 `len(table_data[0])`）
+- [x] `_add_table` merge 操作前裁剪目标行列到表格范围内
+- [x] `_add_table` 写入单元格文本时跳过越界索引
+- [x] `_add_table` 设置列宽时检查 col_idx 不超出 word_table.columns 长度
+- [x] 已有测试 `tests/test_llm_ocr.py` 中 `_parse_html_table` 用例全部通过
+- [x] 使用 LLM OCR 模式翻译包含复杂表格的 PDF 不再报 "list index out of range" 错误

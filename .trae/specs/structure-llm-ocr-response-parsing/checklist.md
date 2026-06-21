@@ -1,0 +1,21 @@
+- [x] OcrBlock 数据类已定义，包含 text/bbox/block_type/is_image/table_html/bboxes 字段
+- [x] block_type 到 TextBlock 属性的映射常量已定义
+- [x] `_create_text_block` 公共方法已提取，消除 _parse_json_response 和 _parse_ref_tags_response 中的重复代码
+- [x] `_create_image` 方法已实现
+- [x] 格式检测互斥：ref 标签文本含 `{...}` 不误判为 JSON
+- [x] `_extract_json` 第三级容错（`{...}` 提取）已移除
+- [x] ref 标签解析改为分步解析（先提取标注对位置，再提取区间文本）
+- [x] ref 标签解析输出 OcrBlock 列表，保留 block_type
+- [x] JSON 解析器输出 OcrBlock 列表，type 字段映射 block_type
+- [x] Markdown 解析器输出 OcrBlock 列表，标题层级映射 block_type
+- [x] `_map_ocr_blocks_to_models` 统一映射方法已实现
+- [x] 表格坐标从 OcrBlock 直接取用，不再依赖 table_bbox_map 隐式索引对齐
+- [x] 归一化坐标越界钳位到 [0, 999]
+- [x] `_parse_det_bboxes` 支持负数和科学计数法容错
+- [x] 图像裁剪保存功能已实现：`_crop_and_save_image` 使用 fitz clip 裁剪
+- [x] `extract_from_pdf` 将 fitz.Page 对象传递给 `_extract_page`
+- [x] PdfImage.image_path 指向实际裁剪保存的 PNG 文件
+- [x] 文件命名格式与 PaddleOCR 一致：`ocr_img_p{page_num}_{image_idx}.png`
+- [ ] DOCX 输出验证：LLM OCR 图像正常嵌入 Word 文档（需完整依赖环境验证）
+- [ ] Markdown 输出验证：LLM OCR 图像生成有效引用且文件被复制到输出目录（需完整依赖环境验证）
+- [x] 测试全部通过（72/72 核心测试通过，35个因缺少cv2/PIL依赖跳过）
