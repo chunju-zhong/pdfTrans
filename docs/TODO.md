@@ -29,7 +29,7 @@
   - Cleaning strategy: Replace `\n` with space, clean extra spaces
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
 - [x] Python code review fixes (LaTeX regex backreference, conditional fallback replacement, thread safety, CJK range expansion, binary search truncation, exception catch narrowing, import order, cross-platform paths)
-- [x] PDF generator optimizations (transparent background, table bbox fallback, cell capacity pre-check, amsmath package)
+- [x] PDF generator optimizations (transparent background→reverted to white, table bbox fallback, cell capacity pre-check, amsmath package)
 - [x] Word generator optimizations (merged cell column count, column width boundary check, skip over-column cells)
 - [x] PdfCell data model extended with estimated_lines field
 - [x] Added fix_line_break_hyphens() utility function (OCR line-break hyphen fix)

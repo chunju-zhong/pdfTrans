@@ -29,7 +29,7 @@
   - 清理策略：将 `\n` 替换为空格，清理多余空格
 - [ ] 优化LaTeX公式语法修复能力，处理模型输出的语法错误
 - [x] Python 代码审查修复（LaTeX正则反向引用、兜底替换条件化、线程安全、CJK范围扩展、截断二分查找、异常捕获收窄、import顺序、跨平台路径）
-- [x] PDF 生成器优化（透明背景、表格bbox fallback、单元格容量预判、amsmath宏包）
+- [x] PDF 生成器优化（透明背景→已回退为白底、表格bbox fallback、单元格容量预判、amsmath宏包）
 - [x] Word 生成器优化（合并单元格列数计算、列宽边界检查、跳过超列单元格）
 - [x] PdfCell 数据模型扩展 estimated_lines 字段
 - [x] 新增 fix_line_break_hyphens() 工具函数（OCR断词连字符修复）

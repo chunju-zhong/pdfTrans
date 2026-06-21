@@ -513,7 +513,7 @@ class PdfGenerator:
                 min(rect.x1 + h_padding, page.rect.width),
                 min(rect.y1 + v_padding, page.rect.height)
             )
-            page.add_redact_annot(bg_rect, fill=None)
+            page.add_redact_annot(bg_rect, fill=(1, 1, 1))
             logger.debug(f"添加 redaction 标注，区域: {bg_rect} (h_padding={h_padding:.1f}, v_padding={v_padding:.1f})")
 
         # 一次性执行 redaction，真正删除原文（不删除图片）
@@ -1080,7 +1080,7 @@ class PdfGenerator:
                     min(x1 + 2, page.rect.width),
                     y1
                 )
-                page.add_redact_annot(cell_bg_rect, fill=None)
+                page.add_redact_annot(cell_bg_rect, fill=(1, 1, 1))
 
         # 一次性执行 redaction，真正删除单元格原文（不删除图片）
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)

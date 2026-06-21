@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-22
+
+- PDF generator fix:
+  - **Restore white background**: `add_redact_annot` `fill` changed from transparent `None` back to white `(1,1,1)`, ensuring translated text effectively covers original text (transparent background caused overlap of original and translated text, reducing readability; will optimize to match original background color once reliable text color extraction method is found)
+  - Affected scope: text block and table cell redaction calls
+- Files changed: `modules/pdf_generator.py`
+
 ## 2026-06-21
 
 - Python code review fixes (12 items, covering HIGH/MEDIUM/LOW severity):
