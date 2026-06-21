@@ -28,6 +28,18 @@
   - Add `_is_title_block` function to determine if original block is a title
   - Cleaning strategy: Replace `\n` with space, clean extra spaces
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
+- [x] Python code review fixes (LaTeX regex backreference, conditional fallback replacement, thread safety, CJK range expansion, binary search truncation, exception catch narrowing, import order, cross-platform paths)
+- [x] PDF generator optimizations (transparent background, table bbox fallback, cell capacity pre-check, amsmath package)
+- [x] Word generator optimizations (merged cell column count, column width boundary check, skip over-column cells)
+- [x] PdfCell data model extended with estimated_lines field
+- [x] Added fix_line_break_hyphens() utility function (OCR line-break hyphen fix)
+- [x] Fix LLM OCR table HTML rendered as plain text
+- [x] Fix LLM OCR table content not translated (logic inversion bug)
+- [x] Fix LLM OCR table position fixed, not following original PDF (preserve det coordinates)
+- [x] Fix LLM OCR multiple tables overlapping (offset based on previous table bottom)
+- [x] Fix LLM OCR extraction progress bar not updating
+- [x] LLM OCR code review optimizations (table_bbox_map index key, eliminate duplicate deconstruction/checks, constant extraction)
+- [ ] LLM OCR table cell adaptive column width (dynamic adjustment based on content length)
 - [x] Merged cell rendering optimization (text truncation, line separation, horizontal lines exceeding table boundary)
 - [x] Fix Rect.intersect() in-place mutation causing table text overlap detection failure
 - [x] Fix Roman numeral page numbers not recognized as footers, causing cross-page text merging errors

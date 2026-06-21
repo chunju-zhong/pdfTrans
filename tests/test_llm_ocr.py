@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 from modules.ocr.base import OcrExtractor
 from modules.ocr.factory import create_ocr_extractor
-from modules.ocr.llm_extractor import LlmOcrExtractor
+from modules.ocr.llm_extractor import LlmOcrExtractor, OcrBlock, BLOCK_TYPE_MAP
 from models.extraction import PdfExtraction
 
 
@@ -49,16 +49,17 @@ class TestLlmOcrJsonParsing:
         assert data == {"key": "value"}
 
     def test_extract_json_markdown_block_no_lang(self):
-        """从无语言标记的markdown代码块中提取"""
+        """从无语言标记的markdown代码块中提取——第三级容错通过首尾花括号匹配提取"""
         extractor = LlmOcrExtractor()
         data = extractor._extract_json('```\n{"key": "value"}\n```')
-        # 无json标记时不匹配markdown模式，但会尝试{...}提取
+        # 无json标记时不匹配markdown模式，但第三级容错通过{...}匹配成功
         assert data == {"key": "value"}
 
     def test_extract_json_embedded(self):
-        """从嵌入文本中提取JSON"""
+        """从嵌入文本中提取JSON——第三级容错通过首尾花括号匹配提取"""
         extractor = LlmOcrExtractor()
         data = extractor._extract_json('Here is the result: {"key": "value"} done')
+        # 不以{开头，无```json```包裹，但第三级容错通过{...}匹配成功
         assert data == {"key": "value"}
 
     def test_extract_json_invalid(self):
@@ -107,7 +108,7 @@ class TestLlmOcrResponseParsing:
         assert text_blocks[0].block_text == "Hello World"
         assert text_blocks[0].is_body_text is True
         assert text_blocks[0].page_num == 1
-        assert text_blocks[1].is_body_text is True  # LLM OCR所有块都标记为正文
+        assert text_blocks[1].is_body_text is False  # title类型映射为is_body_text=False
 
     def test_parse_response_tables(self):
         """解析表格"""
@@ -153,13 +154,12 @@ class TestLlmOcrResponseParsing:
         assert images[0].image_path == ''  # LLM OCR不生成裁剪图片
 
     def test_parse_response_markdown_wrapped(self):
-        """解析markdown包裹的JSON"""
+        """解析markdown包裹的JSON——空内容时ocr_blocks为空列表，返回None"""
         extractor = LlmOcrExtractor(translator_type='aiping')
         response = '```json\n{"text_blocks": [], "tables": [], "images": []}\n```'
         result = extractor._parse_response(response, page_num=1)
-        assert result is not None
-        text_blocks, tables, images = result
-        assert len(text_blocks) == 0
+        # 空JSON解析后ocr_blocks为空列表，_parse_response返回None
+        assert result is None
 
     def test_parse_response_invalid_json(self):
         """无效JSON回退到Markdown段落解析"""
@@ -172,14 +172,11 @@ class TestLlmOcrResponseParsing:
         assert text_blocks[0].block_text == "not json"
 
     def test_parse_response_empty(self):
-        """空JSON"""
+        """空JSON——空内容时ocr_blocks为空列表，返回None"""
         extractor = LlmOcrExtractor(translator_type='aiping')
         result = extractor._parse_response('{}', page_num=1)
-        assert result is not None
-        text_blocks, tables, images = result
-        assert len(text_blocks) == 0
-        assert len(tables) == 0
-        assert len(images) == 0
+        # 空JSON解析后ocr_blocks为空列表，_parse_response返回None
+        assert result is None
 
     def test_parse_response_invalid_bbox(self):
         """无效bbox容错"""
@@ -231,7 +228,7 @@ class TestLlmOcrHtmlTableParser:
         """解析简单表格"""
         extractor = LlmOcrExtractor()
         html = "<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>"
-        cells = extractor._parse_html_table(html)
+        cells, row_heights, col_widths = extractor._parse_html_table(html)
         assert cells is not None
         assert len(cells) == 2
         assert cells[0][0].text == "A"
@@ -241,15 +238,76 @@ class TestLlmOcrHtmlTableParser:
         """解析带rowspan的表格"""
         extractor = LlmOcrExtractor()
         html = '<table><tr><td rowspan="2">A</td><td>B</td></tr><tr><td>C</td></tr></table>'
-        cells = extractor._parse_html_table(html)
+        cells, row_heights, col_widths = extractor._parse_html_table(html)
         assert cells is not None
         assert cells[0][0].row_span == 2
 
     def test_parse_empty_html(self):
-        """空HTML返回None"""
+        """空HTML返回 (None, [], [])"""
         extractor = LlmOcrExtractor()
-        cells = extractor._parse_html_table("")
-        assert cells is None
+        result = extractor._parse_html_table("")
+        assert result[0] is None  # cells 为 None
+        assert result[1] == []     # row_heights 为空
+        assert result[2] == []     # col_widths 为空
+
+    def test_parse_table_with_bbox(self):
+        """传入 table_bbox 时计算单元格坐标"""
+        extractor = LlmOcrExtractor()
+        html = '<table><tr><td colspan="2">A</td></tr><tr><td>B</td><td>C</td></tr></table>'
+        table_bbox = (50, 100, 450, 300)
+        cells, row_heights, col_widths = extractor._parse_html_table(html, table_bbox=table_bbox)
+        assert len(cells) == 2
+        assert len(row_heights) == 2
+        assert len(col_widths) == 2
+        # 第一行第一列单元格应有有效 bbox（不是全零）
+        assert cells[0][0].bbox != (0, 0, 0, 0)
+        # colspan=2 的单元格宽度应等于两列宽之和
+        assert abs(cells[0][0].bbox[2] - cells[0][0].bbox[0] - (col_widths[0] + col_widths[1])) < 0.01
+
+    def test_parse_table_without_bbox(self):
+        """不传 table_bbox 时单元格 bbox 为全零"""
+        extractor = LlmOcrExtractor()
+        html = "<table><tr><td>A</td><td>B</td></tr></table>"
+        cells, row_heights, col_widths = extractor._parse_html_table(html)
+        assert cells[0][0].bbox == (0, 0, 0, 0)
+        assert row_heights == []
+        assert col_widths == []
+
+    def test_json_text_block_with_html_table_is_skipped(self):
+        """JSON 响应中 text_blocks 包含 HTML 表格时应跳过，不作为纯文本渲染"""
+        extractor = LlmOcrExtractor(translator_type='aiping')
+        response = json.dumps({
+            "text_blocks": [
+                {"id": 0, "text": "Normal text", "bbox": [10, 10, 200, 30], "type": "text"},
+                {"id": 1, "text": "<table><tr><td>A</td></tr></table>", "bbox": [10, 40, 400, 200], "type": "text"}
+            ],
+            "tables": [
+                {"id": 0, "bbox": [10, 40, 400, 200], "html": "<table><tr><td>A</td></tr></table>"}
+            ],
+            "images": []
+        })
+        result = extractor._parse_response(response, page_num=1)
+        assert result is not None
+        text_blocks, tables, images = result
+        # 只有 "Normal text" 一个文本块，HTML 表格文本块被跳过
+        assert len(text_blocks) == 1
+        assert text_blocks[0].block_text == "Normal text"
+        # 表格正常解析
+        assert len(tables) == 1
+
+    def test_markdown_response_html_table_not_in_text_blocks(self):
+        """Markdown 响应中 HTML 表格不应出现在 text_blocks 中"""
+        extractor = LlmOcrExtractor()
+        response = "Some text\n\n<table><tr><td>A</td><td>B</td></tr></table>\n\nMore text"
+        result = extractor._parse_response(response, page_num=1)
+        assert result is not None
+        text_blocks, tables, _ = result
+        # HTML 表格段落应被跳过，不作为文本块
+        for tb in text_blocks:
+            assert '<table' not in tb.block_text.lower()
+        assert len(text_blocks) == 2  # "Some text" 和 "More text"
+        # 表格应被提取为PdfTable
+        assert len(tables) == 1
 
 
 class TestLlmOcrConfigDefaults:
@@ -282,7 +340,7 @@ class TestLlmOcrRefTagParsing:
         # 第一个块：title类型，Markdown前缀已清理
         assert text_blocks[0].block_text == "Removal of the primary depends on the raw water characteristics"
         assert text_blocks[0].block_bbox == (54.0, 23.0, 940.0, 87.0)
-        assert text_blocks[0].is_body_text is True  # LLM OCR所有块都标记为正文
+        assert text_blocks[0].is_body_text is False  # title类型映射为is_body_text=False
         # 第二个块：text类型
         assert text_blocks[1].block_text == "Example: Two plants in the same city"
         assert text_blocks[1].block_bbox == (56.0, 92.0, 562.0, 142.0)
@@ -304,7 +362,7 @@ class TestLlmOcrRefTagParsing:
         assert images[0].bbox == (20.0, 153.0, 677.0, 911.0)
 
     def test_parse_deepseek_ocr_sub_title_type(self):
-        """sub_title类型也标记为正文，Markdown前缀已清理"""
+        """sub_title类型映射为is_body_text=False，Markdown前缀已清理"""
         extractor = LlmOcrExtractor()
         response = (
             "<|ref|>sub_title<|/ref|><|det|>[[700, 421, 775, 461]]<|/det|>\n"
@@ -314,7 +372,7 @@ class TestLlmOcrRefTagParsing:
         assert result is not None
         text_blocks, _, _ = result
         assert len(text_blocks) == 1
-        assert text_blocks[0].is_body_text is True  # LLM OCR所有块都标记为正文
+        assert text_blocks[0].is_body_text is False  # sub_title类型映射为is_body_text=False
         assert text_blocks[0].block_text == "Lesson:"  # Markdown前缀已清理
 
     def test_parse_deepseek_ocr_empty_text_skipped(self):
@@ -331,13 +389,13 @@ class TestLlmOcrRefTagParsing:
         assert len(text_blocks) == 1
         assert text_blocks[0].block_text == "Actual text"
 
-    def test_parse_det_bbox(self):
-        """_parse_det_bbox提取坐标"""
+    def test_parse_det_bboxes(self):
+        """_parse_det_bboxes提取坐标"""
         extractor = LlmOcrExtractor()
-        assert extractor._parse_det_bbox("[[54, 23, 940, 87]]") == (54.0, 23.0, 940.0, 87.0)
-        assert extractor._parse_det_bbox("[[0, 0, 0, 0]]") == (0.0, 0.0, 0.0, 0.0)
-        assert extractor._parse_det_bbox("invalid") == (0, 0, 0, 0)
-        assert extractor._parse_det_bbox("") == (0, 0, 0, 0)
+        assert extractor._parse_det_bboxes("[[54, 23, 940, 87]]") == [(54.0, 23.0, 940.0, 87.0)]
+        assert extractor._parse_det_bboxes("[[0, 0, 0, 0]]") == [(0.0, 0.0, 0.0, 0.0)]
+        assert extractor._parse_det_bboxes("invalid") == [(0, 0, 0, 0)]
+        assert extractor._parse_det_bboxes("") == [(0, 0, 0, 0)]
 
     def test_parse_ref_tags_no_tables(self):
         """<|ref|>标签格式不返回表格"""
@@ -435,7 +493,7 @@ class TestLlmOcrMarkdownParsing:
         text_blocks, _, _ = result
         assert len(text_blocks) == 3
         assert text_blocks[0].block_text == "# Title"
-        assert text_blocks[0].is_body_text is True  # LLM OCR所有块都标记为正文
+        assert text_blocks[0].is_body_text is False  # # Title被检测为title类型，映射为is_body_text=False
         assert text_blocks[1].block_text == "First paragraph"
         assert text_blocks[1].is_body_text is True
 
@@ -718,7 +776,7 @@ class TestLlmOcrTitleTranslation:
     """LLM OCR 标题/副标题翻译测试"""
 
     def test_title_is_body_text(self):
-        """LLM OCR title 类型文本块 is_body_text=True"""
+        """LLM OCR title 类型文本块 is_body_text=False"""
         extractor = LlmOcrExtractor()
         response = (
             "<|ref|>title<|/ref|><|det|>[[54, 23, 943, 87]]<|/det|>\n"
@@ -730,12 +788,12 @@ class TestLlmOcrTitleTranslation:
         assert result is not None
         text_blocks, _, _ = result
         assert len(text_blocks) == 2
-        # title 块也应该是 is_body_text=True
-        assert text_blocks[0].is_body_text is True
+        # title 块映射为 is_body_text=False
+        assert text_blocks[0].is_body_text is False
         assert text_blocks[1].is_body_text is True
 
     def test_sub_title_is_body_text(self):
-        """LLM OCR sub_title 类型文本块 is_body_text=True"""
+        """LLM OCR sub_title 类型文本块 is_body_text=False"""
         extractor = LlmOcrExtractor()
         response = (
             "<|ref|>sub_title<|/ref|><|det|>[[700, 421, 775, 459]]<|/det|>\n"
@@ -746,7 +804,7 @@ class TestLlmOcrTitleTranslation:
         result = extractor._parse_response(response, page_num=1)
         assert result is not None
         text_blocks, _, _ = result
-        assert text_blocks[0].is_body_text is True
+        assert text_blocks[0].is_body_text is False  # sub_title映射为is_body_text=False
         assert text_blocks[1].is_body_text is True
 
     def test_font_size_estimated_from_bbox(self):
@@ -840,3 +898,454 @@ class TestMixedFormulaTextRendering:
         result = generator._render_formula_image('\\invalidcommand{xyz}', fontsize=12)
         # 可能返回 None 或有效的 BytesIO
         assert result is None or (hasattr(result, 'getvalue') and len(result.getvalue()) > 0)
+
+
+class TestOcrBlockToTableMapping:
+    """OcrBlock → PdfTable 映射测试（替代旧的 _extract_tables_from_text）"""
+
+    def test_table_ocr_block_creates_pdf_table(self):
+        """table类型的OcrBlock（含table_html）映射为PdfTable"""
+        extractor = LlmOcrExtractor()
+        ocr_blocks = [
+            OcrBlock(
+                text='',
+                bbox=(100, 200, 400, 350),
+                block_type='table',
+                is_image=False,
+                table_html='<table><tr><td>A</td><td>B</td></tr></table>',
+                bboxes=[(100, 200, 400, 350)],
+            ),
+        ]
+        result = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1)
+        assert result is not None
+        _, tables, _ = result
+        assert len(tables) == 1
+        assert tables[0].page_num == 1
+        assert len(tables[0].cells) == 1  # 1行
+        assert tables[0].cells[0][0].text == "A"
+
+    def test_table_ocr_block_bbox_from_ocr_block(self):
+        """表格bbox直接来自OcrBlock，而非隐式索引对齐"""
+        extractor = LlmOcrExtractor()
+        ocr_blocks = [
+            OcrBlock(
+                text='',
+                bbox=(50, 100, 450, 300),
+                block_type='table',
+                is_image=False,
+                table_html='<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>',
+                bboxes=[(50, 100, 450, 300)],
+            ),
+        ]
+        result = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1)
+        assert result is not None
+        _, tables, _ = result
+        assert len(tables) == 1
+        # bbox来自OcrBlock（无page_info时不转换，直接使用原始坐标）
+        assert tables[0].bbox[0] == 50
+        assert tables[0].bbox[1] == 100
+        assert tables[0].bbox[2] == 450
+        assert tables[0].bbox[3] == 300
+
+    def test_multiple_table_ocr_blocks(self):
+        """多个table OcrBlock各自映射为PdfTable"""
+        extractor = LlmOcrExtractor()
+        ocr_blocks = [
+            OcrBlock(
+                text='',
+                bbox=(10, 10, 400, 200),
+                block_type='table',
+                is_image=False,
+                table_html='<table><tr><td>A</td></tr></table>',
+                bboxes=[(10, 10, 400, 200)],
+            ),
+            OcrBlock(
+                text='',
+                bbox=(10, 250, 400, 450),
+                block_type='table',
+                is_image=False,
+                table_html='<table><tr><td>B</td></tr></table>',
+                bboxes=[(10, 250, 400, 450)],
+            ),
+        ]
+        result = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1)
+        assert result is not None
+        _, tables, _ = result
+        assert len(tables) == 2
+        assert tables[0].cells[0][0].text == "A"
+        assert tables[1].cells[0][0].text == "B"
+
+    def test_table_ocr_block_with_page_info(self):
+        """有page_info时表格bbox使用归一化坐标转换"""
+        extractor = LlmOcrExtractor()
+        ocr_blocks = [
+            OcrBlock(
+                text='',
+                bbox=(100, 200, 500, 400),
+                block_type='table',
+                is_image=False,
+                table_html='<table><tr><td>A</td></tr></table>',
+                bboxes=[(100, 200, 500, 400)],
+            ),
+        ]
+        page_info = {
+            'page_width_pts': 960.0,
+            'page_height_pts': 540.0,
+        }
+        result = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1, page_info=page_info)
+        assert result is not None
+        _, tables, _ = result
+        assert len(tables) == 1
+        # 归一化坐标转换后bbox非零
+        assert tables[0].bbox != (0, 0, 0, 0)
+
+    def test_text_ocr_block_not_mapped_to_table(self):
+        """text类型的OcrBlock不映射为PdfTable"""
+        extractor = LlmOcrExtractor()
+        ocr_blocks = [
+            OcrBlock(
+                text='Some text',
+                bbox=(10, 10, 200, 50),
+                block_type='text',
+                is_image=False,
+                table_html=None,
+                bboxes=[(10, 10, 200, 50)],
+            ),
+        ]
+        result = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1)
+        assert result is not None
+        text_blocks, tables, _ = result
+        assert len(tables) == 0
+        assert len(text_blocks) == 1
+
+
+class TestRefTagTableBboxPreservation:
+    """DeepSeek-OCR ref 标签中表格 det 坐标保留测试"""
+
+    def test_ref_tag_table_bbox_preserved(self):
+        """<|ref|> 中包含 HTML 表格时，det 坐标被保留到 table_bbox_map"""
+        extractor = LlmOcrExtractor()
+        response = (
+            "<|ref|>text<|/ref|><|det|>[[56, 92, 562, 142]]<|/det|>\n"
+            "Normal text\n\n"
+            "<|ref|>text<|/ref|><|det|>[[100, 200, 500, 400]]<|/det|>\n"
+            "<table><tr><td>A</td><td>B</td></tr></table>"
+        )
+        page_info = {
+            'page_width_pts': 960.0,
+            'page_height_pts': 540.0,
+        }
+        result = extractor._parse_response(response, page_num=1, page_info=page_info)
+        assert result is not None
+        text_blocks, tables, _ = result
+        # 普通文本块正常
+        assert len(text_blocks) == 1
+        assert text_blocks[0].block_text == "Normal text"
+        # 表格被提取，使用 det 坐标
+        assert len(tables) == 1
+        # det 坐标 [[100, 200, 500, 400]] 经归一化转换后应非零
+        assert tables[0].bbox != (0, 0, 0, 0)
+
+    def test_ref_tag_table_not_in_text_blocks(self):
+        """<|ref|> 中包含 HTML 表格时不作为 TextBlock"""
+        extractor = LlmOcrExtractor()
+        response = (
+            "<|ref|>text<|/ref|><|det|>[[56, 92, 562, 142]]<|/det|>\n"
+            "Normal text\n\n"
+            "<|ref|>text<|/ref|><|det|>[[100, 200, 500, 400]]<|/det|>\n"
+            "<table><tr><td>Data</td></tr></table>"
+        )
+        result = extractor._parse_response(response, page_num=1)
+        assert result is not None
+        text_blocks, _, _ = result
+        # HTML 表格不应出现在 text_blocks 中
+        for tb in text_blocks:
+            assert '<table' not in tb.block_text.lower()
+
+    def test_ref_tag_multiple_tables_in_one_block(self):
+        """一个 <|ref|> 块中包含多个 <table> 时，仅第一个表格被提取（re.search非贪婪匹配）"""
+        extractor = LlmOcrExtractor()
+        response = (
+            "<|ref|>text<|/ref|><|det|>[[50, 100, 900, 800]]<|/det|>\n"
+            "<table><tr><td>A</td></tr></table>\n"
+            "<table><tr><td>B</td></tr></table>"
+        )
+        page_info = {
+            'page_width_pts': 960.0,
+            'page_height_pts': 540.0,
+        }
+        result = extractor._parse_response(response, page_num=1, page_info=page_info)
+        assert result is not None
+        _, tables, _ = result
+        # 新代码中re.search仅匹配第一个<table>，所以只生成1个PdfTable
+        assert len(tables) == 1
+        assert tables[0].bbox != (0, 0, 0, 0)
+
+
+class TestFormatDetectionMutualExclusion:
+    """格式检测互斥测试"""
+
+    def test_ref_tags_priority_over_json(self):
+        """当响应同时包含<|ref|>标签和{...}JSON时，优先使用ref标签格式"""
+        extractor = LlmOcrExtractor()
+        response = (
+            '<|ref|>title<|/ref|><|det|>[[54, 23, 940, 87]]<|/det|>\n'
+            'Some Title\n\n'
+            '{"text_blocks": [{"id": 0, "text": "JSON content"}], "tables": [], "images": []}'
+        )
+        result = extractor._parse_response(response, page_num=1)
+        assert result is not None
+        text_blocks, _, _ = result
+        # 应使用ref标签格式解析，不是JSON
+        assert any('Title' in tb.block_text for tb in text_blocks)
+        assert not any(tb.block_text == 'JSON content' for tb in text_blocks)
+
+
+class TestBlockTypeMapping:
+    """BLOCK_TYPE_MAP 映射测试"""
+
+    def test_title_mapping(self):
+        """title → is_body_text=False, block_type=1"""
+        is_body, block_type_int = BLOCK_TYPE_MAP['title']
+        assert is_body is False
+        assert block_type_int == 1
+
+    def test_text_mapping(self):
+        """text → is_body_text=True, block_type=0"""
+        is_body, block_type_int = BLOCK_TYPE_MAP['text']
+        assert is_body is True
+        assert block_type_int == 0
+
+    def test_header_mapping(self):
+        """header → is_body_text=False, block_type=3"""
+        is_body, block_type_int = BLOCK_TYPE_MAP['header']
+        assert is_body is False
+        assert block_type_int == 3
+
+    def test_footer_mapping(self):
+        """footer → is_body_text=False, block_type=4"""
+        is_body, block_type_int = BLOCK_TYPE_MAP['footer']
+        assert is_body is False
+        assert block_type_int == 4
+
+    def test_sub_title_mapping(self):
+        """sub_title → is_body_text=False, block_type=1"""
+        is_body, block_type_int = BLOCK_TYPE_MAP['sub_title']
+        assert is_body is False
+        assert block_type_int == 1
+
+    def test_footnote_mapping(self):
+        """footnote → is_body_text=False, block_type=5"""
+        is_body, block_type_int = BLOCK_TYPE_MAP['footnote']
+        assert is_body is False
+        assert block_type_int == 5
+
+    def test_unknown_type_defaults_to_text(self):
+        """未知block_type默认为text映射"""
+        is_body, block_type_int = BLOCK_TYPE_MAP.get('unknown_type', (True, 0))
+        assert is_body is True
+        assert block_type_int == 0
+
+
+class TestNormalizedCoordinateClamping:
+    """归一化坐标钳位测试"""
+
+    def test_clamp_coordinates_over_999(self):
+        """坐标>999时钳位到999"""
+        extractor = LlmOcrExtractor()
+        page_info = {
+            'page_width_pts': 960.0,
+            'page_height_pts': 540.0,
+        }
+        # x2=1200 > 999，应被钳位到999
+        result = extractor._pixel_to_pdf_coords((100, 200, 1200, 400), page_info, is_normalized=True)
+        # 999/999*960 = 960.0
+        assert result[2] == pytest.approx(960.0, abs=0.01)
+
+    def test_clamp_coordinates_negative(self):
+        """坐标<0时钳位到0"""
+        extractor = LlmOcrExtractor()
+        page_info = {
+            'page_width_pts': 960.0,
+            'page_height_pts': 540.0,
+        }
+        # x1=-50 < 0，应被钳位到0
+        result = extractor._pixel_to_pdf_coords((-50, 200, 500, 400), page_info, is_normalized=True)
+        # 0/999*960 = 0.0
+        assert result[0] == pytest.approx(0.0, abs=0.01)
+
+
+class TestParseDetBboxes:
+    """_parse_det_bboxes 扩展测试"""
+
+    def test_negative_numbers(self):
+        """解析包含负数的bbox"""
+        extractor = LlmOcrExtractor()
+        result = extractor._parse_det_bboxes('[[-10, -20, 500, 400]]')
+        assert result == [(-10.0, -20.0, 500.0, 400.0)]
+
+    def test_scientific_notation(self):
+        """解析包含科学计数法的bbox"""
+        extractor = LlmOcrExtractor()
+        result = extractor._parse_det_bboxes('[[1e2, 2.5e1, 3.0e2, 4E1]]')
+        assert result == [(100.0, 25.0, 300.0, 40.0)]
+
+    def test_multiple_bboxes(self):
+        """解析多个bbox"""
+        extractor = LlmOcrExtractor()
+        result = extractor._parse_det_bboxes('[[10, 20, 30, 40], [50, 60, 70, 80]]')
+        assert len(result) == 2
+        assert result[0] == (10.0, 20.0, 30.0, 40.0)
+        assert result[1] == (50.0, 60.0, 70.0, 80.0)
+
+
+class TestImageCropping:
+    """图像裁剪测试"""
+
+    def test_image_with_page_and_temp_dir_gets_cropped(self):
+        """当page和temp_images_dir都提供时，图像被裁剪保存"""
+        import tempfile
+        extractor = LlmOcrExtractor()
+        ocr_blocks = [
+            OcrBlock(
+                text='',
+                bbox=(100, 100, 500, 400),
+                block_type='image',
+                is_image=True,
+                table_html=None,
+                bboxes=[(100, 100, 500, 400)],
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import fitz
+            doc = fitz.open()
+            page = doc.new_page(width=960, height=540)
+            page_info = {
+                'page_width_pts': 960.0,
+                'page_height_pts': 540.0,
+            }
+            result = extractor._map_ocr_blocks_to_models(
+                ocr_blocks, page_num=1, page_info=page_info,
+                page=page, temp_images_dir=tmpdir
+            )
+            assert result is not None
+            _, _, images = result
+            assert len(images) == 1
+            # 有page和temp_images_dir时，image_path应为实际文件路径
+            assert images[0].image_path != ''
+            assert images[0].image_path.endswith('.png')
+            import os
+            assert os.path.exists(images[0].image_path)
+            doc.close()
+
+    def test_image_without_page_gets_empty_path(self):
+        """无page时image_path为空字符串"""
+        extractor = LlmOcrExtractor()
+        ocr_blocks = [
+            OcrBlock(
+                text='',
+                bbox=(100, 100, 500, 400),
+                block_type='image',
+                is_image=True,
+                table_html=None,
+                bboxes=[(100, 100, 500, 400)],
+            ),
+        ]
+        result = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1)
+        assert result is not None
+        _, _, images = result
+        assert len(images) == 1
+        assert images[0].image_path == ''
+
+
+class TestProgressCallback:
+    """LLM OCR 进度回调测试"""
+
+    def test_progress_callback_called(self):
+        """extract_from_pdf 调用 progress_callback"""
+        extractor = LlmOcrExtractor(translator_type='aiping')
+        callbacks = []
+
+        def mock_callback(msg_type, payload):
+            callbacks.append((msg_type, payload))
+
+        # 创建最小测试 PDF
+        import fitz
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            doc = fitz.open()
+            doc.new_page(width=595, height=842)
+            doc.save(f.name)
+            doc.close()
+            pdf_path = f.name
+
+        try:
+            # Mock LLM 响应
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = json.dumps({
+                "text_blocks": [],
+                "tables": [],
+                "images": []
+            })
+
+            with patch.object(type(extractor), 'model', new_callable=lambda: property(lambda self: MagicMock())):
+                with patch.object(extractor, '_client') as mock_client:
+                    mock_client.chat.completions.create.return_value = mock_response
+                    extractor.extract_from_pdf(
+                        pdf_path, pages=[1],
+                        progress_callback=mock_callback
+                    )
+
+            # 验证回调被调用
+            msg_types = [c[0] for c in callbacks]
+            assert 'step_start' in msg_types
+            assert 'step_progress' in msg_types
+            assert 'step_complete' in msg_types
+        finally:
+            import os
+            os.unlink(pdf_path)
+
+    def test_progress_callback_payload_format(self):
+        """进度回调 payload 包含必要字段"""
+        extractor = LlmOcrExtractor(translator_type='aiping')
+        callbacks = []
+
+        def mock_callback(msg_type, payload):
+            callbacks.append((msg_type, payload))
+
+        import fitz
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            doc = fitz.open()
+            doc.new_page(width=595, height=842)
+            doc.save(f.name)
+            doc.close()
+            pdf_path = f.name
+
+        try:
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = json.dumps({
+                "text_blocks": [],
+                "tables": [],
+                "images": []
+            })
+
+            with patch.object(type(extractor), 'model', new_callable=lambda: property(lambda self: MagicMock())):
+                with patch.object(extractor, '_client') as mock_client:
+                    mock_client.chat.completions.create.return_value = mock_response
+                    extractor.extract_from_pdf(
+                        pdf_path, pages=[1],
+                        progress_callback=mock_callback
+                    )
+
+            # 验证 payload 格式
+            for _, payload in callbacks:
+                assert 'step' in payload
+                assert 'step_name' in payload
+                assert 'total_pages' in payload
+                assert 'pages_done' in payload
+        finally:
+            import os
+            os.unlink(pdf_path)

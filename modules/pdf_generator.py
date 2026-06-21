@@ -167,19 +167,72 @@ class PdfGenerator:
     @classmethod
     def _check_latex_available(cls):
         """检测系统是否安装了 LaTeX 引擎（用于 usetex 渲染，线程安全）"""
-        if cls._latex_available is not None:
-            return cls._latex_available
         with cls._latex_lock:
             # double-check locking
             if cls._latex_available is not None:
                 return cls._latex_available
+            import subprocess
+            import glob as glob_module
+
+            # Step 1: Try PATH detection
             try:
-                import subprocess
                 result = subprocess.run(['latex', '--version'], capture_output=True, timeout=5)
-                cls._latex_available = result.returncode == 0
+                if result.returncode == 0:
+                    cls._latex_available = True
+                    logger.info("LaTeX 可用性检测: 可用 (PATH)")
+                    return cls._latex_available
             except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+            # Step 2: Probe common LaTeX installation paths by platform
+            common_paths = []
+
+            if sys.platform == 'darwin':
+                common_paths = [
+                    '/Library/TeX/texbin/latex',                      # MacTeX default
+                    '/opt/homebrew/bin/latex',                        # Homebrew
+                ]
+                common_paths.extend(
+                    sorted(glob_module.glob('/usr/local/texlive/*/bin/universal-darwin/latex'), reverse=True)
+                )
+            elif sys.platform == 'linux':
+                common_paths = [
+                    '/usr/bin/latex',
+                    '/usr/local/bin/latex',
+                ]
+                common_paths.extend(
+                    sorted(glob_module.glob('/usr/local/texlive/*/bin/x86_64-linux/latex'), reverse=True)
+                )
+                common_paths.extend(
+                    sorted(glob_module.glob('/usr/local/texlive/*/bin/aarch64-linux/latex'), reverse=True)
+                )
+            elif sys.platform == 'win32':
+                common_paths = [
+                    r'C:\Program Files\MiKTeX\miktex\bin\x64\latex.exe',
+                ]
+                common_paths.extend(
+                    sorted(glob_module.glob('C:/texlive/*/bin/windows/latex.exe'), reverse=True)
+                )
+
+            found_path = None
+            for candidate in common_paths:
+                if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                    found_path = candidate
+                    break
+
+            if found_path:
+                latex_dir = os.path.dirname(found_path)
+                current_path = os.environ.get('PATH', '')
+                if latex_dir not in current_path.split(os.pathsep):
+                    os.environ['PATH'] = latex_dir + os.pathsep + current_path
+                    logger.info(f"LaTeX 可用性检测: 可用 ({found_path})，已将 {latex_dir} 添加到 PATH")
+                else:
+                    logger.info(f"LaTeX 可用性检测: 可用 ({found_path})，PATH 已包含 {latex_dir}")
+                cls._latex_available = True
+            else:
                 cls._latex_available = False
-            logger.info(f"LaTeX 可用性检测: {'可用' if cls._latex_available else '不可用'}")
+                logger.info("LaTeX 可用性检测: 不可用")
+
             return cls._latex_available
 
     @staticmethod
@@ -196,9 +249,10 @@ class PdfGenerator:
         处理步骤：
         1. 将 \\(...\\) → $...$，\\[...\\] → $$...$$（mathtext 不识别 \\(\\) \\[\\] 定界符）
         2. 将 \\text{content} → content, \\mathrm{content} → content 等
-        3. 希腊字母替换（mathtext 不支持 \\alpha 等）
-        4. 数学符号替换
-        5. 去除 \\left 和 \\right 命令
+        3. 去除 \\begin{env}...\\end{env} 环境包装（aligned, gathered, cases 等）
+        4. 希腊字母替换（mathtext 不支持 \\alpha 等）
+        5. 数学符号替换
+        6. 去除 \\left 和 \\right 命令
         """
         import re
         # 转换 LaTeX 定界符为 mathtext 支持的格式
@@ -216,6 +270,24 @@ class PdfGenerator:
                 r'\\(?:text|mathrm|mathbf|mathit|mathsf|mathtt|textbf|textrm)\{([^}]*)\}',
                 r'\1', latex
             )
+        # 去除 \begin{env}...\end{env} 环境（aligned, gathered, cases 等）
+        # 必须在数学符号替换（含 \& → &）之前，否则 \\& 中的 \& 被替换导致 \\ 变成 \
+        # 使用反向引用确保 \begin 和 \end 的环境名一致
+        prev = None
+        while prev != latex:
+            prev = latex
+            latex = re.sub(
+                r'\\begin\{(aligned|gathered|cases|equation\*?|align\*?|gather\*?)\}(.*?)\\end\{\1\}',
+                lambda m: re.sub(r'\\\\', ' ', m.group(2)).replace('&', ''),
+                latex,
+                flags=re.DOTALL,
+            )
+        # 兜底：仅处理残留的行分隔符 \\ 和对齐标记 &
+        # （当 _detect_formula 已去除 \begin/\end 时，上面的正则不匹配）
+        # 只替换作为行分隔符的 \\（后跟 & 或另一个 \\ 或字符串末尾）
+        latex = re.sub(r'\\\\(?=\s*&|\\\\|$)', ' ', latex)
+        # 只替换作为对齐标记的 &（两侧有非空白内容）
+        latex = re.sub(r'(?<=\S)\s*&\s*(?=\S)', ' ', latex)
         # 希腊字母替换
         greek_letters = {
             r'\alpha': 'α', r'\beta': 'β', r'\gamma': 'γ', r'\delta': 'δ',
@@ -261,6 +333,8 @@ class PdfGenerator:
         if self._check_latex_available():
             try:
                 plt.rcParams['text.usetex'] = True
+                # 加载 amsmath 宏包以支持 \begin{aligned} 等环境
+                plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
                 fig, ax = plt.subplots(figsize=(0.01, 0.01))
                 ax.axis('off')
                 text = ax.text(0, 0, f'${latex}$', fontsize=fontsize, ha='left', va='bottom')
@@ -372,6 +446,7 @@ class PdfGenerator:
         if self._check_latex_available():
             try:
                 plt.rcParams['text.usetex'] = True
+                plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
                 fig, ax = plt.subplots(figsize=(0.01, 0.01))
                 ax.axis('off')
                 # usetex 模式下需要用 LaTeX 语法
@@ -438,7 +513,7 @@ class PdfGenerator:
                 min(rect.x1 + h_padding, page.rect.width),
                 min(rect.y1 + v_padding, page.rect.height)
             )
-            page.add_redact_annot(bg_rect, fill=(1, 1, 1))
+            page.add_redact_annot(bg_rect, fill=None)
             logger.debug(f"添加 redaction 标注，区域: {bg_rect} (h_padding={h_padding:.1f}, v_padding={v_padding:.1f})")
 
         # 一次性执行 redaction，真正删除原文（不删除图片）
@@ -951,6 +1026,11 @@ class PdfGenerator:
 
         if table_bbox:
             table_x0, table_y0, table_x1, table_y1 = table_bbox
+        else:
+            # 无有效 bbox 时使用页面区域作为 fallback
+            table_x0, table_y0 = 50, 50
+            table_x1, table_y1 = page.rect.width - 50, page.rect.height - 50
+            logger.warning(f"[表格绘制] 表格无有效 bbox，使用页面区域 fallback: ({table_x0},{table_y0},{table_x1},{table_y1})")
 
         # 获取适合目标语言的字体
         suitable_font = self._get_suitable_font(page, 'GoogleSansText-Regular', target_lang)
@@ -1000,7 +1080,7 @@ class PdfGenerator:
                     min(x1 + 2, page.rect.width),
                     y1
                 )
-                page.add_redact_annot(cell_bg_rect, fill=(1, 1, 1))
+                page.add_redact_annot(cell_bg_rect, fill=None)
 
         # 一次性执行 redaction，真正删除单元格原文（不删除图片）
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
@@ -1063,6 +1143,15 @@ class PdfGenerator:
                     base_font_size = min(cell_height * 0.8, 12)
                     logger.debug(f"单元格 ({i},{j}) 字体大小: {base_font_size:.2f}, 单元格高度: {cell_height:.2f}")
 
+                    # 根据 estimated_lines 预判单元格容量
+                    cell_estimated_lines = getattr(cell, 'estimated_lines', 0)
+                    if cell_estimated_lines > 0 and cell_height > 0:
+                        # 计算能容纳 estimated_lines 行的最大字体大小
+                        max_font_for_lines = cell_height / (cell_estimated_lines * 1.2)  # 1.2 is lineheight
+                        if max_font_for_lines < base_font_size:
+                            # 文本可能溢出 - 直接使用较小的字体
+                            base_font_size = max(max_font_for_lines, base_font_size * 0.5)
+
                     max_attempts = 5
                     success = False
 
@@ -1091,18 +1180,107 @@ class PdfGenerator:
                             logger.error(f"单元格 ({i+1},{j+1}) 文本绘制异常: {str(e)}")
 
                     if not success:
-                        try:
-                            page.insert_textbox(
-                                rect,
-                                cell_text,
-                                fontname=suitable_font,
-                                fontsize=base_font_size * 0.5,
-                                color=(0, 0, 0),
-                                align=1,
-                                lineheight=1.2
-                            )
-                        except Exception as e:
-                            logger.error(f"单元格 ({i+1},{j+1}) 最后尝试绘制异常: {str(e)}")
+                        # 尝试截断文本以适应单元格（二分搜索）
+                        is_cjk = any('\u4e00' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f' or '\uff00' <= ch <= '\uffef' for ch in cell_text)
+                        truncation_success = False
+
+                        if is_cjk:
+                            # CJK文本：二分搜索最大可容纳字符数
+                            lo, hi = 1, len(cell_text) - 1
+                            best_n = 0
+                            while lo <= hi:
+                                mid = (lo + hi) // 2
+                                truncated = cell_text[:mid] + "…"
+                                try:
+                                    result = page.insert_textbox(
+                                        rect,
+                                        truncated,
+                                        fontname=suitable_font,
+                                        fontsize=base_font_size * 0.5,
+                                        color=(0, 0, 0),
+                                        align=1,
+                                        lineheight=1.2
+                                    )
+                                    if result >= 0:
+                                        best_n = mid
+                                        lo = mid + 1
+                                    else:
+                                        hi = mid - 1
+                                except Exception:
+                                    hi = mid - 1
+                            if best_n > 0:
+                                truncation_success = True
+                                final_truncated = cell_text[:best_n] + "…"
+                                try:
+                                    page.insert_textbox(
+                                        rect,
+                                        final_truncated,
+                                        fontname=suitable_font,
+                                        fontsize=base_font_size * 0.5,
+                                        color=(0, 0, 0),
+                                        align=1,
+                                        lineheight=1.2
+                                    )
+                                except Exception:
+                                    truncation_success = False
+                        else:
+                            # 英文文本：二分搜索最大可容纳词数
+                            words = cell_text.split()
+                            lo, hi = 1, len(words) - 1
+                            best_n = 0
+                            while lo <= hi:
+                                mid = (lo + hi) // 2
+                                truncated = " ".join(words[:mid]) + "…"
+                                try:
+                                    result = page.insert_textbox(
+                                        rect,
+                                        truncated,
+                                        fontname=suitable_font,
+                                        fontsize=base_font_size * 0.5,
+                                        color=(0, 0, 0),
+                                        align=1,
+                                        lineheight=1.2
+                                    )
+                                    if result >= 0:
+                                        best_n = mid
+                                        lo = mid + 1
+                                    else:
+                                        hi = mid - 1
+                                except Exception:
+                                    hi = mid - 1
+                            if best_n > 0:
+                                truncation_success = True
+                                final_truncated = " ".join(words[:best_n]) + "…"
+                                try:
+                                    page.insert_textbox(
+                                        rect,
+                                        final_truncated,
+                                        fontname=suitable_font,
+                                        fontsize=base_font_size * 0.5,
+                                        color=(0, 0, 0),
+                                        align=1,
+                                        lineheight=1.2
+                                    )
+                                except Exception:
+                                    truncation_success = False
+
+                        if truncation_success:
+                            logger.warning(f"[表格溢出] 单元格 ({i},{j}): 文本='{cell_text[:50]}...', 单元格尺寸={cell_width:.1f}x{cell_height:.1f}, 处理方式=截断")
+                        else:
+                            # 截断也失败，强制写入作为最后手段
+                            try:
+                                page.insert_textbox(
+                                    rect,
+                                    cell_text,
+                                    fontname=suitable_font,
+                                    fontsize=base_font_size * 0.5,
+                                    color=(0, 0, 0),
+                                    align=1,
+                                    lineheight=1.2
+                                )
+                            except Exception as e:
+                                logger.error(f"单元格 ({i+1},{j+1}) 最后尝试绘制异常: {str(e)}")
+                            logger.warning(f"[表格溢出] 单元格 ({i},{j}): 文本='{cell_text[:50]}...', 单元格尺寸={cell_width:.1f}x{cell_height:.1f}, 处理方式=强制写入")
 
         # 统一绘制表格网格线（外框 + 内部线条，跳过合并单元格内部）
         try:

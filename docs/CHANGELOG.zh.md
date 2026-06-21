@@ -1,5 +1,51 @@
 # 更新日志
 
+## 2026-06-21
+
+- Python 代码审查修复（12项，覆盖 HIGH/MEDIUM/LOW 全级别）：
+  - **HIGH**：LaTeX 环境正则使用捕获组+反向引用，确保 `\begin{aligned}...\end{cases}` 不被错误匹配
+  - **HIGH**：兜底 `\\` 和 `&` 替换改为条件化（lookahead/lookbehind），避免破坏合法 LaTeX 内容
+  - **HIGH**：`_check_latex_available` 中 PATH 修改移入 `_latex_lock` 锁内，修复线程安全问题
+  - **MEDIUM**：`_parse_html_table` 返回值检查从 `if cells:` 改为 `if cells is not None:`，避免空矩阵误判
+  - **MEDIUM**：`_estimate_text_display_width` 扩展 CJK 宽度估算，新增日文平假名/片假名、韩文谚文
+  - **MEDIUM**：表格单元格文本截断从线性搜索优化为二分查找，`insert_textbox` 调用次数从 O(n) 降至 O(log n)
+  - **MEDIUM**：`_compute_table_layout` docstring 标注修改 `matrix` 参数的副作用
+  - **MEDIUM**：`docx_generator.py` 合并单元格异常捕获从 `Exception` 收窄为 `(ValueError, KeyError)`
+  - **LOW**：`llm_extractor.py` 模块级 import 顺序修正，常量 `TABLE_HTML_MARKER` 移到 import 之后
+  - **LOW**：`_check_latex_available` LaTeX 路径探测新增 Linux 和 Windows 支持，使用 `sys.platform` 条件化
+- PDF 生成器优化（4项）：
+  - **透明背景**：`add_redact_annot` 的 `fill` 从白色 `(1,1,1)` 改为 `None`，避免覆盖非白色背景
+  - **表格 bbox fallback**：`_draw_translated_table` 中 `table_bbox` 为 None 时使用页面区域作为 fallback，避免 `table_x0` 未定义错误
+  - **单元格容量预判**：根据 `estimated_lines` 预判单元格容量，提前缩小字体避免文本溢出
+  - **amsmath 宏包**：usetex 模式下加载 `\usepackage{amsmath}`，支持 `\begin{aligned}` 等环境
+- Word 生成器优化（3项）：
+  - **合并单元格列数计算**：创建表格时考虑 `col_span` 计算逻辑列数，避免列数不足
+  - **列宽边界检查**：设置列宽时检查 `col_idx < len(word_table.columns)`，避免越界
+  - **跳过超列单元格**：填充单元格内容时跳过超出 Word 表格列数的单元格
+- 数据模型扩展：
+  - `PdfCell` 新增 `estimated_lines` 字段，支持估算文本换行行数
+- 工具函数新增：
+  - `fix_line_break_hyphens()`：修复 OCR 输出中因换行产生的断词连字符（如 "his- torical" → "historical"）
+- 相关文件：`modules/pdf_generator.py`、`modules/ocr/llm_extractor.py`、`modules/docx_generator.py`、`models/extraction.py`、`utils/text_processing.py`
+
+## 2026-06-19
+
+- 修复 LLM OCR 模式表格渲染和定位多项问题：
+  - **表格 HTML 被当作纯文本渲染**：JSON/ref 标签/Markdown 三种响应格式中，包含 `<table>` 的文本块被同时作为 TextBlock 渲染，导致 PDF 输出显示原始 HTML 字符串。添加过滤逻辑跳过含表格 HTML 的文本块
+  - **表格内容未翻译**：`_extract_tables_from_text` 中逻辑反转 bug——`if not cells:` 条件导致只有空表格才被添加，有内容的表格被跳过。修复为 `if not cells: continue`
+  - **`table_x0` 未定义错误**：`_draw_translated_table` 中 `table_bbox` 为 None 时变量未赋值，添加 else 分支使用页面区域作为 fallback
+  - **表格位置固定不随原 PDF**：DeepSeek-OCR `<|ref|>` 标签中的 `<|det|>` 表格坐标被代码丢弃，改用硬编码估算位置。修复为保留 det 坐标并通过 `table_bbox_map` 传入 `_extract_tables_from_text`
+  - **多表格叠放**：同一页多个表格全部从 y=100pt 开始。修复为基于前一个表格底部 y 坐标向下偏移
+- 修复 LLM OCR 提取过程进度条不更新：
+  - `extract_from_pdf` 新增 `progress_callback` 参数，逐页循环中发送 `step_start`/`step_progress`/`step_complete` 回调
+  - `pdf_extractor.py` LLM OCR 分支传递 `progress_callback`
+- 代码审查优化（4项）：
+  - **HIGH**：`table_bbox_map` 从 HTML 全文 key 改为整数索引 key，避免空白差异导致匹配失败
+  - **MEDIUM**：`_parse_html_table` 消除 `table_bbox` 重复解构，提到循环前只计算一次
+  - **MEDIUM**：`_extract_tables_from_text` 消除 bbox 有效性重复检查
+  - **LOW**：`'<table'` 提取为模块级常量 `TABLE_HTML_MARKER`
+- 相关文件：`modules/ocr/llm_extractor.py`、`modules/pdf_extractor.py`、`modules/pdf_generator.py`、`tests/test_llm_ocr.py`
+
 ## 2026-06-18
 
 - 修复短文本未翻译检测缺失——LLM 自行添加 `|||` 分隔符导致未翻译文本绕过检测：

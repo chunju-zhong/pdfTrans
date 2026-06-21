@@ -1,7 +1,26 @@
 # 语义块合并逻辑
 
 import logging
+import re
 from models.merged_block import MergedBlock
+
+
+def fix_line_break_hyphens(text: str) -> str:
+    """修复因换行产生的断词连字符
+
+    当单词在行尾被连字符断开时（如 OCR 输出中的 "his- torical"），
+    移除连字符和空格，将两部分合并为完整单词。
+    不影响合法连字符（如 "next-token"）和普通破折号。
+
+    TODO: 此函数尚未被调用，待在OCR文本后处理流程中集成使用。
+
+    Args:
+        text (str): 待处理的文本
+
+    Returns:
+        str: 修复后的文本
+    """
+    return re.sub(r'(\w)- (\w)', r'\1\2', text)
 
 
 def _create_merged_block(text_block):

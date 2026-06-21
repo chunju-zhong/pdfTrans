@@ -219,6 +219,7 @@ class PdfExtractor:
                     result = extractor.extract_from_pdf(
                         self.pdf_path, pages=pages,
                         temp_images_dir=temp_images_dir,
+                        progress_callback=progress_callback,
                     )
                 else:
                     # PaddleOCR：子进程隔离（内存管理）

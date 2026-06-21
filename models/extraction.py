@@ -56,7 +56,7 @@ class PdfCell(CopyableMixin):
     表示PDF表格中的单个单元格，包含文本、边界框和大小信息
     """
     
-    def __init__(self, text, bbox, row_idx, col_idx, row_span=1, col_span=1, alignment=0):
+    def __init__(self, text, bbox, row_idx, col_idx, row_span=1, col_span=1, alignment=0, estimated_lines=0):
         """初始化PdfCell对象
 
         Args:
@@ -67,6 +67,7 @@ class PdfCell(CopyableMixin):
             row_span (int): 跨行数，默认1
             col_span (int): 跨列数，默认1
             alignment (int): 对齐方式，0=左对齐, 1=居中, 2=右对齐，默认0
+            estimated_lines (int): 估算的文本换行行数，默认0
         """
         self.text = text
         self.bbox = bbox
@@ -75,6 +76,7 @@ class PdfCell(CopyableMixin):
         self.row_span = row_span
         self.col_span = col_span
         self.alignment = alignment
+        self.estimated_lines = estimated_lines
         # 计算单元格大小
         self.width = bbox[2] - bbox[0]
         self.height = bbox[3] - bbox[1]
@@ -100,6 +102,7 @@ class PdfCell(CopyableMixin):
         obj.row_span = data.get('row_span', 1)
         obj.col_span = data.get('col_span', 1)
         obj.alignment = data.get('alignment', 0)
+        obj.estimated_lines = data.get('estimated_lines', 0)
         return obj
 
     def to_dict(self):
@@ -117,7 +120,8 @@ class PdfCell(CopyableMixin):
             'height': self.height,
             'row_span': self.row_span,
             'col_span': self.col_span,
-            'alignment': self.alignment
+            'alignment': self.alignment,
+            'estimated_lines': self.estimated_lines
         }
 
 

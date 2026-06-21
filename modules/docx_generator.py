@@ -869,7 +869,24 @@ class DocxGenerator:
 
         # 创建表格
         num_rows = len(table_data)
-        num_cols = len(table_data[0]) if num_rows > 0 else 0
+        # Calculate max logical columns considering col_span
+        num_cols = 0
+        if num_rows > 0:
+            for row in table_data:
+                row_logical_cols = 0
+                for cell in row:
+                    if cell is not None:
+                        col_span = getattr(cell, 'col_span', 1)
+                        row_logical_cols += col_span
+                    else:
+                        row_logical_cols += 1
+                num_cols = max(num_cols, row_logical_cols)
+            # Also check if any cell has col_idx + col_span exceeding num_cols
+            for row in table_data:
+                for cell in row:
+                    if cell is not None:
+                        cell_end = getattr(cell, 'col_idx', 0) + getattr(cell, 'col_span', 1)
+                        num_cols = max(num_cols, cell_end)
 
         if num_rows == 0 or num_cols == 0:
             logger.warning("表格数据格式不正确，跳过")
@@ -933,7 +950,8 @@ class DocxGenerator:
 
         # 设置 column 对象宽度
         for col_idx, w_inch in enumerate(col_widths_inches):
-            word_table.columns[col_idx].width = Emu(int(w_inch * 914400))
+            if col_idx < len(word_table.columns):
+                word_table.columns[col_idx].width = Emu(int(w_inch * 914400))
 
         # ---- 设置边框 ----
         borders = OxmlElement('w:tblBorders')
@@ -954,9 +972,15 @@ class DocxGenerator:
                 row_span = getattr(cell, 'row_span', 1)
                 col_span = getattr(cell, 'col_span', 1)
                 if row_span > 1 or col_span > 1:
-                    word_table.cell(i, j).merge(
-                        word_table.cell(i + row_span - 1, j + col_span - 1)
-                    )
+                    merge_end_row = min(i + row_span - 1, num_rows - 1)
+                    merge_end_col = min(j + col_span - 1, num_cols - 1)
+                    if merge_end_row > i or merge_end_col > j:
+                        try:
+                            word_table.cell(i, j).merge(
+                                word_table.cell(merge_end_row, merge_end_col)
+                            )
+                        except (ValueError, KeyError) as e:
+                            logger.warning(f"合并单元格失败 ({i},{j})-({merge_end_row},{merge_end_col}): {e}")
 
         # ---- 设置行高 ----
         row_heights_pdf = self._resolve_row_heights(table, num_rows)
@@ -979,6 +1003,8 @@ class DocxGenerator:
             for j, cell in enumerate(row):
                 if cell is None:
                     continue
+                if j >= num_cols:
+                    continue  # Skip cells beyond Word table column count
                 cell_text = cell.text
                 cleaned_text = self._clean_xml_compatible_text(str(cell_text))
                 cell_paragraph = word_table.cell(i, j).paragraphs[0]

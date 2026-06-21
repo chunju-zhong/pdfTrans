@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-06-21
+
+- Python code review fixes (12 items, covering HIGH/MEDIUM/LOW severity):
+  - **HIGH**: LaTeX environment regex now uses capture group + backreference, ensuring `\begin{aligned}...\end{cases}` is not incorrectly matched
+  - **HIGH**: Fallback `\\` and `&` replacements made conditional (lookahead/lookbehind), avoiding damage to legitimate LaTeX content
+  - **HIGH**: `_check_latex_available` PATH modification moved inside `_latex_lock`, fixing thread safety issue
+  - **MEDIUM**: `_parse_html_table` return value check changed from `if cells:` to `if cells is not None:`, preventing empty matrix misjudgment
+  - **MEDIUM**: `_estimate_text_display_width` expanded CJK width estimation with Japanese Hiragana/Katakana and Korean Hangul
+  - **MEDIUM**: Table cell text truncation optimized from linear search to binary search, reducing `insert_textbox` calls from O(n) to O(log n)
+  - **MEDIUM**: `_compute_table_layout` docstring now documents side effect of modifying `matrix` parameter
+  - **MEDIUM**: `docx_generator.py` merge cell exception catch narrowed from `Exception` to `(ValueError, KeyError)`
+  - **LOW**: `llm_extractor.py` module-level import order fixed, constant `TABLE_HTML_MARKER` moved after imports
+  - **LOW**: `_check_latex_available` LaTeX path detection now supports Linux and Windows, using `sys.platform` conditional
+- PDF generator optimizations (4 items):
+  - **Transparent background**: `add_redact_annot` `fill` changed from white `(1,1,1)` to `None`, avoiding covering non-white backgrounds
+  - **Table bbox fallback**: In `_draw_translated_table`, when `table_bbox` is None, use page area as fallback to avoid `table_x0` undefined error
+  - **Cell capacity pre-check**: Pre-judge cell capacity based on `estimated_lines`, reduce font size early to prevent text overflow
+  - **amsmath package**: Load `\usepackage{amsmath}` in usetex mode, supporting `\begin{aligned}` and other environments
+- Word generator optimizations (3 items):
+  - **Merged cell column count**: Calculate logical column count considering `col_span` when creating tables, avoiding insufficient columns
+  - **Column width boundary check**: Check `col_idx < len(word_table.columns)` when setting column widths, avoiding index out of range
+  - **Skip over-column cells**: Skip cells beyond Word table column count when filling cell content
+- Data model extension:
+  - `PdfCell` new `estimated_lines` field, supporting estimated text line count
+- Utility function added:
+  - `fix_line_break_hyphens()`: Fix line-break hyphens in OCR output (e.g., "his- torical" → "historical")
+- Files changed: `modules/pdf_generator.py`, `modules/ocr/llm_extractor.py`, `modules/docx_generator.py`, `models/extraction.py`, `utils/text_processing.py`
+
+## 2026-06-19
+
+- Fixed multiple LLM OCR table rendering and positioning issues:
+  - **Table HTML rendered as plain text**: In JSON/ref-tag/Markdown response formats, text blocks containing `<table>` were also rendered as TextBlocks, causing raw HTML strings in PDF output. Added filtering logic to skip text blocks containing table HTML
+  - **Table content not translated**: Logic inversion bug in `_extract_tables_from_text` — `if not cells:` condition caused only empty tables to be added while populated tables were skipped. Fixed to `if not cells: continue`
+  - **`table_x0` undefined error**: In `_draw_translated_table`, variables were unassigned when `table_bbox` was None. Added else branch using page area as fallback
+  - **Table position fixed, not following original PDF**: DeepSeek-OCR `<|ref|>` tag's `<|det|>` table coordinates were discarded by code, replaced with hardcoded estimated positions. Fixed to preserve det coordinates and pass via `table_bbox_map` to `_extract_tables_from_text`
+  - **Multiple tables overlapping**: All tables on the same page started at y=100pt. Fixed to offset each subsequent table based on the previous table's bottom y coordinate
+- Fixed LLM OCR extraction progress bar not updating:
+  - Added `progress_callback` parameter to `extract_from_pdf`, sending `step_start`/`step_progress`/`step_complete` callbacks per page
+  - `pdf_extractor.py` LLM OCR branch now passes `progress_callback`
+- Code review optimizations (4 items):
+  - **HIGH**: Changed `table_bbox_map` from HTML full-text key to integer index key, avoiding whitespace mismatch failures
+  - **MEDIUM**: Eliminated duplicate `table_bbox` deconstruction in `_parse_html_table`, moved to before loop
+  - **MEDIUM**: Eliminated redundant bbox validity check in `_extract_tables_from_text`
+  - **LOW**: Extracted `'<table'` as module-level constant `TABLE_HTML_MARKER`
+- Files changed: `modules/ocr/llm_extractor.py`, `modules/pdf_extractor.py`, `modules/pdf_generator.py`, `tests/test_llm_ocr.py`
+
 ## 2026-06-18
 
 - Fixed short text untranslated detection bypass — LLM self-added `|||` separator causing untranslated text to evade detection:
