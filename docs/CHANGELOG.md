@@ -2,10 +2,16 @@
 
 ## 2026-06-22
 
-- PDF generator fix:
+- PaddleOCR table content not displaying fix (3 items):
+  - **Table bbox not added to processed_pixel_bboxes**: During PaddleOCR extraction, table bbox was not marked as processed, causing 73 textlines inside the table to be misidentified as "uncovered", creating 20 supplement TextBlocks that were then blacked out by table redaction. Fixed by adding table bbox to `processed_pixel_bboxes`
+  - **estimated_lines not calculated**: PaddleOCR `_compute_table_grid()` did not set `estimated_lines`, preventing the drawing phase from pre-judging cell capacity to reduce font size early. Fixed by calculating and setting `estimated_lines` for each cell with text
+  - **estimate_text_display_width extracted as shared function**: Extracted from `llm_extractor.py` to `coordinate_utils.py`, `llm_extractor.py` now imports it
+- PDF generator table truncation fix:
+  - **Cell text repeated overlay**: Binary search truncation appended text on each successful `insert_textbox` call (PyMuPDF doesn't overwrite previous results), causing 4-5 overlapping texts in the same cell. Fixed by switching to linear decrement loop (break on success), consistent with the 5-attempt shrink loop logic, writing only once
+- PDF generator white background fix:
   - **Restore white background**: `add_redact_annot` `fill` changed from transparent `None` back to white `(1,1,1)`, ensuring translated text effectively covers original text (transparent background caused overlap of original and translated text, reducing readability; will optimize to match original background color once reliable text color extraction method is found)
   - Affected scope: text block and table cell redaction calls
-- Files changed: `modules/pdf_generator.py`
+- Files changed: `modules/pdf_generator.py`, `modules/ocr/paddle_extractor.py`, `modules/extractors/coordinate_utils.py`, `modules/ocr/llm_extractor.py`
 
 ## 2026-06-21
 

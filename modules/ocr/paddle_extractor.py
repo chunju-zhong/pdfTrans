@@ -9,6 +9,7 @@
 步骤2:   图表/印章裁剪（无需额外模型）
 """
 
+import math
 import os
 import sys
 import re
@@ -867,6 +868,9 @@ class PaddleOcrExtractor(OcrExtractor):
 
                     elif label == 'table':
                         has_table = True
+                        # 将表格 bbox 加入 processed_pixel_bboxes，防止表格内 textline
+                        # 在补充捕获阶段被误判为"未覆盖"而创建重复的 supplement TextBlock
+                        processed_pixel_bboxes.append((float(x1), float(y1), float(x2), float(y2)))
 
                     elif label in ('formula', 'formula_number'):
                         has_formula = True
@@ -1471,6 +1475,34 @@ class PaddleOcrExtractor(OcrExtractor):
                             cell.alignment = 2
                         else:
                             cell.alignment = 0
+
+        # 计算每个单元格的 estimated_lines，供绘制阶段优化字体大小选择
+        from modules.extractors.coordinate_utils import estimate_text_display_width
+        # 从 textline 高度估算字体大小
+        textline_heights = []
+        for tl_box in textline_boxes:
+            if len(tl_box) >= 4:
+                tl_h = float(tl_box[3]) - float(tl_box[1])
+                if tl_h > 0:
+                    textline_heights.append(tl_h)
+        if textline_heights:
+            median_tl_h = sorted(textline_heights)[len(textline_heights) // 2]
+            estimated_font_size = median_tl_h * 0.75
+        else:
+            estimated_font_size = 9.0
+
+        for row_idx in range(n_rows):
+            for col_idx in range(n_cols):
+                cell = cells[row_idx][col_idx] if row_idx < len(cells) and col_idx < len(cells[row_idx]) else None
+                if cell is None or not cell.text:
+                    continue
+                display_w = estimate_text_display_width(cell.text, estimated_font_size)
+                col_span = getattr(cell, 'col_span', 1)
+                span_width = sum(col_widths[col_idx:col_idx + col_span]) if col_idx + col_span <= len(col_widths) else (col_widths[col_idx] if col_idx < len(col_widths) else 0)
+                if span_width > 0:
+                    cell.estimated_lines = max(1, math.ceil(display_w / span_width))
+                else:
+                    cell.estimated_lines = 1
 
         return cells, row_heights, col_widths
 

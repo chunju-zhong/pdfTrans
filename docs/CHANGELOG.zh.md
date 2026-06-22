@@ -2,10 +2,16 @@
 
 ## 2026-06-22
 
-- PDF 生成器修复：
+- PaddleOCR 表格内容不显示修复（3项）：
+  - **表格 bbox 未加入 processed_pixel_bboxes**：PaddleOCR 提取时表格 bbox 未标记为已处理，导致表格内 73 个 textline 被误判为"未覆盖"，创建 20 个 supplement TextBlock，渲染时被表格 redaction 涂黑删除。修复为将表格 bbox 加入 `processed_pixel_bboxes`
+  - **estimated_lines 未计算**：PaddleOCR `_compute_table_grid()` 中未设置 `estimated_lines`，导致绘制阶段无法预判单元格容量提前缩小字体。修复为计算并设置每个有文本单元格的 `estimated_lines`
+  - **estimate_text_display_width 提取为共享函数**：从 `llm_extractor.py` 提取到 `coordinate_utils.py`，`llm_extractor.py` 改为导入
+- PDF 生成器表格截断修复：
+  - **单元格文本重复叠加**：二分搜索截断中每次成功的 `insert_textbox` 追加写入文本（PyMuPDF 不覆盖前次结果），导致同一单元格文本叠加 4-5 次。修复为改用逐步减少循环（成功后 break），与5次缩小循环逻辑一致，只写入1次
+- PDF 生成器白底修复：
   - **恢复白底**：`add_redact_annot` 的 `fill` 从透明 `None` 恢复为白色 `(1,1,1)`，确保翻译文字有效遮盖原文（透明背景导致原文与译文重叠，可读性差；待后续找到可靠的文字颜色提取方法后再优化为匹配原文背景色）
   - 影响范围：文本块和表格单元格两处 redaction 调用
-- 相关文件：`modules/pdf_generator.py`
+- 相关文件：`modules/pdf_generator.py`、`modules/ocr/paddle_extractor.py`、`modules/extractors/coordinate_utils.py`、`modules/ocr/llm_extractor.py`
 
 ## 2026-06-21
 

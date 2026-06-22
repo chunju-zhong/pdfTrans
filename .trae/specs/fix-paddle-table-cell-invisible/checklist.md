@@ -1,0 +1,6 @@
+- [x] 表格 bbox 已加入 `processed_pixel_bboxes`，表格内 textline 不再被创建为 supplement TextBlock
+- [x] `estimate_text_display_width()` 已提取到 `coordinate_utils.py`，`llm_extractor.py` 改为导入
+- [x] PaddleOCR `_compute_table_grid()` 中每个有文本的 PdfCell 的 `estimated_lines` 被正确设置
+- [x] PaddleOCR 处理第64页后，日志中不再出现表格区域内的 supplement TextBlock（text_blocks 从 28 降至 8）
+- [x] `_draw_translated_table()` 中 `estimated_lines > 0` 的字体优化逻辑对 PaddleOCR 表格生效
+- [x] LLM OCR 表格功能不受影响（导入测试通过）

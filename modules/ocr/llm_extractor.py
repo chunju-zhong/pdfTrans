@@ -25,6 +25,7 @@ from openai import OpenAI
 from models.text_block import TextBlock
 from models.extraction import PdfPage, PdfTable, PdfCell, PdfImage, PdfExtraction
 from modules.ocr.base import OcrExtractor
+from modules.extractors.coordinate_utils import estimate_text_display_width
 from config import config
 from utils.text_processing import fix_line_break_hyphens
 
@@ -107,19 +108,6 @@ def _is_deepseek_ocr_model(model_name):
     """判断模型是否为DeepSeek-OCR"""
     model_lower = model_name.lower()
     return 'deepseek-ocr' in model_lower
-
-
-def _estimate_text_display_width(text, font_size=9.0):
-    """估算文本的显示宽度：CJK字符宽度=font_size×1.0，ASCII字符宽度=font_size×0.6"""
-    width = 0.0
-    for ch in text:
-        if ('\u4e00' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f' or '\uff00' <= ch <= '\uffef'
-                or '\u3040' <= ch <= '\u309f' or '\u30a0' <= ch <= '\u30ff'  # Japanese Hiragana/Katakana
-                or '\uac00' <= ch <= '\ud7af'):  # Korean Hangul
-            width += font_size * 1.0
-        else:
-            width += font_size * 0.6
-    return width
 
 
 class LlmOcrExtractor(OcrExtractor):
@@ -970,7 +958,7 @@ class LlmOcrExtractor(OcrExtractor):
             for c in range(n_cols):
                 cell = matrix[r][c]
                 if cell is not None and cell.text:
-                    cell_display_widths[(r, c)] = _estimate_text_display_width(cell.text, font_size)
+                    cell_display_widths[(r, c)] = estimate_text_display_width(cell.text, font_size)
 
         # Step 1: 初始行高估算（假设等宽列）
         equal_col_width = table_width / n_cols

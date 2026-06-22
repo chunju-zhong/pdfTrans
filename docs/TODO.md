@@ -28,7 +28,11 @@
   - Add `_is_title_block` function to determine if original block is a title
   - Cleaning strategy: Replace `\n` with space, clean extra spaces
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
-- [x] Python code review fixes (LaTeX regex backreference, conditional fallback replacement, thread safety, CJK range expansion, binary search truncation, exception catch narrowing, import order, cross-platform paths)
+- [x] Fix PaddleOCR table bbox not added to processed_pixel_bboxes causing content not displaying
+- [x] Fix PaddleOCR _compute_table_grid() not setting estimated_lines
+- [x] Extract estimate_text_display_width as shared function to coordinate_utils.py
+- [x] Fix table cell text repeated overlay (binary search → linear decrement loop, break on success)
+- [x] Python code review fixes (LaTeX regex backreference, conditional fallback replacement, thread safety, CJK range expansion, binary search truncation→reverted to linear search, exception catch narrowing, import order, cross-platform paths)
 - [x] PDF generator optimizations (transparent background→reverted to white, table bbox fallback, cell capacity pre-check, amsmath package)
 - [x] Word generator optimizations (merged cell column count, column width boundary check, skip over-column cells)
 - [x] PdfCell data model extended with estimated_lines field

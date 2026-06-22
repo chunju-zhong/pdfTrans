@@ -1180,89 +1180,50 @@ class PdfGenerator:
                             logger.error(f"单元格 ({i+1},{j+1}) 文本绘制异常: {str(e)}")
 
                     if not success:
-                        # 尝试截断文本以适应单元格（二分搜索）
+                        # 5次缩小后仍溢出，尝试逐步截断文本（每次成功后break，避免多次写入）
                         is_cjk = any('\u4e00' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f' or '\uff00' <= ch <= '\uffef' for ch in cell_text)
                         truncation_success = False
+                        truncation_font_size = base_font_size * 0.5
 
                         if is_cjk:
-                            # CJK文本：二分搜索最大可容纳字符数
-                            lo, hi = 1, len(cell_text) - 1
-                            best_n = 0
-                            while lo <= hi:
-                                mid = (lo + hi) // 2
-                                truncated = cell_text[:mid] + "…"
+                            # CJK文本：逐步减少字符数，每次成功后break
+                            for n in range(len(cell_text) - 1, 0, -1):
+                                truncated = cell_text[:n] + "…"
                                 try:
                                     result = page.insert_textbox(
                                         rect,
                                         truncated,
                                         fontname=suitable_font,
-                                        fontsize=base_font_size * 0.5,
+                                        fontsize=truncation_font_size,
                                         color=(0, 0, 0),
                                         align=1,
                                         lineheight=1.2
                                     )
                                     if result >= 0:
-                                        best_n = mid
-                                        lo = mid + 1
-                                    else:
-                                        hi = mid - 1
+                                        truncation_success = True
+                                        break
                                 except Exception:
-                                    hi = mid - 1
-                            if best_n > 0:
-                                truncation_success = True
-                                final_truncated = cell_text[:best_n] + "…"
-                                try:
-                                    page.insert_textbox(
-                                        rect,
-                                        final_truncated,
-                                        fontname=suitable_font,
-                                        fontsize=base_font_size * 0.5,
-                                        color=(0, 0, 0),
-                                        align=1,
-                                        lineheight=1.2
-                                    )
-                                except Exception:
-                                    truncation_success = False
+                                    continue
                         else:
-                            # 英文文本：二分搜索最大可容纳词数
+                            # 英文文本：逐步减少词数，每次成功后break
                             words = cell_text.split()
-                            lo, hi = 1, len(words) - 1
-                            best_n = 0
-                            while lo <= hi:
-                                mid = (lo + hi) // 2
-                                truncated = " ".join(words[:mid]) + "…"
+                            for n in range(len(words) - 1, 0, -1):
+                                truncated = " ".join(words[:n]) + "…"
                                 try:
                                     result = page.insert_textbox(
                                         rect,
                                         truncated,
                                         fontname=suitable_font,
-                                        fontsize=base_font_size * 0.5,
+                                        fontsize=truncation_font_size,
                                         color=(0, 0, 0),
                                         align=1,
                                         lineheight=1.2
                                     )
                                     if result >= 0:
-                                        best_n = mid
-                                        lo = mid + 1
-                                    else:
-                                        hi = mid - 1
+                                        truncation_success = True
+                                        break
                                 except Exception:
-                                    hi = mid - 1
-                            if best_n > 0:
-                                truncation_success = True
-                                final_truncated = " ".join(words[:best_n]) + "…"
-                                try:
-                                    page.insert_textbox(
-                                        rect,
-                                        final_truncated,
-                                        fontname=suitable_font,
-                                        fontsize=base_font_size * 0.5,
-                                        color=(0, 0, 0),
-                                        align=1,
-                                        lineheight=1.2
-                                    )
-                                except Exception:
-                                    truncation_success = False
+                                    continue
 
                         if truncation_success:
                             logger.warning(f"[表格溢出] 单元格 ({i},{j}): 文本='{cell_text[:50]}...', 单元格尺寸={cell_width:.1f}x{cell_height:.1f}, 处理方式=截断")

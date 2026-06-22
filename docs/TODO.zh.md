@@ -28,7 +28,11 @@
   - 添加 `_is_title_block` 函数判断原始块是否是标题
   - 清理策略：将 `\n` 替换为空格，清理多余空格
 - [ ] 优化LaTeX公式语法修复能力，处理模型输出的语法错误
-- [x] Python 代码审查修复（LaTeX正则反向引用、兜底替换条件化、线程安全、CJK范围扩展、截断二分查找、异常捕获收窄、import顺序、跨平台路径）
+- [x] 修复 PaddleOCR 表格 bbox 未加入 processed_pixel_bboxes 导致内容不显示
+- [x] 修复 PaddleOCR _compute_table_grid() 未设置 estimated_lines
+- [x] 提取 estimate_text_display_width 为共享函数到 coordinate_utils.py
+- [x] 修复表格单元格文本重复叠加（二分搜索→逐步减少循环，成功后break）
+- [x] Python 代码审查修复（LaTeX正则反向引用、兜底替换条件化、线程安全、CJK范围扩展、截断二分查找→已回退为线性查找、异常捕获收窄、import顺序、跨平台路径）
 - [x] PDF 生成器优化（透明背景→已回退为白底、表格bbox fallback、单元格容量预判、amsmath宏包）
 - [x] Word 生成器优化（合并单元格列数计算、列宽边界检查、跳过超列单元格）
 - [x] PdfCell 数据模型扩展 estimated_lines 字段

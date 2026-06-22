@@ -525,3 +525,16 @@ def detect_text_block_alignment(bbox, page_width):
 
     # 默认左对齐
     return 0
+
+
+def estimate_text_display_width(text, font_size=9.0):
+    """估算文本的显示宽度：CJK字符宽度=font_size×1.0，ASCII字符宽度=font_size×0.6"""
+    width = 0.0
+    for ch in text:
+        if ('\u4e00' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f' or '\uff00' <= ch <= '\uffef'
+                or '\u3040' <= ch <= '\u309f' or '\u30a0' <= ch <= '\u30ff'  # Japanese Hiragana/Katakana
+                or '\uac00' <= ch <= '\ud7af'):  # Korean Hangul
+            width += font_size * 1.0
+        else:
+            width += font_size * 0.6
+    return width

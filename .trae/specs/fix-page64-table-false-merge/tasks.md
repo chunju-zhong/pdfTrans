@@ -1,21 +1,29 @@
 # Tasks
 
-- [ ] Task 1: 在 `compute_span_from_none_positions` 中增加几何验证
-  - [ ] SubTask 1.1: 计算推断 span 覆盖区域的几何尺寸（基于 bbox_matrix 中各行列的 bbox 宽高）
-  - [ ] SubTask 1.2: 比较起始单元格 bbox 与覆盖区域尺寸，覆盖率 < 80% 则判定为无效 span
-  - [ ] SubTask 1.3: 仅将通过几何验证的 span 加入 span_map 返回值
-  - [ ] SubTask 1.4: 在验证失败时记录 DEBUG 日志（单元格坐标、推断 span、bbox 尺寸、覆盖区域尺寸、失败原因）
+- [ ] Task 1: 在 `coordinate_utils.py` 中新增工具函数
+  - [ ] SubTask 1.1: `detect_incomplete_table(table, page, row_threshold=2, x_overlap_threshold=0.5)` — 判断表格是否可能不完整（行数≤阈值且下方有对齐文本块）
+  - [ ] SubTask 1.2: `find_data_row_region(table_bbox, page, gap_threshold=25, width_tolerance=50)` — 扫描表格下方文本块，确定数据行区域边界
+  - [ ] SubTask 1.3: `compute_row_boundaries(text_blocks, row_group_tolerance=5)` — 将文本块按y0分组，计算每行边界
+  - [ ] SubTask 1.4: `extract_data_rows_by_col_bounds(page, col_boundaries, row_boundaries, table_bbox)` — 使用列边界+行边界，通过字符级重叠分配提取数据行单元格
 
-- [ ] Task 2: 在 `table_processor.py` 中为非合并的 None 位置创建空 PdfCell
-  - [ ] SubTask 2.1: 构建 span 覆盖位置集合（从有效 span_map 计算所有被合并覆盖的坐标）
-  - [ ] SubTask 2.2: 遍历 data 时，对 bbox_matrix 中为 None 但不在覆盖集合中的位置，使用均匀分割计算 bbox 并创建 text="" 的 PdfCell
-  - [ ] SubTask 2.3: 对在覆盖集合中的 None 位置，保持跳过逻辑不变
+- [ ] Task 2: 在 `table_processor.py` 中集成不完整表格扩展逻辑
+  - [ ] SubTask 2.1: 在 `extract_tables_by_pymupdf` 的表格处理循环中，对每个表格调用 `detect_incomplete_table`
+  - [ ] SubTask 2.2: 对不完整表格，调用 `find_data_row_region` 和 `compute_row_boundaries` 确定数据行
+  - [ ] SubTask 2.3: 调用 `extract_data_rows_by_col_bounds` 提取数据行单元格内容
+  - [ ] SubTask 2.4: 合并表头行和数据行，构建完整的 `data`、`rows_data`、`bbox_matrix`
+  - [ ] SubTask 2.5: 调用 `compute_span_from_none_positions` 推断合并单元格
+  - [ ] SubTask 2.6: 创建 PdfCell 对象，构建 cell_matrix，计算行高列宽
+  - [ ] SubTask 2.7: 创建 PdfTable 对象，替换原始不完整表格
+  - [ ] SubTask 2.8: 更新 `page_table_cells` 和 `page_tables` 返回值
+  - [ ] SubTask 2.9: 异常处理：扩展失败时回退到原始表格，记录 WARNING 日志
 
 - [ ] Task 3: 验证
   - [ ] SubTask 3.1: 语法检查通过
-  - [ ] SubTask 3.2: 运行程序验证第64页表格不再误合并
-  - [ ] SubTask 3.3: 验证真正有合并单元格的表格仍然正确合并
+  - [ ] SubTask 3.2: 运行程序验证第64页表格被正确扩展（1行→9行，包含所有数据行）
+  - [ ] SubTask 3.3: 验证数据行文本块被 is_table_text 正确过滤，不再作为普通文本渲染
+  - [ ] SubTask 3.4: 验证其他页面的表格不受影响（行数≥3的表格不触发扩展）
+  - [ ] SubTask 3.5: 验证真正有合并单元格的表格仍然正确合并
 
 # Task Dependencies
-- Task 2 依赖 Task 1（需要有效 span_map 来区分合并 None 和空单元格 None）
-- Task 3 依赖 Task 1 和 Task 2
+- Task 2 依赖 Task 1（需要工具函数）
+- Task 3 依赖 Task 1-2
