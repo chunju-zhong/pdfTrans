@@ -1,0 +1,3 @@
+- [x] LLM OCR 模式下 title/sub_title/section_title 文本块的 is_body_text 为 True，会被翻译
+- [x] LLM OCR 模式下 header/footer/footnote/page_number 文本块的 is_body_text 仍为 False，不会被翻译
+- [x] title/sub_title/section_title 的 block_type 仍为 1，不影响 PDF 生成样式
