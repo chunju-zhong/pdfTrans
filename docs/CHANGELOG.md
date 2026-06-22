@@ -2,6 +2,13 @@
 
 ## 2026-06-22
 
+- LLM OCR title-type text blocks not translated fix:
+  - **BLOCK_TYPE_MAP mapping error**: `title`, `sub_title`, `section_title` were mapped to `is_body_text=False`, and the translation service only translates blocks with `is_body_text=True`, causing all title-type text blocks to be skipped, leaving titles untranslated in the output PDF. Fixed by changing `is_body_text` to `True` for these three title types, while keeping `block_type_int=1` unchanged
+  - Affected scope: LLM OCR mode only; headers, footers, etc. remain `is_body_text=False`
+- Files changed: `modules/ocr/llm_extractor.py`
+
+## 2026-06-22
+
 - PaddleOCR table content not displaying fix (3 items):
   - **Table bbox not added to processed_pixel_bboxes**: During PaddleOCR extraction, table bbox was not marked as processed, causing 73 textlines inside the table to be misidentified as "uncovered", creating 20 supplement TextBlocks that were then blacked out by table redaction. Fixed by adding table bbox to `processed_pixel_bboxes`
   - **estimated_lines not calculated**: PaddleOCR `_compute_table_grid()` did not set `estimated_lines`, preventing the drawing phase from pre-judging cell capacity to reduce font size early. Fixed by calculating and setting `estimated_lines` for each cell with text

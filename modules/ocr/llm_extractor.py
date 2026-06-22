@@ -49,9 +49,9 @@ class OcrBlock:
 # block_type → (is_body_text, block_type_int) 映射
 # block_type_int: 0=正文, 1=标题, 2=副标题, 3=页眉, 4=页脚, 5=脚注
 BLOCK_TYPE_MAP = {
-    'title': (False, 1),
-    'sub_title': (False, 1),
-    'section_title': (False, 1),
+    'title': (True, 1),
+    'sub_title': (True, 1),
+    'section_title': (True, 1),
     'header': (False, 3),
     'footer': (False, 4),
     'footnote': (False, 5),

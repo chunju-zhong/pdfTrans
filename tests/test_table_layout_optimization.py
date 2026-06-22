@@ -16,7 +16,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.extraction import PdfCell
-from modules.ocr.llm_extractor import LlmOcrExtractor, _estimate_text_display_width
+from modules.ocr.llm_extractor import LlmOcrExtractor
+from modules.extractors.coordinate_utils import estimate_text_display_width
 from modules.pdf_generator import PdfGenerator
 
 
@@ -298,39 +299,39 @@ class TestLatexEnvironmentRemoval:
 
 
 # ============================================================
-# 4. _estimate_text_display_width 辅助函数测试
+# 4. estimate_text_display_width 辅助函数测试
 # ============================================================
 
 class TestEstimateTextDisplayWidth:
-    """_estimate_text_display_width 辅助函数测试"""
+    """estimate_text_display_width 辅助函数测试"""
 
     def test_ascii_width(self):
         """ASCII字符宽度为font_size * 0.6"""
-        width = _estimate_text_display_width("AB", font_size=10.0)
+        width = estimate_text_display_width("AB", font_size=10.0)
         assert abs(width - 10.0 * 0.6 * 2) < 0.01
 
     def test_cjk_width(self):
         """CJK字符宽度为font_size * 1.0"""
-        width = _estimate_text_display_width("你好", font_size=10.0)
+        width = estimate_text_display_width("你好", font_size=10.0)
         assert abs(width - 10.0 * 1.0 * 2) < 0.01
 
     def test_mixed_width(self):
         """混合字符宽度正确计算"""
-        width = _estimate_text_display_width("A你", font_size=10.0)
+        width = estimate_text_display_width("A你", font_size=10.0)
         expected = 10.0 * 0.6 + 10.0 * 1.0
         assert abs(width - expected) < 0.01
 
     def test_empty_string(self):
         """空字符串宽度为0"""
-        width = _estimate_text_display_width("", font_size=10.0)
+        width = estimate_text_display_width("", font_size=10.0)
         assert width == 0.0
 
     def test_default_font_size(self):
         """默认font_size为9.0"""
-        width = _estimate_text_display_width("A", font_size=9.0)
+        width = estimate_text_display_width("A", font_size=9.0)
         assert abs(width - 9.0 * 0.6) < 0.01
 
     def test_fullwidth_width(self):
         """全角字符宽度为font_size * 1.0"""
-        width = _estimate_text_display_width("Ａ", font_size=10.0)
+        width = estimate_text_display_width("Ａ", font_size=10.0)
         assert abs(width - 10.0 * 1.0) < 0.01

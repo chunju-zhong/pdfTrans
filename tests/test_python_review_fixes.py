@@ -197,48 +197,48 @@ class TestCjkWidthEstimation:
 
     def test_japanese_hiragana_fullwidth(self):
         """日文平假名按全角宽度计算"""
-        from modules.ocr.llm_extractor import _estimate_text_display_width
+        from modules.extractors.coordinate_utils import estimate_text_display_width
 
         # 5 个平假名字符，每个 9.0pt = 45.0
-        width = _estimate_text_display_width('こんにちは', 9.0)
+        width = estimate_text_display_width('こんにちは', 9.0)
         assert abs(width - 45.0) < 0.01, f"Expected ~45.0, got {width}"
 
     def test_japanese_katakana_fullwidth(self):
         """日文片假名按全角宽度计算"""
-        from modules.ocr.llm_extractor import _estimate_text_display_width
+        from modules.extractors.coordinate_utils import estimate_text_display_width
 
         # 4 个片假名字符，每个 9.0pt
-        width = _estimate_text_display_width('カタカナ', 9.0)
+        width = estimate_text_display_width('カタカナ', 9.0)
         assert abs(width - 36.0) < 0.01, f"Expected ~36.0, got {width}"
 
     def test_korean_hangul_fullwidth(self):
         """韩文谚文按全角宽度计算"""
-        from modules.ocr.llm_extractor import _estimate_text_display_width
+        from modules.extractors.coordinate_utils import estimate_text_display_width
 
         # 5 个韩文字符，每个 9.0pt = 45.0
-        width = _estimate_text_display_width('안녕하세요', 9.0)
+        width = estimate_text_display_width('안녕하세요', 9.0)
         assert abs(width - 45.0) < 0.01, f"Expected ~45.0, got {width}"
 
     def test_chinese_fullwidth(self):
         """中文仍按全角宽度计算"""
-        from modules.ocr.llm_extractor import _estimate_text_display_width
+        from modules.extractors.coordinate_utils import estimate_text_display_width
 
-        width = _estimate_text_display_width('你好世界', 9.0)
+        width = estimate_text_display_width('你好世界', 9.0)
         assert abs(width - 36.0) < 0.01, f"Expected ~36.0, got {width}"
 
     def test_mixed_cjk_width(self):
         """混合中日韩文字宽度计算"""
-        from modules.ocr.llm_extractor import _estimate_text_display_width
+        from modules.extractors.coordinate_utils import estimate_text_display_width
 
         # 1 Chinese + 1 Japanese hiragana + 1 Korean = 3 fullwidth chars = 27.0
-        width = _estimate_text_display_width('你こ안', 9.0)
+        width = estimate_text_display_width('你こ안', 9.0)
         assert abs(width - 27.0) < 0.01, f"Expected ~27.0, got {width}"
 
     def test_latin_halfwidth(self):
         """拉丁字母按半角宽度计算"""
-        from modules.ocr.llm_extractor import _estimate_text_display_width
+        from modules.extractors.coordinate_utils import estimate_text_display_width
 
-        width = _estimate_text_display_width('abc', 9.0)
+        width = estimate_text_display_width('abc', 9.0)
         assert abs(width - 9.0 * 0.6 * 3) < 0.01, f"Expected ~16.2, got {width}"
 
 

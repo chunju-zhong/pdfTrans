@@ -108,7 +108,7 @@ class TestLlmOcrResponseParsing:
         assert text_blocks[0].block_text == "Hello World"
         assert text_blocks[0].is_body_text is True
         assert text_blocks[0].page_num == 1
-        assert text_blocks[1].is_body_text is False  # title类型映射为is_body_text=False
+        assert text_blocks[1].is_body_text is True  # title类型映射为is_body_text=True（标题需翻译）
 
     def test_parse_response_tables(self):
         """解析表格"""
@@ -340,7 +340,7 @@ class TestLlmOcrRefTagParsing:
         # 第一个块：title类型，Markdown前缀已清理
         assert text_blocks[0].block_text == "Removal of the primary depends on the raw water characteristics"
         assert text_blocks[0].block_bbox == (54.0, 23.0, 940.0, 87.0)
-        assert text_blocks[0].is_body_text is False  # title类型映射为is_body_text=False
+        assert text_blocks[0].is_body_text is True  # title类型映射为is_body_text=True（标题需翻译）
         # 第二个块：text类型
         assert text_blocks[1].block_text == "Example: Two plants in the same city"
         assert text_blocks[1].block_bbox == (56.0, 92.0, 562.0, 142.0)
@@ -372,7 +372,7 @@ class TestLlmOcrRefTagParsing:
         assert result is not None
         text_blocks, _, _ = result
         assert len(text_blocks) == 1
-        assert text_blocks[0].is_body_text is False  # sub_title类型映射为is_body_text=False
+        assert text_blocks[0].is_body_text is True  # sub_title类型映射为is_body_text=True（标题需翻译）
         assert text_blocks[0].block_text == "Lesson:"  # Markdown前缀已清理
 
     def test_parse_deepseek_ocr_empty_text_skipped(self):
@@ -493,7 +493,7 @@ class TestLlmOcrMarkdownParsing:
         text_blocks, _, _ = result
         assert len(text_blocks) == 3
         assert text_blocks[0].block_text == "# Title"
-        assert text_blocks[0].is_body_text is False  # # Title被检测为title类型，映射为is_body_text=False
+        assert text_blocks[0].is_body_text is True  # # Title被检测为title类型，映射为is_body_text=True（标题需翻译）
         assert text_blocks[1].block_text == "First paragraph"
         assert text_blocks[1].is_body_text is True
 
@@ -776,7 +776,7 @@ class TestLlmOcrTitleTranslation:
     """LLM OCR 标题/副标题翻译测试"""
 
     def test_title_is_body_text(self):
-        """LLM OCR title 类型文本块 is_body_text=False"""
+        """LLM OCR title 类型文本块 is_body_text=True（标题需翻译）"""
         extractor = LlmOcrExtractor()
         response = (
             "<|ref|>title<|/ref|><|det|>[[54, 23, 943, 87]]<|/det|>\n"
@@ -788,12 +788,12 @@ class TestLlmOcrTitleTranslation:
         assert result is not None
         text_blocks, _, _ = result
         assert len(text_blocks) == 2
-        # title 块映射为 is_body_text=False
-        assert text_blocks[0].is_body_text is False
+        # title 块映射为 is_body_text=True（标题需翻译）
+        assert text_blocks[0].is_body_text is True
         assert text_blocks[1].is_body_text is True
 
     def test_sub_title_is_body_text(self):
-        """LLM OCR sub_title 类型文本块 is_body_text=False"""
+        """LLM OCR sub_title 类型文本块 is_body_text=True（标题需翻译）"""
         extractor = LlmOcrExtractor()
         response = (
             "<|ref|>sub_title<|/ref|><|det|>[[700, 421, 775, 459]]<|/det|>\n"
@@ -804,7 +804,7 @@ class TestLlmOcrTitleTranslation:
         result = extractor._parse_response(response, page_num=1)
         assert result is not None
         text_blocks, _, _ = result
-        assert text_blocks[0].is_body_text is False  # sub_title映射为is_body_text=False
+        assert text_blocks[0].is_body_text is True  # sub_title映射为is_body_text=True（标题需翻译）
         assert text_blocks[1].is_body_text is True
 
     def test_font_size_estimated_from_bbox(self):
@@ -1105,9 +1105,9 @@ class TestBlockTypeMapping:
     """BLOCK_TYPE_MAP 映射测试"""
 
     def test_title_mapping(self):
-        """title → is_body_text=False, block_type=1"""
+        """title → is_body_text=True（标题需翻译）, block_type=1"""
         is_body, block_type_int = BLOCK_TYPE_MAP['title']
-        assert is_body is False
+        assert is_body is True
         assert block_type_int == 1
 
     def test_text_mapping(self):
@@ -1129,9 +1129,9 @@ class TestBlockTypeMapping:
         assert block_type_int == 4
 
     def test_sub_title_mapping(self):
-        """sub_title → is_body_text=False, block_type=1"""
+        """sub_title → is_body_text=True（标题需翻译）, block_type=1"""
         is_body, block_type_int = BLOCK_TYPE_MAP['sub_title']
-        assert is_body is False
+        assert is_body is True
         assert block_type_int == 1
 
     def test_footnote_mapping(self):
@@ -1139,6 +1139,12 @@ class TestBlockTypeMapping:
         is_body, block_type_int = BLOCK_TYPE_MAP['footnote']
         assert is_body is False
         assert block_type_int == 5
+
+    def test_section_title_mapping(self):
+        """section_title → is_body_text=True（标题需翻译）, block_type=1"""
+        is_body, block_type_int = BLOCK_TYPE_MAP['section_title']
+        assert is_body is True
+        assert block_type_int == 1
 
     def test_unknown_type_defaults_to_text(self):
         """未知block_type默认为text映射"""

@@ -2,6 +2,13 @@
 
 ## 2026-06-22
 
+- LLM OCR 标题类型文本块未翻译修复：
+  - **BLOCK_TYPE_MAP 映射错误**：`title`、`sub_title`、`section_title` 被映射为 `is_body_text=False`，翻译服务只翻译 `is_body_text=True` 的块，导致所有标题类型文本块被跳过，输出 PDF 中标题保持原文未翻译。修复为将这三个标题类型的 `is_body_text` 改为 `True`，`block_type_int` 保持为 1 不变
+  - 影响范围：仅 LLM OCR 模式，页眉页脚等仍保持 `is_body_text=False`
+- 相关文件：`modules/ocr/llm_extractor.py`
+
+## 2026-06-22
+
 - PaddleOCR 表格内容不显示修复（3项）：
   - **表格 bbox 未加入 processed_pixel_bboxes**：PaddleOCR 提取时表格 bbox 未标记为已处理，导致表格内 73 个 textline 被误判为"未覆盖"，创建 20 个 supplement TextBlock，渲染时被表格 redaction 涂黑删除。修复为将表格 bbox 加入 `processed_pixel_bboxes`
   - **estimated_lines 未计算**：PaddleOCR `_compute_table_grid()` 中未设置 `estimated_lines`，导致绘制阶段无法预判单元格容量提前缩小字体。修复为计算并设置每个有文本单元格的 `estimated_lines`

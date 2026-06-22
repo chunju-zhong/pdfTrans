@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import logging
+import pytest
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -61,6 +62,7 @@ def generate_test_text_blocks(num_blocks):
         text_blocks.append(text_block)
     return text_blocks
 
+@pytest.mark.slow
 def test_performance():
     """测试批量处理和非批量处理的性能差异"""
     # 测试不同数量的文本块

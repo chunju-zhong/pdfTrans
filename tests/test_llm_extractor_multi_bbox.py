@@ -1,4 +1,4 @@
-"""_parse_ref_tags_response 多 bbox 拆分 TextBlock 的单元测试"""
+"""_parse_ref_tags_to_blocks 多 bbox 拆分 TextBlock 的单元测试"""
 import pytest
 from unittest.mock import patch, MagicMock
 from modules.ocr.llm_extractor import LlmOcrExtractor
@@ -35,7 +35,7 @@ class TestMultiBboxSplit:
             "[[135, 80, 861, 175], [264, 197, 790, 391]]",
             "First paragraph text\n\nSecond paragraph text",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_response(result_text, page_num=1, page_info=MOCK_PAGE_INFO)
+        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
 
         assert len(text_blocks) == 2
 
@@ -60,7 +60,7 @@ class TestMultiBboxSplit:
             "[[135, 80, 861, 175], [264, 197, 790, 391]]",
             "Single paragraph without double newline",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_response(result_text, page_num=1, page_info=MOCK_PAGE_INFO)
+        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
 
         assert len(text_blocks) == 1
         assert text_blocks[0].block_text == "Single paragraph without double newline"
@@ -74,7 +74,7 @@ class TestMultiBboxSplit:
             "[[135, 80, 861, 175]]",
             "Just one paragraph",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_response(result_text, page_num=1, page_info=MOCK_PAGE_INFO)
+        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
 
         assert len(text_blocks) == 1
         assert text_blocks[0].block_text == "Just one paragraph"
@@ -88,7 +88,7 @@ class TestMultiBboxSplit:
             "[[135, 80, 861, 175], [264, 197, 790, 391]]",
             "First paragraph\n\nSecond paragraph\n\nThird paragraph",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_response(result_text, page_num=1, page_info=MOCK_PAGE_INFO)
+        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
 
         assert len(text_blocks) == 1
         assert text_blocks[0].block_text == "First paragraph\n\nSecond paragraph\n\nThird paragraph"
@@ -101,7 +101,7 @@ class TestMultiBboxSplit:
             "[[10, 20, 100, 50], [10, 60, 100, 90], [10, 100, 100, 130]]",
             "Para one\n\nPara two\n\nPara three",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_response(result_text, page_num=2, page_info=MOCK_PAGE_INFO)
+        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
 
         assert len(text_blocks) == 3
         assert text_blocks[0].block_text == "Para one"
@@ -125,7 +125,7 @@ class TestMultiBboxSplit:
             "New para A\n\nNew para B",
         )
         result_text = block1 + block2
-        text_blocks, _, _ = extractor._parse_ref_tags_response(result_text, page_num=1, page_info=MOCK_PAGE_INFO)
+        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
 
         assert len(text_blocks) == 3
         assert text_blocks[0].block_no == 0
