@@ -1,0 +1,5 @@
+- [x] SKILL.md 中 `--ocr-engine` 参数说明已标注支持 `paddleocr` 和 `llm` 两个选项
+- [x] SKILL.md 中 OCR 使用示例包含 `--ocr-engine llm` 的示例
+- [x] SKILL.md 包含 LLM OCR 引擎功能说明（工作原理、支持模型、响应格式、功能列表）
+- [x] SKILL.md 包含 LLM OCR 相关环境变量配置说明
+- [x] SKILL.md OCR 注意事项包含 LLM OCR 特有的注意事项
