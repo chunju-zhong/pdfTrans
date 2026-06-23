@@ -180,6 +180,74 @@
 - [ ] Documentation improvement
 ```
 
+### 2.6 项目技术文档更新
+
+项目技术文档是 AI 和新开发人员理解项目全貌的核心参考资料，代码变更时必须同步更新。
+
+#### 2.6.1 文件路径
+
+| 文档 | 中文版路径 | 英文版路径 | 用途 |
+|------|-----------|-----------|------|
+| 架构文档 | `docs/ARCHITECTURE.zh.md` | `docs/ARCHITECTURE.md` | 项目整体架构、模块职责、数据流、数据模型、配置系统、外部依赖 |
+| 技术方案文档 | `docs/TECHNICAL_GUIDE.zh.md` | `docs/TECHNICAL_GUIDE.md` | OCR 管线、翻译管线、语义合并、输出生成、公式处理、表格处理、错误处理等核心技术细节 |
+| 开发指南文档 | `docs/DEVELOPMENT_GUIDE.zh.md` | `docs/DEVELOPMENT_GUIDE.md` | 环境搭建、配置说明、运行方式、CLI/Web API 参考、测试方法、开发任务指南、代码规范 |
+
+#### 2.6.2 更新触发条件
+
+以下代码变更必须同步更新对应的技术文档：
+
+| 变更类型 | 需更新的文档 | 更新内容 |
+|----------|-------------|---------|
+| 新增/删除模块或文件 | ARCHITECTURE.zh.md / ARCHITECTURE.md | 目录结构说明、系统架构图 |
+| 新增/修改数据模型字段 | ARCHITECTURE.zh.md / ARCHITECTURE.md | 关键数据模型及关系章节 |
+| 新增/修改配置项 | ARCHITECTURE.zh.md / ARCHITECTURE.md、DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md | 配置系统说明、.env 配置说明 |
+| 新增/更换外部服务 | ARCHITECTURE.zh.md / ARCHITECTURE.md | 外部服务依赖章节 |
+| OCR 管线变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | OCR 管线架构章节 |
+| 翻译管线变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 翻译管线架构章节 |
+| 语义合并逻辑变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 语义合并策略章节 |
+| PDF/DOCX/Markdown 生成逻辑变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 对应输出生成章节 |
+| 表格处理逻辑变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 表格处理管线章节 |
+| 公式检测/渲染逻辑变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 公式检测与渲染章节 |
+| 错误处理/重试机制变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 错误处理与重试机制章节 |
+| 进度模型变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 进度管理模型章节 |
+| 术语表/章节识别变更 | TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md | 术语表提取与章节识别章节 |
+| CLI 命令参数变更 | DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md | CLI 完整命令参考章节 |
+| Web API 路由变更 | DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md | Web API 接口参考章节 |
+| 环境依赖变更 | DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md | 环境要求与搭建章节 |
+| 测试结构变更 | DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md | 测试方法章节 |
+| 新增支持语言 | DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md、ARCHITECTURE.zh.md / ARCHITECTURE.md | 支持语言列表章节 |
+| 新增设计模式或代码约定 | DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md | 代码规范与约定章节 |
+
+#### 2.6.3 更新规则
+
+- **准确性优先**：文档内容必须与实际代码完全一致，不得有虚构或过时的描述
+- **增量更新**：只更新受变更影响的章节，不需要重写整篇文档
+- **交叉引用**：三份文档之间存在概念引用关系，更新一处时检查其他文档是否需要同步
+  - ARCHITECTURE.zh.md / ARCHITECTURE.md 提供全局视图，TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md 和 DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md 引用其中的概念
+  - 配置项变更需同时更新 ARCHITECTURE.zh.md / ARCHITECTURE.md（配置系统章节）和 DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md（.env 配置章节）
+- **验证方法**：更新后通过阅读源代码交叉验证文档描述的准确性
+- **双语更新**：三份技术文档均有中文版（.zh.md）和英文版，变更时需同时更新两个版本
+
+#### 2.6.4 更新示例
+
+```markdown
+### 示例：新增 OCR 引擎后的文档更新
+
+1. ARCHITECTURE.zh.md / ARCHITECTURE.md 更新：
+   - 目录结构：添加新引擎文件说明
+   - 系统架构图：在核心模块层添加新引擎
+   - 外部服务依赖：添加新引擎依赖的服务
+
+2. TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md 更新：
+   - OCR 管线架构：添加新引擎的技术方案描述
+   - 错误处理：添加新引擎的错误处理和重试机制
+
+3. DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md 更新：
+   - .env 配置说明：添加新引擎相关配置项
+   - CLI 命令参考：更新 --ocr-engine 参数的 choices
+   - 开发任务指南：无需变更（已有"添加新 OCR 引擎"指南）
+```
+
 ## 3. 文档更新流程
 
 ### 3.1 准备阶段
@@ -200,6 +268,7 @@
    - 在 `docs/TODO.zh.md` 中更新中文版
    - 在 `docs/TODO.md` 中更新英文版
 4. **更新 AI 开发进度**：记录当前状态、已完成任务和后续计划
+5. **更新项目技术文档**：根据变更类型更新 ARCHITECTURE.zh.md / ARCHITECTURE.md、TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md、DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md（参见 2.6.2 更新触发条件）
 
 ### 3.3 验证阶段
 
@@ -275,7 +344,20 @@
 - [ ] 任务描述清晰详细
 - [ ] 中文版和英文版内容一致
 
-### 5.5 整体验证
+### 5.5 项目技术文档验证
+
+- [ ] 代码变更涉及模块/文件增删时，ARCHITECTURE.zh.md / ARCHITECTURE.md 目录结构和系统架构图已更新
+- [ ] 代码变更涉及数据模型字段时，ARCHITECTURE.zh.md / ARCHITECTURE.md 关键数据模型章节已更新
+- [ ] 代码变更涉及配置项时，ARCHITECTURE.zh.md / ARCHITECTURE.md 和 DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md 配置章节已同步更新
+- [ ] 代码变更涉及外部服务时，ARCHITECTURE.zh.md / ARCHITECTURE.md 外部服务依赖章节已更新
+- [ ] 代码变更涉及 OCR/翻译/合并/生成/表格/公式/错误处理等核心逻辑时，TECHNICAL_GUIDE.zh.md / TECHNICAL_GUIDE.md 对应章节已更新
+- [ ] 代码变更涉及 CLI 参数或 Web API 路由时，DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md 对应章节已更新
+- [ ] 代码变更涉及环境依赖或测试结构时，DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md 对应章节已更新
+- [ ] 文档描述与实际代码行为一致，无虚构或过时内容
+- [ ] 三份文档间的交叉引用保持一致（如配置项在 ARCHITECTURE.zh.md / ARCHITECTURE.md 和 DEVELOPMENT_GUIDE.zh.md / DEVELOPMENT_GUIDE.md 中描述一致）
+- [ ] 中文版（.zh.md）和英文版已同步更新
+
+### 5.6 整体验证
 
 - [ ] 所有文档变更与代码变更一致
 - [ ] 文档格式统一规范
@@ -284,7 +366,7 @@
 - [ ] 提交信息完整描述变更
 - [ ] 中文版和英文版同步更新
 
-### 5.6 文件命名验证
+### 5.7 文件命名验证
 
 - [ ] 中文版文档使用 `.zh.md` 后缀
 - [ ] 英文版文档使用原始文件名（无后缀）
