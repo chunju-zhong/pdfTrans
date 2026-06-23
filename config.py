@@ -87,12 +87,10 @@ class Config:
     _default_use_gpu = 'false' if platform.system() == 'Darwin' else 'true'
     OCR_USE_GPU = os.environ.get('OCR_USE_GPU', _default_use_gpu).lower() == 'true'  # 是否使用GPU加速
 
-    OCR_DPI = int(os.environ.get('OCR_DPI', '200'))  # OCR渲染DPI
-    
     # OCR 内存激进优化配置 (Intel 16GB Mac 崩溃时可启用)
     OCR_SKIP_TABLE = os.environ.get('OCR_SKIP_TABLE', 'false').lower() == 'true'  # 跳过表格识别节省内存
     OCR_SKIP_FORMULA = os.environ.get('OCR_SKIP_FORMULA', 'false').lower() == 'true'  # 跳过公式识别节省内存
-    OCR_RENDER_DPI = int(os.environ.get('OCR_RENDER_DPI', '120'))  # OCR渲染DPI: 120默认激进内存优化 | 150质量优先
+    OCR_PADDLE_DPI = int(os.environ.get('OCR_PADDLE_DPI', '120'))  # PaddleOCR渲染DPI: 120默认激进内存优化 | 150质量优先
 
     # OCR 超时与重试配置
     OCR_HEARTBEAT_TIMEOUT = int(os.environ.get('OCR_HEARTBEAT_TIMEOUT', '0'))  # 心跳超时(秒)，0=禁用，超过判定子进程死机

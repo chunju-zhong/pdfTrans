@@ -1,5 +1,18 @@
 # 更新日志
 
+## 2026-06-23
+
+- OCR 配置项清理与重命名：
+  - **删除 `OCR_DPI`**：该配置项从未被代码引用，属于历史遗留，已从 `config.py` 中移除
+  - **重命名 `OCR_RENDER_DPI` → `OCR_PADDLE_DPI`**：与 `OCR_LLM_DPI` 命名对称，明确表示为 PaddleOCR 引擎专用 DPI 配置
+  - 影响范围：`config.py`、`modules/ocr/paddle_extractor.py`（3 处引用）
+- SKILL.md 文档更新 — 补充 LLM OCR 功能说明：
+  - 更新 `--ocr-engine` 参数说明，标注支持 `paddleocr` 和 `llm` 两个选项
+  - 新增 LLM OCR 引擎功能说明（工作原理、支持模型、响应格式、功能列表）
+  - 新增 LLM OCR 环境变量配置说明（`AIPING_OCR_LLM_MODEL`、`OCR_LLM_DPI` 等）
+  - 新增 LLM OCR 使用示例和注意事项
+- 相关文件：`config.py`、`modules/ocr/paddle_extractor.py`、`SKILL.md`
+
 ## 2026-06-22
 
 - LLM OCR 标题类型文本块未翻译修复：

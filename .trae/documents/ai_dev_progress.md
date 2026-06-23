@@ -1,5 +1,26 @@
 # AI 开发进度记录
 
+### 2026-06-23
+- **当前状态**：已完成 OCR 配置项清理和 SKILL.md 文档更新
+- **已完成任务**：
+  - OCR 配置项清理：
+    - 删除 `config.py` 中未使用的 `OCR_DPI` 配置项（从未被代码引用）
+    - 重命名 `OCR_RENDER_DPI` → `OCR_PADDLE_DPI`，与 `OCR_LLM_DPI` 命名对称
+    - 更新 `modules/ocr/paddle_extractor.py` 中 3 处引用（2 处代码 + 1 处日志字符串）
+  - SKILL.md 文档更新 — 补充 LLM OCR 功能：
+    - 更新 `--ocr-engine` 参数说明，标注支持 `paddleocr` 和 `llm`
+    - 新增 LLM OCR 引擎功能说明（工作原理、支持模型、响应格式、功能列表）
+    - 新增 LLM OCR 环境变量配置说明
+    - 新增 LLM OCR 使用示例和注意事项
+  - 项目技术文档同步更新：
+    - `docs/ARCHITECTURE.md`：删除 `OCR_DPI` 行，`OCR_RENDER_DPI` → `OCR_PADDLE_DPI`
+    - `docs/DEVELOPMENT_GUIDE.md`：同上
+- **技术实现**：
+  - 两个 OCR 引擎的 DPI 最优值不同：PaddleOCR 默认 120（内存优化防崩溃），LLM OCR 默认 150（节省 token），因此保留两个独立配置
+- **影响**：
+  - 环境变量 `OCR_RENDER_DPI` 需改为 `OCR_PADDLE_DPI`（如有 `.env` 配置需同步修改）
+  - SKILL.md 现在完整覆盖了 LLM OCR 功能文档
+
 ### 2026-06-19
 - **当前状态**：已完成 LLM OCR 模式表格渲染、定位、翻译、进度条等多项修复
 - **已完成任务**：

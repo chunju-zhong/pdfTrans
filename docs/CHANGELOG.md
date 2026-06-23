@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-23
+
+- OCR configuration cleanup and rename:
+  - **Removed `OCR_DPI`**: This config item was never referenced by any code (legacy artifact), removed from `config.py`
+  - **Renamed `OCR_RENDER_DPI` → `OCR_PADDLE_DPI`**: Symmetric naming with `OCR_LLM_DPI`, clearly indicating it's the PaddleOCR engine-specific DPI config
+  - Affected scope: `config.py`, `modules/ocr/paddle_extractor.py` (3 references)
+- SKILL.md documentation update — added LLM OCR feature documentation:
+  - Updated `--ocr-engine` parameter description to show both `paddleocr` and `llm` options
+  - Added LLM OCR engine feature description (working principle, supported models, response formats, feature list)
+  - Added LLM OCR environment variable configuration (e.g., `AIPING_OCR_LLM_MODEL`, `OCR_LLM_DPI`)
+  - Added LLM OCR usage examples and notes
+- Files changed: `config.py`, `modules/ocr/paddle_extractor.py`, `SKILL.md`
+
 ## 2026-06-22
 
 - LLM OCR title-type text blocks not translated fix:

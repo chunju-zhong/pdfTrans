@@ -69,6 +69,21 @@ SILICON_FLOW_API_KEY=your_silicon_flow_api_key
 
 **注意：** 只需配置其中一种翻译服务的API密钥即可使用。
 
+**LLM OCR 配置（可选）：**
+
+使用 `--ocr-engine llm` 时，可通过以下环境变量自定义模型和行为：
+
+```bash
+# LLM OCR 模型配置
+AIPING_OCR_LLM_MODEL=DeepSeek-OCR-2           # aiping服务的OCR模型
+SILICON_FLOW_OCR_LLM_MODEL=deepseek-ai/DeepSeek-OCR  # 硅基流动服务的OCR模型
+
+# LLM OCR 参数配置
+OCR_LLM_MAX_TOKENS=8192    # 最大输出token数
+OCR_LLM_TEMPERATURE=0.1    # 生成温度（越低越确定）
+OCR_LLM_DPI=150            # 渲染DPI（越低token消耗越少，识别精度略降）
+```
+
 ## 命令行使用
 
 使用 `pdftrans -h` 查看详细使用帮助。
@@ -94,8 +109,14 @@ pdftrans translate document.pdf -f markdown -c
 # 启用OCR模式
 pdftrans translate document.pdf --ocr -o output.pdf
 
-# 指定OCR引擎和识别语言
+# 指定OCR引擎和识别语言（PaddleOCR引擎）
 pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o output.pdf
+
+# 使用LLM视觉模型OCR引擎
+pdftrans translate document.pdf --ocr --ocr-engine llm -o output.pdf
+
+# 使用LLM OCR引擎并指定翻译服务
+pdftrans translate document.pdf --ocr --ocr-engine llm -T silicon_flow -o output.pdf
 ```
 
 ### OCR模式说明
@@ -104,10 +125,14 @@ OCR模式通过OCR技术提取PDF文本内容后翻译，支持版面分析、�
 
 **OCR参数：**
 - `--ocr` - 启用OCR模式
-- `--ocr-engine` - OCR引擎类型（默认：paddleocr）
+- `--ocr-engine` - OCR引擎类型，可选值：`paddleocr`（默认）、`llm`
 - `--ocr-lang` - OCR识别语言（默认：根据源语言自动选择）
 
-**OCR支持的功能：**
+#### PaddleOCR引擎
+
+PaddleOCR是默认的OCR引擎，基于PP-StructureV3模型，本地运行，无需额外API调用。
+
+**支持的功能：**
 - 文本识别：提取扫描文档中的文字
 - 公式识别：识别数学公式并转换为LaTeX格式
 - 表格识别：识别表格结构并保留格式
@@ -116,6 +141,30 @@ OCR模式通过OCR技术提取PDF文本内容后翻译，支持版面分析、�
 - OCR模式会增加处理时间
 - 公式和表格识别需要额外内存
 - OCR识别质量取决于原始文档的清晰度
+
+#### LLM视觉模型OCR引擎
+
+LLM OCR引擎通过OpenAI兼容API调用视觉模型（如DeepSeek-OCR、Qwen3-VL等），将PDF页面图像发送给模型进行识别。
+
+**支持的功能：**
+- 文本识别：提取扫描文档和图片型PDF中的文字
+- 表格识别：识别表格结构并转换为HTML格式
+- 图表识别：识别图表区域并提取描述信息
+- 版面分析：识别标题、正文、页眉、页脚、脚注等结构
+
+**支持的模型：**
+- aiping服务：DeepSeek-OCR-2（默认）
+- 硅基流动服务：deepseek-ai/DeepSeek-OCR（默认）
+
+**响应格式：**
+- **JSON格式**：通用VLM模型（如Qwen3-VL）使用，输出结构化JSON包含文本块、坐标、表格和图表
+- **Markdown/<|ref|>格式**：DeepSeek-OCR原生格式，自动解析为结构化数据
+
+**注意事项：**
+- LLM OCR需要调用API，会产生API费用和token消耗
+- 处理速度取决于API响应速度，网络延迟会影响整体耗时
+- 每页PDF会渲染为图像发送给模型，大文件token消耗较高
+- 需要配置对应翻译服务的API密钥
 
 ### 提取术语表使用示例
 
@@ -161,6 +210,8 @@ pdftrans list-languages
 3. 大文件翻译可能需要较长时间
 4. 语义合并和LLM合并会增加翻译时间，但能提高翻译质量
 5. 按章节拆分功能只在选择Markdown输出格式时起作用
+6. LLM OCR引擎（`--ocr-engine llm`）会产生API调用费用，大文件token消耗较高
+7. LLM OCR引擎依赖网络连接，API响应速度影响整体耗时
 
 ## 错误处理
 

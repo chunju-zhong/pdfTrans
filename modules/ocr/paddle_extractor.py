@@ -400,8 +400,8 @@ class PaddleOcrExtractor(OcrExtractor):
                 - img_height_px: 渲染图像高度（像素）
         """
         page_images = {}
-        dpi = self.render_dpi if self.render_dpi is not None else config.OCR_RENDER_DPI
-        logger.info(f"OCR 渲染 DPI: {dpi} (profiler={self.render_dpi}, config={config.OCR_RENDER_DPI})")
+        dpi = self.render_dpi if self.render_dpi is not None else config.OCR_PADDLE_DPI
+        logger.info(f"OCR 渲染 DPI: {dpi} (profiler={self.render_dpi}, config={config.OCR_PADDLE_DPI})")
         for page_num in target_pages:
             page_idx = page_num - 1
             page = doc[page_idx]
@@ -1175,7 +1175,7 @@ class PaddleOcrExtractor(OcrExtractor):
             pages_to_process = [p for p in target_pages if p not in skip_pages_set]
 
             logger.info(f"开始OCR提取PDF: {pdf_path}, 共{len(target_pages)}页, 跳过{len(skip_pages_set)}页, 需处理{len(pages_to_process)}页")
-            logger.info(f"OCR内存优化配置: OCR_SKIP_TABLE={self._skip_table}, OCR_SKIP_FORMULA={self._skip_formula}, OCR_RENDER_DPI={config.OCR_RENDER_DPI}")
+            logger.info(f"OCR内存优化配置: OCR_SKIP_TABLE={self._skip_table}, OCR_SKIP_FORMULA={self._skip_formula}, OCR_PADDLE_DPI={config.OCR_PADDLE_DPI}")
             if self._skip_table or self._skip_formula:
                 logger.info("提示: 部分OCR功能已跳过，若需完整功能请调整参数")
 
