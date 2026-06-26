@@ -87,6 +87,30 @@ class TestCLIParser(unittest.TestCase):
         self.assertTrue(args.llm_merge)
         self.assertTrue(args.chapter_split)
     
+    def test_translate_command_with_model_params(self):
+        """测试 translate 命令的新模型参数"""
+        parser = cli_main.create_parser()
+        args = parser.parse_args([
+            'translate', 'test.pdf',
+            '--translation-model', 'gpt-4',
+            '--layout-model', 'gpt-4',
+            '--glossary-model', 'gpt-3.5',
+            '--ocr-llm-model', 'deepseek-ocr'
+        ])
+        self.assertEqual(args.translation_model, 'gpt-4')
+        self.assertEqual(args.layout_model, 'gpt-4')
+        self.assertEqual(args.glossary_model, 'gpt-3.5')
+        self.assertEqual(args.ocr_llm_model, 'deepseek-ocr')
+    
+    def test_translate_command_with_qianfan(self):
+        """测试 translate 命令的 qianfan 翻译器"""
+        parser = cli_main.create_parser()
+        args = parser.parse_args([
+            'translate', 'test.pdf',
+            '-T', 'qianfan'
+        ])
+        self.assertEqual(args.translator, 'qianfan')
+    
     def test_glossary_command(self):
         """测试 glossary 命令解析"""
         parser = cli_main.create_parser()
@@ -115,6 +139,15 @@ class TestCLIParser(unittest.TestCase):
         self.assertEqual(args.translator, 'silicon_flow')
         self.assertEqual(args.pages, '1-5')
         self.assertEqual(args.doc_type, '医学文档')
+    
+    def test_glossary_command_with_model_param(self):
+        """测试 glossary 命令的 --glossary-model 参数"""
+        parser = cli_main.create_parser()
+        args = parser.parse_args([
+            'glossary', 'test.pdf',
+            '--glossary-model', 'gpt-4'
+        ])
+        self.assertEqual(args.glossary_model, 'gpt-4')
     
     def test_list_languages_command(self):
         """测试 list-languages 命令解析"""

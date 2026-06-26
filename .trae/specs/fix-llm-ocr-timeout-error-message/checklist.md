@@ -1,0 +1,17 @@
+- [x] Task 1: 精细化异常处理实现
+  - [x] `_extract_page` 中捕获 `openai.APITimeoutError` 并返回中文可读错误消息
+  - [x] 其他非超时异常保持原有格式
+  - [x] 返回值结构化为 `(result, error_msg)` 元组
+- [x] Task 2: 超时重试机制实现
+  - [x] `APITimeoutError` 时重试 1 次
+  - [x] 重试日志格式符合规范
+  - [x] 重试仍然失败时返回空结果+错误消息
+- [x] Task 3: `extract_from_pdf` 错误传播实现
+  - [x] 收集 `_extract_page` 返回的错误消息
+  - [x] 提取完成后通过 `progress_callback` 传递
+  - [x] 适配 `_extract_page` 新返回值
+- [x] Task 4: `translation_service` 错误原因显示
+  - [x] 提取结果为空时检查具体错误原因
+  - [x] 有超时错误时调用 `task.set_error()` 终止流程
+  - [x] 无错误记录时保持原行为不变
+- [x] 端到端验证：模拟超时场景，确认用户看到可理解的错误消息而非 "没有找到需要翻译的文本块"

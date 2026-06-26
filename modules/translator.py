@@ -24,7 +24,8 @@ class Translator:
             'fr': '法语',
             'de': '德语',
             'es': '西班牙语',
-            'ru': '俄语'
+            'ru': '俄语',
+            'bo': '藏文'
         }
     
     def translate(self, text, source_lang, target_lang, doc_type, glossary):
@@ -123,42 +124,58 @@ class Translator:
         """
         return text.strip()
     
-    def _generate_system_prompt(self, doc_type, source_lang_name, target_lang_name, glossary):
+    def _generate_system_prompt(self, doc_type, source_lang_name, target_lang_name, glossary,
+                                 source_lang_code=None, target_lang_code=None):
         """生成系统提示词
-        
+
         Args:
             doc_type (str): 文档类型
             source_lang_name (str): 源语言名称
             target_lang_name (str): 目标语言名称
             glossary (str): 术语表
-            
+            source_lang_code (str, optional): 源语言代码（如 bo/zh/en），用于追加专项规则
+            target_lang_code (str, optional): 目标语言代码（如 zh/en）
+
         Returns:
             str: 生成的系统提示词
         """
-        return f"""
+        base_prompt = f"""
 你是专业的{doc_type}翻译专家，擅长将{source_lang_name}的{doc_type}文档转写成{target_lang_name}，严格遵循以下规则：
-1. 语义连贯：必须基于完整上下文理解，句式适配{target_lang_name}表达习惯，表达流畅，转折自然；
-2. 自然过渡：保持原文逻辑关系，仅在必要时添加过渡词，不额外扩展内容；
-3. 风格一致：符合原文风格，保持原文档的语气；
-4. 简洁精炼：翻译应简洁精炼，长度与原文相当，不添加解释性说明或扩展内容；
-5. 术语一致：严格使用以下术语表翻译，不随意变更：
+
+一、核心原则（最高优先级）
+1. **忠实直译**：只翻译原文明确包含的信息，禁止脑补、添加原文不存在的细节（如作者、别名、版本、品类、传承等），不编造原文未提及的内容；
+2. **禁止膨胀**：翻译长度与原文相当，不添加解释性说明、注释、备注，标题、列表项等短文本尤其应保持简洁；
+3. **术语一致**：严格使用以下术语表翻译，不自行创译：
 {glossary if glossary else '无'}
-6. 不增删义：严格遵循原文含义，不添加额外解释，不遗漏任何细节（包括标点、括号、冒号的位置）；
-7. 语法正确：符合{target_lang_name}语法规则，避免语法错误，避免缺少句子成分；
-8. 技术精准：对于{doc_type}术语、代码片段等，保持高度准确性，避免误译。
-9. 不要翻译URL：原文中包含的URL地址，保持原状，不进行翻译。
-10. **代码段保留与格式化**：原文中包含的代码段（包括但不限于代码块、行内代码），必须：
-    - 保持原状，不进行翻译；
-    - **保持正确的代码格式**：包括缩进、空格、换行、对齐方式等，不可改变代码的结构化格式；
-    - 代码特征识别：包含常见编程关键字（如 `def`、`class`、`import`、`if`、`for`、`function`、`var`、`const` 等）或特殊符号（`=`、`=>`、`->`、`<>`、`()`、`{{}}`、`[]`）的文本片段，应识别为代码段处理；
-    - 保持代码段中的注释原文，不翻译。
-11. 长度控制：翻译长度应与原文相近，避免翻译膨胀；标题、列表项等短文本尤其应保持简洁，不做任何解释性扩展。
-12. 不要翻译公式：原文中包含的数学公式、LaTeX表达式、数学符号（如 $...$、\\frac{{}}{{}}、α、β、∑ 等），保持原状，不进行翻译，不添加解释；
-13. 不要解释缩写：原文中的专业缩写（如 AI、LLM、API、CPU 等），保持原状，不展开解释，不添加括号说明；
-14. **禁止元注释和原文输出**：翻译结果中严禁添加任何形式的注释、说明、备注（如"注："、"说明："等），严禁输出原文内容，只输出{target_lang_name}翻译结果本身，不解释翻译决策，不保留原文。
-15. **保持列表格式**：原文中的列表格式（换行、项目符号如•、-、数字编号等）必须在翻译结果中保持，不将列表项合并为连续段落。
-16. **保留单元格分隔符**：当输入文本包含 "|||" 分隔符时，这是表格单元格之间的分隔标记。你必须在翻译结果的对应位置保留每个 "|||" 分隔符，且每个分隔段独立翻译，绝不将相邻段的内容合并或混入其他段。短文本段（如标签词）保持为对应语言的翻译，不与相邻段合并。
+
+二、语义与风格
+4. **语义连贯**：基于完整上下文理解，句式适配{target_lang_name}表达习惯，表达流畅，转折自然；
+5. **风格一致**：符合原文风格，保持原文档的语气；
+6. **语法正确**：符合{target_lang_name}语法规则，避免语法错误，避免缺少句子成分。
+
+三、保持格式（不翻译、不解释）
+7. **代码段保留**：原文中的代码段（代码块、行内代码），保持原状不翻译，保持正确的代码格式（缩进、空格、换行、对齐），代码中的注释保持原文；
+8. **公式不翻译**：数学公式、LaTeX表达式、数学符号（如 $...$、\\frac{{}}{{}}、α、β、∑ 等），保持原状不翻译；
+9. **缩写不解释**：专业缩写（如 AI、LLM、API、CPU 等），保持原状不展开解释；
+10. **URL不翻译**：原文中的URL地址，保持原状不翻译；
+11. **列表格式保持**：原文中的列表格式（换行、项目符号如•、-、数字编号等），在翻译结果中保持，不将列表项合并为连续段落；
+12. **单元格分隔符保留**：输入文本包含 "|||" 分隔符时，在翻译结果的对应位置保留每个 "|||"，每个分隔段独立翻译，不合并相邻段内容。
+
+四、禁止元注释
+13. **禁止元注释和原文输出**：翻译结果中严禁添加任何形式的注释、说明、备注（如"注："、"说明："等），严禁输出原文内容，只输出{target_lang_name}翻译结果本身，不解释翻译决策。
 """
+        # 追加语言专项规则
+        if source_lang_code or target_lang_code:
+            try:
+                from prompts import rule_registry
+                return rule_registry.merge_into_prompt(
+                    base_prompt, "translation",
+                    source_lang_code or "",
+                    target_lang_code or "",
+                )
+            except ImportError:
+                pass  # prompts 模块不存在时保持原有行为
+        return base_prompt
     
     def _generate_user_prompt(self, source_lang_name, target_lang_name, doc_type, processed_text):
         """生成用户提示词

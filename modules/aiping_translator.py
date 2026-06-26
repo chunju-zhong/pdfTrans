@@ -18,16 +18,15 @@ class AipingTranslator(Translator):
             model (str): 要使用的模型名称
         """
         super().__init__(api_key, api_url)
-        self.api_url = api_url
         self.model = model
         # 初始化OpenAI客户端
         self.client = OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
-            timeout=30.0,  # 添加超时设置，30秒
+            timeout=config.TRANSLATION_TIMEOUT,
         )
-        # 设置max_tokens属性，默认值为8192
-        self.max_tokens = 8192
+        # 设置max_tokens属性
+        self.max_tokens = config.TRANSLATION_MAX_TOKENS
     
     def translate(self, text, source_lang, target_lang, doc_type, glossary):
         """使用aiping翻译API翻译文本
@@ -68,14 +67,18 @@ class AipingTranslator(Translator):
             'fr': '法文',
             'de': '德文',
             'es': '西班牙文',
-            'ru': '俄文'
+            'ru': '俄文',
+            'bo': '藏文'
         }
         
         source_lang_name = lang_map.get(source_lang, source_lang)
         target_lang_name = lang_map.get(target_lang, target_lang)
         
         # 生成提示词
-        system_prompt = self._generate_system_prompt(doc_type, source_lang_name, target_lang_name, glossary)
+        system_prompt = self._generate_system_prompt(
+            doc_type, source_lang_name, target_lang_name, glossary,
+            source_lang_code=source_lang, target_lang_code=target_lang,
+        )
         user_prompt = self._generate_user_prompt(source_lang_name, target_lang_name, doc_type, processed_text)
         
         import time
@@ -89,8 +92,8 @@ class AipingTranslator(Translator):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=True,  # 保持流式调用，兼容现有测试
-                    temperature=0.1,  # Qwen3 非思考模式推荐参数
-                    top_p=0.9,  # Qwen3 非思考模式推荐参数
+                    temperature=config.TRANSLATION_TEMPERATURE,
+                    top_p=config.TRANSLATION_TOP_P,
                     max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
@@ -172,34 +175,5 @@ class AipingTranslator(Translator):
                 else:
                     # 最后一次尝试失败，抛出异常
                     raise Exception(f"aiping翻译API请求失败: {str(e)}")
-    
-    def batch_translate(self, texts, source_lang, target_lang, doc_type="AI技术", glossary=""):
-        """批量翻译文本
-        
-        Args:
-            texts (list): 要翻译的文本列表
-            source_lang (str): 源语言代码
-            target_lang (str): 目标语言代码
-            doc_type (str): 文档类型
-            glossary (str): 术语表，格式为"术语1: 翻译1\n术语2: 翻译2"
-            
-        Returns:
-            list: 翻译结果对象列表，每个元素为TranslationResult实例
-        """
-        # 检查原语言与目标语言是否一致
-        if source_lang == target_lang:
-            # 语言一致，直接返回原文本列表和空截断信息
-            return [TranslationResult(
-                content=text,
-                token_usage={},
-                finish_reason="",
-                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
-            ) for text in texts]
-        
-        results = []
-        for text in texts:
-            result = self.translate(text, source_lang, target_lang, doc_type, glossary)
-            results.append(result)
-        return results
 
 

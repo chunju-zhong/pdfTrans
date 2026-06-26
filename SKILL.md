@@ -22,6 +22,12 @@ pdftrans是一个支持多翻译API的PDF翻译命令行工具，你必须根据
 - pdf：生成PDF格式输出
 - docx：生成Word文档格式输出
 - markdown：生成Markdown格式输出（打包为zip文件）
+- pdf_docx：同时生成PDF和Word两种格式
+- all：同时生成PDF、Word和Markdown三种格式
+
+## 组合格式说明
+
+使用 `pdf_docx` 或 `all` 格式时，工具会同时生成多种格式的输出文件。`-o` 参数被视作输出目录前缀。不带 `-o` 时文件默认输出到配置的输出目录。
 
 ## 智能后缀处理
 工具会根据输出格式自动添加正确的文件后缀：
@@ -49,9 +55,10 @@ pdftrans是一个支持多翻译API的PDF翻译命令行工具，你必须根据
 
 ## API密钥配置
 
-pdftrans工具需要配置翻译API的API密钥才能正常工作。目前支持两种翻译服务：
+pdftrans工具需要配置翻译API的API密钥才能正常工作。目前支持三种翻译服务：
 1. **aiping API** （默认）
 2. **硅基流动 API**
+3. **百度千帆 API**
 
 **配置步骤：**
 1. 复制 `.env.example` 文件为 `.env`
@@ -65,9 +72,12 @@ AIPING_API_KEY=your_aiping_api_key
 
 # 硅基流动 API 配置
 SILICON_FLOW_API_KEY=your_silicon_flow_api_key
+
+# 百度千帆 API 配置
+QIANFAN_API_KEY=your_qianfan_api_key
 ```
 
-**注意：** 只需配置其中一种翻译服务的API密钥即可使用。
+**注意：** 只需配置至少一种翻译服务的API密钥即可使用。
 
 **LLM OCR 配置（可选）：**
 
@@ -116,8 +126,18 @@ pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o ou
 pdftrans translate document.pdf --ocr --ocr-engine llm -o output.pdf
 
 # 使用LLM OCR引擎并指定翻译服务
-pdftrans translate document.pdf --ocr --ocr-engine llm -T silicon_flow -o output.pdf
-```
+
+# 使用千帆翻译服务
+pdftrans translate document.pdf -T qianfan -o output.pdf
+
+# 藏语翻译
+pdftrans translate document.pdf -s bo -t zh -o output.pdf
+
+# 同时生成PDF和Word
+pdftrans translate document.pdf -f pdf_docx -o output/
+
+# 同时生成PDF、Word和Markdown
+pdftrans translate document.pdf -f all -o output/
 
 ### OCR模式说明
 
@@ -195,12 +215,14 @@ pdftrans list-languages
 - de（德语）
 - es（西班牙语）
 - ru（俄语）
+- bo（藏文）
 
 
 ## 支持的翻译服务
 
 - aiping：使用aiping翻译API
 - silicon_flow：使用硅基流动翻译API
+- qianfan：使用百度千帆翻译API
 
 
 ## 注意事项
@@ -209,7 +231,7 @@ pdftrans list-languages
 2. 翻译服务需要配置相应的API密钥
 3. 大文件翻译可能需要较长时间
 4. 语义合并和LLM合并会增加翻译时间，但能提高翻译质量
-5. 按章节拆分功能只在选择Markdown输出格式时起作用
+5. 按章节拆分功能只在选择Markdown输出格式或者 `all`（包含Markdown）时起作用
 6. LLM OCR引擎（`--ocr-engine llm`）会产生API调用费用，大文件token消耗较高
 7. LLM OCR引擎依赖网络连接，API响应速度影响整体耗时
 

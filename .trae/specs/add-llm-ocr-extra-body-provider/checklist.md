@@ -1,0 +1,5 @@
+- [x] config.py 包含 OCR_LLM_EXTRA_BODY 配置项，从环境变量读取并解析为 dict
+- [x] 环境变量未设置时 OCR_LLM_EXTRA_BODY 为 None，不影响 API 调用
+- [x] 环境变量 JSON 格式错误时记录警告日志，OCR_LLM_EXTRA_BODY 为 None
+- [x] LlmOcrExtractor API 调用中当 extra_body 非 None 时传递给 create() 方法
+- [x] extra_body 为 None 时不传递该参数，行为无回归

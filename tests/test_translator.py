@@ -33,6 +33,65 @@ class TestTranslator:
         result = translator.translate('Hello', 'en', 'en', doc_type="AI技术", glossary=None)
         assert hasattr(result, 'content')
         assert result.content == 'Hello'
+    
+    def test_supported_languages_includes_tibetan(self):
+        """测试支持的语言包含藏文"""
+        translator = Translator(api_key="test_key")
+        assert 'bo' in translator.supported_languages
+        assert translator.supported_languages['bo'] == '藏文'
+    
+    def test_validate_language_bo(self):
+        """测试藏文语言代码验证"""
+        translator = Translator(api_key="test_key")
+        assert translator._validate_language('bo') is True
+    
+    def test_generate_system_prompt_with_lang_codes(self):
+        """测试 _generate_system_prompt 含 source_lang_code/target_lang_code 参数"""
+        translator = Translator(api_key="test_key")
+        
+        # 测试带语言代码参数
+        prompt = translator._generate_system_prompt(
+            doc_type="技术文档",
+            source_lang_name="英文",
+            target_lang_name="中文",
+            glossary="AI: 人工智能",
+            source_lang_code="en",
+            target_lang_code="zh",
+        )
+        assert "技术文档" in prompt
+        assert "英文" in prompt
+        assert "中文" in prompt
+        assert "AI:" in prompt
+    
+    def test_generate_system_prompt_without_lang_codes(self):
+        """测试 _generate_system_prompt 不含语言代码参数（向后兼容）"""
+        translator = Translator(api_key="test_key")
+        
+        # 测试不带语言代码参数
+        prompt = translator._generate_system_prompt(
+            doc_type="AI技术",
+            source_lang_name="英文",
+            target_lang_name="中文",
+            glossary="",
+        )
+        assert "AI技术" in prompt
+        assert "英文" in prompt
+        assert "中文" in prompt
+    
+    def test_batch_translate(self):
+        """测试 batch_translate 方法"""
+        translator = Translator(api_key="test_key")
+        
+        # 测试相同语言批量翻译
+        texts = ['Hello', 'World']
+        results = translator.batch_translate(texts, 'en', 'en')
+        assert len(results) == 2
+        assert results[0].content == 'Hello'
+        assert results[1].content == 'World'
+        
+        # 测试不同语言批量翻译（应调用translate，会抛出NotImplementedError）
+        with pytest.raises(NotImplementedError):
+            translator.batch_translate(['Hello'], 'en', 'zh')
 
 class TestContextTranslation:
     """测试上下文翻译功能"""

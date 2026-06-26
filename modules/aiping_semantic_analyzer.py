@@ -21,12 +21,12 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
         self.client = OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
-            timeout=30.0,  # 添加超时设置，30秒
+            timeout=config.SEMANTIC_ANALYSIS_TIMEOUT,
         )
-        # 设置max_tokens属性，默认值为1024（用于单个语义分析）
-        self.max_tokens = 1024
-        # 设置batch_max_tokens属性，默认值为2048（用于批量语义分析）
-        self.batch_max_tokens = 2048
+        # 设置max_tokens属性（使用config的常量）
+        self.max_tokens = config.SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS
+        # 设置batch_max_tokens属性
+        self.batch_max_tokens = config.SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS
     
     def analyze_semantic_relationship(self, text1, text2, source_lang):
         """分析两个文本块之间的语义关系，判断是否应该合并
@@ -58,8 +58,8 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=True,  # 保持流式调用
-                    temperature=0.1,  # 降低温度，提高分析准确性
-                    top_p=0.9,  # 核采样参数
+                    temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                    top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                     max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
@@ -149,8 +149,8 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=True,  # 保持流式调用
-                    temperature=0.1,  # 降低温度，提高分析准确性
-                    top_p=0.9,  # 核采样参数
+                    temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                    top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                     max_tokens=self.batch_max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[

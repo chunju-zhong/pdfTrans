@@ -1,0 +1,8 @@
+- [x] config.py 的 SUPPORTED_LANGUAGES 包含 `'bo': '藏文'`
+- [x] modules/translator.py 的 supported_languages 包含 `'bo': '藏语'`
+- [x] modules/aiping_translator.py 的 lang_map 包含 `'bo': '藏文'`
+- [x] modules/silicon_flow_translator.py 的 lang_map 包含 `'bo': '藏文'`
+- [x] modules/semantic_analyzer.py 的 supported_languages 包含 `'bo': '藏语'`
+- [x] modules/pdf_generator.py 两处 test_chars 字典包含 `'bo': 'བཀྲ་ཤིས་བདེ་ལེགས'`
+- [x] Web 界面源语言下拉框中出现"藏文"选项（通过 config.py SUPPORTED_LANGUAGES 自动渲染）
+- [x] CLI `list-languages` 命令输出中包含 `bo - 藏文`（通过 config.py SUPPORTED_LANGUAGES 自动读取）

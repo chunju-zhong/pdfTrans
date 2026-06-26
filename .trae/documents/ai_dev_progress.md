@@ -1,5 +1,52 @@
 # AI 开发进度记录
 
+### 2026-06-26
+- **当前状态**：已完成百度千帆翻译服务、藏语支持、语言专项规则系统、模块拆分等多项重大功能更新
+- **已完成任务**：
+  - 新增百度千帆翻译服务（qianfan）：
+    - 新增 `modules/qianfan_translator.py`（150行），继承 `Translator`，复用系统提示词生成 + 语言专项规则注入
+    - Config 新增 `QIANFAN_API_KEY/URL/MODEL/MODEL_LAYOUT/MODEL_GLOSSARY/OCR_LLM_MODEL` 及 `QIANFAN_EXTRA_BODY`
+    - CLI 新增 `-T qianfan`，Web UI 下拉框新增"百度千帆翻译"
+    - 语义分析器工厂、术语提取器均支持 `qianfan`
+  - 新增藏语（bo）支持：
+    - `SUPPORTED_LANGUAGES` 新增 `'bo': '藏文'`
+    - 新增 `prompts/language_rules/bo_to_zh.py`（8KB）：藏→中翻译专项规则
+    - 新增 `prompts/rule_registry.py`：按 `(stage, source_lang, target_lang)` 查找并追加规则到提示词
+  - 新增组合输出格式：CLI `-f pdf_docx` 和 `-f all`
+  - 新增 CLI 模型覆盖参数：`--translation-model`、`--layout-model`、`--glossary-model`、`--ocr-llm-model`
+  - Config 重构：类级别→实例级别 + `_load()` 方法，支持运行时刷新
+  - 翻译系统提示词重写：16条平铺→四段式结构 + 语言专项规则注入
+  - TranslationService 拆分（1400+→5个子模块）：
+    - `TranslationExtractor`（233行）
+    - `TranslationContentTranslator`（583行）
+    - `TranslationTableHandler`（384行）
+    - `TranslationOutputGenerator`（446行）
+  - PdfGenerator 渲染逻辑拆分：`PdfTextRenderer`（1070行）+ `PdfTableRenderer`（556行）
+  - LLM OCR 解析器拆分：`LlmOcrResponseParser`（707行）+ `LlmTableParser`（284行）+ 空白页检测 + 超时重试
+  - 术语提取器基类重构：`BaseApiGlossaryExtractor` + `QianfanGlossaryExtractor`
+  - 硬编码参数统一迁移到 Config 实例属性
+  - Bug修复：`glossary_service.py` 中 `cell.strip()` → `cell.text.strip()`
+- **技术实现**：
+  - 规则注册表设计：`rule_registry.merge_into_prompt(prompt, stage, source_lang, target_lang)` 在提示词末尾追加语言专项规则
+  - Config 实例化：`Config()` → `_load()` 从环境变量读取，属性从类级别 `Config.X` 改为实例级别 `self.X`
+  - TranslationService 拆分：主类保留流程编排和 re-export，子模块各司其职
+  - PdfGenerator 委派模式：保留所有公开方法签名，内部委派到 `self.text_renderer` / `self.table_renderer`
+  - LLM OCR 空白页检测：灰度标准差 < 阈值则跳过 OCR，节省 API 调用
+- **影响**：
+  - 新增第三个翻译平台百度千帆，扩大用户选择范围
+  - 藏语 PDF 翻译质量通过专项规则显著提升
+  - 模块拆分提高代码可维护性，单个文件从 1400+ 行降至 500 行以内
+  - CLI 功能更灵活，支持运行时模型覆盖和组合输出
+  - Config 支持运行时刷新，便于 Web 服务动态配置
+- **遇到的问题**：
+  - TranslationService 拆分需维护测试兼容性，通过 re-export 解决
+  - Config 重构从类级别改为实例级别，需全局搜索替换 `Config.X` 为 `config.X`
+- **后续计划**：
+  - 实际运行验证百度千帆翻译效果
+  - 实际运行验证藏语翻译效果
+  - 完善更多语言的专项规则
+  - 优化翻译提示词，减少翻译膨胀
+
 ### 2026-06-23
 - **当前状态**：已完成 OCR 配置项清理和 SKILL.md 文档更新
 - **已完成任务**：

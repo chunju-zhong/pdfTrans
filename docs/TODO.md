@@ -88,7 +88,7 @@
 - [ ] Expand table extraction, support more complex tables and table styles
 
 ## Low Priority
-- [ ] Expand glossary extraction support for more translation platforms
+- [x] Expand glossary extraction support for more translation platforms (added Baidu Qianfan)
 - [ ] Optimize API call strategy, improve translation efficiency
 - [ ] Improve documentation, add user guides
 - [ ] Code refactoring, improve maintainability

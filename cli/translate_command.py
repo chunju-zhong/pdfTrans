@@ -20,7 +20,7 @@ def get_output_path_with_correct_suffix(output_path, output_format):
     
     Args:
         output_path: 用户指定的输出路径
-        output_format: 输出格式 (pdf, docx, markdown)
+        output_format: 输出格式 (pdf, docx, markdown, pdf_docx, all)
         
     Returns:
         str: 处理后的输出路径
@@ -36,6 +36,9 @@ def get_output_path_with_correct_suffix(output_path, output_format):
         expected_ext = '.docx'
     elif output_format == 'markdown':
         expected_ext = '.zip'  # Markdown生成的是zip文件
+    elif output_format in ('pdf_docx', 'all'):
+        # 组合格式时，-o 视为目录或基础名称，不添加后缀
+        return output_path
     else:
         return output_path
     
@@ -65,8 +68,9 @@ def translate_handler(args):
         sys.exit(1)
     
     # 检查章节拆分和输出格式的兼容性
-    if args.chapter_split and args.format != 'markdown':
-        print("警告: --chapter-split 只在选择Markdown输出格式时起作用")
+    if args.chapter_split:
+        if args.format not in ('markdown', 'all'):
+            print("警告: --chapter-split 只在选择Markdown输出格式时起作用")
     
     # 读取术语表
     glossary = ""
@@ -137,6 +141,14 @@ def translate_handler(args):
         progress.log("按章节拆分输出")
     if args.ocr:
         progress.log(f"启用OCR模式 (引擎: {args.ocr_engine})")
+    if args.translation_model:
+        progress.log(f"翻译模型: {args.translation_model}")
+    if args.layout_model:
+        progress.log(f"排版模型: {args.layout_model}")
+    if args.glossary_model:
+        progress.log(f"术语提取模型: {args.glossary_model}")
+    if args.ocr_llm_model:
+        progress.log(f"OCR LLM模型: {args.ocr_llm_model}")
     
     try:
         # 执行同步翻译
@@ -158,6 +170,10 @@ def translate_handler(args):
             ocr_mode=args.ocr,
             ocr_engine=args.ocr_engine,
             ocr_lang=args.ocr_lang or args.source,
+            translation_model=args.translation_model,
+            layout_model=args.layout_model,
+            glossary_model=args.glossary_model,
+            ocr_llm_model=args.ocr_llm_model,
             progress_callback=TaskProgressCallback(progress),
             is_cli=True,
             output_path=os.path.dirname(output_path) if args.output else None,
@@ -166,12 +182,19 @@ def translate_handler(args):
         )
         
         if result:
-            # 直接使用用户指定的输出路径或默认路径
-            final_output_path = output_path if args.output else os.path.join(config.OUTPUT_FOLDER, result)
-            progress.success("翻译完成！")
-            progress.log(f"输出文件: {final_output_path}")
-            
-            # 显示警告信息
+            if isinstance(result, list):
+                progress.success("翻译完成！")
+                for f in result:
+                    if args.output:
+                        full_path = os.path.join(os.path.dirname(output_path), f)
+                    else:
+                        full_path = os.path.join(config.OUTPUT_FOLDER, f if isinstance(f, str) else f)
+                    progress.log(f"输出文件: {full_path}")
+            else:
+                final_output_path = output_path if args.output else os.path.join(config.OUTPUT_FOLDER, result)
+                progress.success("翻译完成！")
+                progress.log(f"输出文件: {final_output_path}")
+
             if task.warnings:
                 progress.warning(f"翻译过程中有 {len(task.warnings)} 个警告:")
                 for warning in task.warnings:

@@ -1,0 +1,13 @@
+- [x] Issue 1: OCR_LLM_TIMEOUT 接入客户端
+  - [x] `timeout=config.OCR_LLM_TIMEOUT` 替换 `timeout=120.0`
+  - [x] `.env.example` 中 `OCR_LLM_TIMEOUT` 注释值与代码一致
+- [x] Issue 2: 删除 OCR_LLM_EXTRA_BODY
+  - [x] `config.py` 中不再有 `OCR_LLM_EXTRA_BODY` 定义
+- [x] Issue 3: 消除超时检查重复
+  - [x] 3 处检查点均调用 `_handle_ocr_timeout_errors`
+  - [x] 原行为保持不变（非超时空结果仍显示"没有找到需要翻译的文本块"）
+- [x] Issue 4: 超时消息使用配置值
+  - [x] 超时消息显示 `{config.OCR_LLM_TIMEOUT}秒` 而非硬编码值
+- [x] Issue 5: 移除未使用的异常变量
+  - [x] `except APITimeoutError:` 不带 `as e`
+- [x] 语法检查：`python3 -m py_compile` 所有修改的文件无错误

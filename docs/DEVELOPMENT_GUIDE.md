@@ -99,7 +99,7 @@ cp .env.example .env
 vim .env
 ```
 
-**Required configuration**: At least one translation service API key (`AIPING_API_KEY` or `SILICON_FLOW_API_KEY`) must be configured, along with `SECRET_KEY`.
+**Required configuration**: At least one translation service API key (`AIPING_API_KEY`, `SILICON_FLOW_API_KEY`, or `QIANFAN_API_KEY`) must be configured, along with `SECRET_KEY`.
 
 ### 1.6 Platform Notes
 

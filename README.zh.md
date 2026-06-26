@@ -17,6 +17,7 @@ PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持We
 - **多翻译API支持**：
   - aiping 模型调用API
   - 硅基流动 模型调用API
+  - 百度千帆 模型调用API
 - **文档生成**：
   - PDF生成：基于原始PDF生成翻译后的PDF，保留原始布局和格式
   - Word生成：基于合并后的翻译结果生成Word文档，保留原始字体和样式
@@ -24,7 +25,7 @@ PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持We
 - **Web界面**：提供简洁易用的Web界面，支持文件上传、翻译服务选择和结果下载
 - **指定页码翻译**：支持翻译指定页码或页码范围，提高翻译效率
 - **输出格式选择**：支持选择输出为PDF、Word、Markdown或任意组合
-- **自动术语提取**：从上传的PDF中自动提取术语表，支持aiping和硅基流动两个平台
+- **自动术语提取**：从上传的PDF中自动提取术语表，支持aiping、硅基流动和百度千帆三个平台
 
 ### 技术特点
 
@@ -47,7 +48,7 @@ PDF翻译工具是一个支持多种翻译API的PDF文档翻译工具，支持We
   - PaddlePaddle 3.0+：深度学习框架（CPU/GPU自动检测）
 - **文档处理**：
   - python-docx：用于Word文档生成
-- **翻译API**：aiping翻译API、硅基流动翻译API
+- **翻译API**：aiping翻译API、硅基流动翻译API、百度千帆翻译API
 - **API客户端**：openai：用于调用翻译API
 - **测试框架**：pytest
 - **版本控制**：Git + Gitee
@@ -109,8 +110,18 @@ SILICON_FLOW_MODEL_LAYOUT=Qwen/Qwen3-32B
 # 指定术语提取模型
 SILICON_FLOW_MODEL_GLOSSARY=Qwen/Qwen3-32B
 
+# 百度千帆API配置
+QIANFAN_API_KEY=your-secret-key
+QIANFAN_API_URL=https://qianfan.baidubce.com/v1
+# 指定翻译模型
+QIANFAN_MODEL_TRANSLATION=ernie-4.0-8k
+# 指定Markdown排版模型
+QIANFAN_MODEL_LAYOUT=ernie-4.0-8k
+# 指定术语提取模型
+QIANFAN_MODEL_GLOSSARY=ernie-4.0-8k
+
 # LLM OCR配置（复用翻译引擎的API Key，仅需指定模型）
-AIPING_OCR_LLM_MODEL=DeepSeek-OCR-2
+AIPING_OCR_LLM_MODEL=DeepSeek-OCR
 SILICON_FLOW_OCR_LLM_MODEL=deepseek-ai/DeepSeek-OCR
 ```
 
@@ -217,6 +228,9 @@ pdftrans translate document.pdf -o translated.pdf
 # 指定源语言和目标语言
 pdftrans translate document.pdf -s en -t zh -o output.pdf
 
+# 翻译藏语文档（bo 为藏语语言代码）
+pdftrans translate document.pdf -s bo -t zh -o output.pdf
+
 # 使用指定的翻译服务，比如silicon_flow
 pdftrans translate document.pdf -T silicon_flow -o output.pdf
 
@@ -269,7 +283,7 @@ pdftrans list-languages
 
 **translate命令选项：**
 - `-o, --output` - 输出文件路径（未指定则自动生成）
-- `-f, --format` - 输出格式（pdf/docx/markdown，默认：pdf）
+- `-f, --format` - 输出格式（pdf/docx/markdown/pdf_docx/all，默认：pdf）
 - `-g, --glossary` - 术语表文件路径
 - `-m, --semantic-merge` - 启用语义合并
 - `-l, --llm-merge` - 使用LLM语义判断
@@ -277,6 +291,10 @@ pdftrans list-languages
 - `--ocr` - 启用OCR模式
 - `--ocr-engine` - OCR引擎类型：`paddleocr`（本地，需PaddlePaddle）或 `llm`（云端，需API Key），默认：paddleocr
 - `--ocr-lang` - OCR识别语言（默认：根据源语言自动选择）
+- `--translation-model` - 覆盖翻译模型
+- `--layout-model` - 覆盖Markdown排版模型
+- `--glossary-model` - 覆盖术语提取模型
+- `--ocr-llm-model` - 覆盖LLM OCR模型
 
 ---
 

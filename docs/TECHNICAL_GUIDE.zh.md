@@ -87,6 +87,26 @@ PP-StructureV3 输出的标签分为四组：
    - `_parse_markdown_to_blocks()`：解析 Markdown 格式
 3. **模型映射**：`_map_ocr_blocks_to_models()` 将 `OcrBlock` 数据类映射为内部模型
 
+#### 1.3.1a 解析器拆分
+
+LLM OCR 的响应解析已从 `LlmOcrExtractor` 拆分为独立模块：
+
+- `modules/ocr/llm_response_parser.py`（`LlmOcrResponseParser`）：负责文本内容的格式检测与结构化解析（`<|ref|>` 标签 / JSON / Markdown）
+- `modules/ocr/llm_table_parser.py`（`LlmTableParser`）：负责表格布局计算，实现行高优先迭代优化算法
+
+拆分后 `LlmOcrExtractor` 仅负责 API 调用和页面级编排，解析逻辑委托给上述两个解析器。
+
+#### 1.3.1b 空白页检测
+
+`LlmOcrExtractor` 新增 `_is_blank_image()` 方法，在调用 LLM API 前检测页面是否为空白：
+
+- 计算图像像素的标准差，低于阈值时判定为空白页
+- 空白页跳过 LLM 调用，返回空结果，节省 API 调用成本
+
+#### 1.3.1c 超时处理
+
+LLM OCR 调用新增 `APITimeoutError` 捕获，超时时记录警告并跳过当前页面，不中断整体流程。
+
 #### 1.3.2 DeepSeek-OCR 归一化坐标
 
 DeepSeek-OCR 使用 0-999 归一化坐标系，`_pixel_to_pdf_coords()` 通过 `is_normalized` 参数处理坐标转换：
@@ -185,35 +205,26 @@ GPU 可用时，模型级别自动提升一级。
 
 ## 2. 翻译管线架构
 
-### 2.1 双翻译器设计
+### 2.1 三翻译器设计
 
 | 翻译器 | 类名 | 流式 | 重试 | extra_body |
 |--------|------|------|------|-----------|
 | Aiping | `AipingTranslator` | `stream=True` | `max_retries=3` | `config.AIPING_EXTRA_BODY` |
 | SiliconFlow | `SiliconFlowTranslator` | `stream=False` | 无重试 | `config.SILICON_FLOW_EXTRA_BODY` |
+| 百度千帆 | `QianfanTranslator` | `stream=False` | 无重试 | `config.QIANFAN_EXTRA_BODY` |
 
-两者共享基类 `Translator`（`modules/translator.py`），通用参数：`temperature=0.1`，`top_p=0.9`，`max_tokens=8192`。
+三者共享基类 `Translator`（`modules/translator.py`），通用参数：`temperature=0.1`，`top_p=0.9`，`max_tokens=8192`。`QianfanTranslator` 使用百度千帆 OpenAI 兼容 API（默认地址 `https://qianfan.baidubce.com/v2`），通过 `QIANFAN_API_KEY` 认证。
 
-### 2.2 16 规则系统提示词
+### 2.2 四节结构系统提示词
 
-`Translator._generate_system_prompt()` 生成包含 16 条规则的系统提示词：
+`Translator._generate_system_prompt()` 生成包含 4 节结构的系统提示词：
 
-1. 语义连贯性
-2. 自然过渡
-3. 风格一致性
-4. 简洁性
-5. 术语一致性
-6. 不增不减
-7. 语法正确性
-8. 技术精确性
-9. 不翻译 URL
-10. 代码保留格式
-11. 长度控制
-12. 不翻译公式
-13. 不解释缩写
-14. 不输出元注解/原文
-15. 保留列表格式
-16. 保留单元格分隔符 `|||`
+1. **核心原则**：语义连贯、自然过渡、风格一致、简洁
+2. **语义与风格**：术语一致、不增不减、语法正确、技术精确
+3. **保持格式**：不翻译 URL、保留代码格式、长度控制、不翻译公式、不解释缩写、保留列表格式、保留单元格分隔符 `|||`
+4. **禁止元注释**：不输出元注解/原文
+
+提示词通过 `rule_registry.merge_into_prompt()` 注入语言专项规则（详见第 9 节「语言专项规则系统」），实现按翻译方向动态扩展。
 
 ### 2.3 预处理与后处理
 
@@ -315,6 +326,15 @@ if hasattr(chunk.choices[0].delta, 'reasoning_content') and chunk.choices[0].del
 ---
 
 ## 4. PDF 生成技术
+
+### 4.0 渲染器拆分
+
+`PdfGenerator`（`modules/pdf_generator.py`）的渲染逻辑已拆分为两个独立模块：
+
+- `modules/pdf_text_renderer.py`（`PdfTextRenderer`）：负责文本绘制，包括两遍绘制策略、字体选择链、字体大小估算、行高倍率计算、文本溢出处理
+- `modules/pdf_table_renderer.py`（`PdfTableRenderer`）：负责表格绘制，包括表格两遍策略、合并单元格处理、可见线段计算、单元格字体大小动态计算
+
+拆分后 `PdfGenerator` 作为门面类协调两个渲染器，保持对外接口不变。
 
 ### 4.1 两遍绘制策略
 
@@ -723,6 +743,8 @@ chapters = self._build_chapter_tree(bookmarks, doc)
 
 - Aiping：`max_retries=3`，指数退避
 - SiliconFlow：无重试机制
+- 百度千帆：无重试机制
+- 所有翻译器均捕获 `APITimeoutError`，超时时记录警告并跳过当前文本块，不中断整体流程
 
 ### 10.4 语义分析容错
 
@@ -814,6 +836,42 @@ overall_progress = start + round((end - start) * phase_percent / 100)
 
 - `'translation'`：使用 `PHASE_CONFIG`
 - `'glossary'`：使用 `GLOSSARY_PHASE_CONFIG`
+
+---
+
+## 9. 语言专项规则系统
+
+### 9.1 规则注册表
+
+`PromptRuleRegistry`（`prompts/rule_registry.py`）是语言专项规则的单例注册表，负责按翻译方向（源语言→目标语言）查找并注入额外提示词规则。
+
+核心方法：
+
+- `merge_into_prompt(base_prompt, source_lang, target_lang)`：将匹配的语言专项规则追加到基础提示词末尾，返回增强后的完整提示词
+- `register(source_lang, target_lang, rules)`：注册一条语言专项规则
+
+### 9.2 规则文件组织
+
+```
+prompts/
+├── __init__.py                 # 模块初始化
+├── rule_registry.py            # PromptRuleRegistry — 规则注册表（单例）
+└── language_rules/             # 语言专项规则目录
+    ├── __init__.py             # 自动发现与注册规则
+    ├── base.py                 # 通用基础规则
+    └── bo_to_zh.py             # 藏文→中文专项规则
+```
+
+### 9.3 规则自动发现
+
+`language_rules/__init__.py` 在模块加载时自动扫描同目录下的规则文件，调用 `rule_registry.register()` 完成注册。新增语言专项规则只需在 `language_rules/` 目录下添加规则文件并实现注册即可，无需修改其他代码。
+
+### 9.4 现有规则
+
+| 源语言 | 目标语言 | 规则文件 | 说明 |
+|--------|---------|---------|------|
+| — | — | `base.py` | 通用基础规则，适用于所有翻译方向 |
+| `bo` | `zh` | `bo_to_zh.py` | 藏文→中文专项规则，处理藏文特有翻译问题 |
 
 ### 11.7 取消机制
 

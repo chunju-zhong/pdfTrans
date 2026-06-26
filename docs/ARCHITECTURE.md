@@ -10,13 +10,13 @@ pdfTrans is a PDF translation tool that supports three invocation methods: **Web
 |------------|-------------|
 | PDF Text Extraction | Extract text blocks, tables, images, and style information based on PyMuPDF |
 | OCR Text Recognition | Supports PaddleOCR (PP-StructureV3 local engine) and LLM OCR (DeepSeek-OCR cloud engine) |
-| Multi-Translation API | Supports aiping (OpenAI-compatible API) and SiliconFlow (OpenAI-compatible API) |
+| Multi-Translation API | Supports aiping (OpenAI-compatible API), SiliconFlow (OpenAI-compatible API), and Baidu Qianfan (OpenAI-compatible API) |
 | Multi-Format Output | PDF (preserving original layout), DOCX (Word document), Markdown (with chapter splitting) |
 | Glossary Extraction | Automatically extract specialized terminology and translation mappings from PDFs |
 | Semantic Merging | Rule-based merging or LLM semantic judgment merging to reduce translation fragmentation |
 | Chapter Identification | Automatically identify document chapter structure; supports output split by chapters |
 
-### Supported Languages (8-way mutual translation)
+### Supported Languages (9-way mutual translation)
 
 | Code | Language | Code | Language |
 |------|----------|------|----------|
@@ -24,6 +24,7 @@ pdfTrans is a PDF translation tool that supports three invocation methods: **Web
 | ja | Japanese | ko | Korean |
 | fr | French | de | German |
 | es | Spanish | ru | Russian |
+| bo | Tibetan | | |
 
 ---
 
@@ -54,11 +55,14 @@ pdfTrans/
 │   ├── translator.py               # BaseTranslator — translator base class
 │   ├── aiping_translator.py        # AipingTranslator — aiping translator implementation
 │   ├── silicon_flow_translator.py  # SiliconFlowTranslator — SiliconFlow translator implementation
+│   ├── qianfan_translator.py       # QianfanTranslator — Baidu Qianfan translator implementation
 │   ├── semantic_analyzer.py        # BaseSemanticAnalyzer — semantic analyzer base class
 │   ├── aiping_semantic_analyzer.py # AipingSemanticAnalyzer — aiping semantic analyzer implementation
 │   ├── semantic_analyzer_factory.py# SemanticAnalyzerFactory — semantic analyzer factory
 │   ├── chapter_identifier.py       # ChapterIdentifier — chapter identifier
 │   ├── glossary_extractor.py       # GlossaryExtractor / create_glossary_extractor() — glossary extractor
+│   ├── pdf_text_renderer.py        # PdfTextRenderer — PDF text rendering (split from PdfGenerator)
+│   ├── pdf_table_renderer.py       # PdfTableRenderer — PDF table rendering (split from PdfGenerator)
 │   │
 │   ├── extractors/                 # PDF extraction sub-module
 │   │   ├── __init__.py
@@ -74,11 +78,17 @@ pdfTrans/
 │       ├── factory.py              # OCR factory, creates instances based on engine type
 │       ├── paddle_extractor.py     # PaddleOCRExtractor — PaddleOCR engine implementation
 │       ├── llm_extractor.py        # LLMOCRExtractor — LLM OCR engine implementation (DeepSeek-OCR)
+│       ├── llm_response_parser.py  # LlmOcrResponseParser — LLM OCR response parser (split from LlmOcrExtractor)
+│       ├── llm_table_parser.py     # LlmTableParser — LLM OCR table parser (split from LlmOcrExtractor)
 │       ├── ocr_worker.py           # OCR subprocess manager (heartbeat, timeout, retry)
 │       └── system_profiler.py      # System resource profiler (dynamically adjusts OCR parameters)
 │
 ├── services/                       # Service orchestration layer
 │   ├── translation_service.py      # TranslationService — translation workflow orchestration (core business logic)
+│   ├── translation_content.py      # TranslationContentTranslator — text translation sub-module (split from TranslationService)
+│   ├── translation_extractor.py    # TranslationExtractor — translator creation and extraction sub-module (split from TranslationService)
+│   ├── translation_output.py       # TranslationOutputGenerator — output generation sub-module (split from TranslationService)
+│   ├── translation_table.py        # TranslationTableHandler — table translation sub-module (split from TranslationService)
 │   ├── task_service.py             # TaskService — task management (create, query, cancel)
 │   └── glossary_service.py         # GlossaryService — glossary extraction workflow orchestration
 │
@@ -88,6 +98,14 @@ pdfTrans/
 │   ├── glossary_command.py         # glossary subcommand handler
 │   ├── list_languages_command.py   # list-languages subcommand handler
 │   └── progress_display.py         # CLI progress bar display
+│
+├── prompts/                        # Prompt rule system
+│   ├── __init__.py                 # Module initialization
+│   ├── rule_registry.py            # PromptRuleRegistry — language-specific rule registry (singleton)
+│   └── language_rules/             # Language-specific rules directory
+│       ├── __init__.py             # Auto-discovery and registration of rules
+│       ├── base.py                 # Common base rules
+│       └── bo_to_zh.py             # Tibetan→Chinese specific rules
 │
 ├── utils/                          # Utility functions
 │   ├── file_utils.py               # File operations (upload validation, directory creation, ZIP packaging, file deletion)
@@ -197,6 +215,7 @@ The system uses a three-layer architecture design:
 │  │  (PyMuPDF)      │  │                 │  │                 │  │
 │  │  • extract()    │  │  • PaddleOCR    │  │  • Aiping       │  │
 │  │  • get_chapters │  │  • LLM OCR     │  │  • SiliconFlow  │  │
+│  │                 │  │                 │  │  • Qianfan      │  │
 │  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘  │
 │           │                    │                     │           │
 │  ┌────────┴────────┐  ┌───────┴─────────┐  ┌───────┴─────────┐ │
@@ -478,13 +497,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY')
-    # ... other configuration items
+    # Static constants remain at class level
+    MAX_CONTENT_LENGTH = 500 * 1024 * 1024
+    SUPPORTED_LANGUAGES = { ... }
+    AIPING_EXTRA_BODY = { ... }
+    QIANFAN_EXTRA_BODY = { ... }
+
+    def __init__(self):
+        """Initialize configuration, calls _load() to read environment variables"""
+        self._load()
+
+    def _load(self):
+        """(Re)load environment variable configuration
+
+        Moves all environment-dependent attributes from class level to instance level (lazy evaluation).
+        Supports refreshing configuration at runtime by calling this method after modifying environment variables.
+        """
+        self.SECRET_KEY = os.environ.get('SECRET_KEY')
+        # ... other configuration items
 ```
 
 - Automatically loads the `.env` file in the project root directory on startup
-- All configuration items are read via `os.environ.get()`, with support for default values
+- `__init__()` calls `_load()` method, setting all environment-dependent attributes as instance-level attributes
+- Static constants that don't depend on environment variables (e.g., `MAX_CONTENT_LENGTH`, `SUPPORTED_LANGUAGES`, `EXTRA_BODY` dicts) remain at class level
 - `SECRET_KEY` is required; a `RuntimeError` is raised if missing
+- Supports runtime reload: call `_load()` to refresh configuration after modifying environment variables
 
 ### 6.2 Complete Configuration Reference
 
@@ -523,16 +560,25 @@ class Config:
 | `SILICON_FLOW_MODEL_LAYOUT` | `SILICON_FLOW_MODEL_LAYOUT` | str | `Qwen/Qwen3-32B` | Markdown layout model |
 | `SILICON_FLOW_MODEL_GLOSSARY` | `SILICON_FLOW_MODEL_GLOSSARY` | str | `Qwen/Qwen3-32B` | Glossary extraction model |
 
+#### Baidu Qianfan API Configuration
+
+| Environment Variable | Config Property | Type | Default | Description |
+|---------------------|-----------------|------|---------|-------------|
+| `QIANFAN_API_KEY` | `QIANFAN_API_KEY` | str | None | Baidu Qianfan API key |
+| `QIANFAN_API_URL` | `QIANFAN_API_URL` | str | `https://qianfan.baidubce.com/v2` | Baidu Qianfan API URL |
+| `QIANFAN_MODEL_TRANSLATION` | `QIANFAN_MODEL` | str | `Qwen3-32B` | Translation model |
+| `QIANFAN_MODEL_LAYOUT` | `QIANFAN_MODEL_LAYOUT` | str | `Qwen3-32B` | Markdown layout model |
+| `QIANFAN_MODEL_GLOSSARY` | `QIANFAN_MODEL_GLOSSARY` | str | `Qwen3-32B` | Glossary extraction model |
+
 #### Language & Document Type
 
 | Environment Variable | Config Property | Type | Default | Description |
 |---------------------|-----------------|------|---------|-------------|
-| — | `SUPPORTED_LANGUAGES` | dict | 8 languages | Supported language mapping |
+| — | `SUPPORTED_LANGUAGES` | dict | 9 languages | Supported language mapping |
 | — | `DEFAULT_SOURCE_LANGUAGE` | str | `en` | Default source language |
 | — | `DEFAULT_TARGET_LANGUAGE` | str | `zh` | Default target language |
 | — | `DEFAULT_TRANSLATOR` | str | `aiping` | Default translation service |
 | `DEFAULT_DOC_TYPE` | `DEFAULT_DOC_TYPE` | str | `AI技术` | Default document type |
-| — | `SUPPORTED_DOC_TYPES` | list | 6 types | Supported document type list |
 
 #### Thread Pool Configuration
 
@@ -581,11 +627,31 @@ class Config:
 
 | Environment Variable | Config Property | Type | Default | Description |
 |---------------------|-----------------|------|---------|-------------|
-| `AIPING_OCR_LLM_MODEL` | `AIPING_OCR_LLM_MODEL` | str | `DeepSeek-OCR-2` | aiping LLM OCR model |
+| `AIPING_OCR_LLM_MODEL` | `AIPING_OCR_LLM_MODEL` | str | `DeepSeek-OCR` | aiping LLM OCR model |
 | `SILICON_FLOW_OCR_LLM_MODEL` | `SILICON_FLOW_OCR_LLM_MODEL` | str | `deepseek-ai/DeepSeek-OCR` | SiliconFlow LLM OCR model |
+| `QIANFAN_OCR_LLM_MODEL` | `QIANFAN_OCR_LLM_MODEL` | str | `DeepSeek-OCR` | Baidu Qianfan LLM OCR model |
 | `OCR_LLM_MAX_TOKENS` | `OCR_LLM_MAX_TOKENS` | int | 8192 | LLM OCR maximum token count |
 | `OCR_LLM_TEMPERATURE` | `OCR_LLM_TEMPERATURE` | float | 0.1 | LLM OCR temperature |
 | `OCR_LLM_DPI` | `OCR_LLM_DPI` | int | 150 | LLM OCR render DPI |
+
+#### Per-Module API Parameters
+
+| Environment Variable | Config Property | Type | Default | Description |
+|---------------------|-----------------|------|---------|-------------|
+| `TRANSLATION_TEMPERATURE` | `TRANSLATION_TEMPERATURE` | float | 0.1 | Translation temperature |
+| `TRANSLATION_TOP_P` | `TRANSLATION_TOP_P` | float | 0.9 | Translation top_p |
+| `TRANSLATION_MAX_TOKENS` | `TRANSLATION_MAX_TOKENS` | int | 8192 | Translation max tokens |
+| `TRANSLATION_TIMEOUT` | `TRANSLATION_TIMEOUT` | int | 30 | Translation timeout (seconds) |
+| `SEMANTIC_ANALYSIS_TEMPERATURE` | `SEMANTIC_ANALYSIS_TEMPERATURE` | float | 0.1 | Semantic analysis temperature |
+| `SEMANTIC_ANALYSIS_TOP_P` | `SEMANTIC_ANALYSIS_TOP_P` | float | 0.9 | Semantic analysis top_p |
+| `SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS` | `SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS` | int | 1024 | Semantic analysis single max tokens |
+| `SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS` | `SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS` | int | 2048 | Semantic analysis batch max tokens |
+| `SEMANTIC_ANALYSIS_TIMEOUT` | `SEMANTIC_ANALYSIS_TIMEOUT` | int | 30 | Semantic analysis timeout (seconds) |
+| `GLOSSARY_TEMPERATURE` | `GLOSSARY_TEMPERATURE` | float | 0.3 | Glossary extraction temperature |
+| `GLOSSARY_MAX_TOKENS` | `GLOSSARY_MAX_TOKENS` | int | 4096 | Glossary extraction max tokens |
+| `GLOSSARY_TIMEOUT` | `GLOSSARY_TIMEOUT` | int | 30 | Glossary extraction timeout (seconds) |
+| `LAYOUT_TEMPERATURE` | `LAYOUT_TEMPERATURE` | float | 0.1 | Markdown layout temperature |
+| `LAYOUT_MAX_TOKENS` | `LAYOUT_MAX_TOKENS` | int | 8192 | Markdown layout max tokens |
 
 ---
 
@@ -607,9 +673,9 @@ class Config:
 | Translation | `AIPING_MODEL` | `Qwen3-32B` |
 | Markdown Layout | `AIPING_MODEL_LAYOUT` | `Qwen3-32B` |
 | Glossary Extraction | `AIPING_MODEL_GLOSSARY` | `Qwen3-32B` |
-| LLM OCR | `AIPING_OCR_LLM_MODEL` | `DeepSeek-OCR-2` |
+| LLM OCR | `AIPING_OCR_LLM_MODEL` | `DeepSeek-OCR` |
 
-**Extra Request Parameters (`AIPING_EXTRA_BODY`):**
+**Extra Request Parameters (`AIPING_EXTRA_BODY`)**
 
 ```python
 {
@@ -653,7 +719,33 @@ class Config:
 }
 ```
 
-### 7.3 PaddleOCR
+### 7.3 Baidu Qianfan
+
+| Item | Description |
+|------|-------------|
+| **Purpose** | Translation, semantic analysis, glossary extraction, LLM OCR, Markdown layout |
+| **API Format** | OpenAI-compatible API (`/v2/chat/completions`) |
+| **API URL** | `https://qianfan.baidubce.com/v2` |
+| **Authentication** | Bearer Token (`QIANFAN_API_KEY`) |
+
+**Default Models:**
+
+| Function | Config Key | Default Model |
+|----------|-----------|---------------|
+| Translation | `QIANFAN_MODEL` | `Qwen3-32B` |
+| Markdown Layout | `QIANFAN_MODEL_LAYOUT` | `Qwen3-32B` |
+| Glossary Extraction | `QIANFAN_MODEL_GLOSSARY` | `Qwen3-32B` |
+| LLM OCR | `QIANFAN_OCR_LLM_MODEL` | `DeepSeek-OCR` |
+
+**Extra Request Parameters (`QIANFAN_EXTRA_BODY`):**
+
+```python
+{
+    "enable_thinking": False
+}
+```
+
+### 7.4 PaddleOCR
 
 | Item | Description |
 |------|-------------|

@@ -27,8 +27,8 @@ class MarkdownGenerator:
         self.api_key = api_key
         self.api_url = api_url
         self.model = model
-        # 设置max_tokens属性，默认值为8192
-        self.max_tokens = 8192
+        # 设置max_tokens属性（使用config的常量）
+        self.max_tokens = config.LAYOUT_MAX_TOKENS
         # 初始化OpenAI客户端
         self.client = self._initialize_client()
         logger.info("Markdown生成器初始化完成")
@@ -187,7 +187,7 @@ class MarkdownGenerator:
         stream = self.client.chat.completions.create(
             model=self.model,
             stream=True,  # 启用流式响应
-            temperature=0.1,  # 降低温度，提高格式一致性
+            temperature=config.LAYOUT_TEMPERATURE,
             max_tokens=self.max_tokens,  # 使用类属性作为最大token数
             timeout=60.0,  # 增加超时时间
             extra_body=config.SILICON_FLOW_EXTRA_BODY,
@@ -1344,7 +1344,7 @@ class AipingMarkdownGenerator(MarkdownGenerator):
         stream = self.client.chat.completions.create(
             model=self.model,
             stream=True,  # 启用流式响应
-            temperature=0.1,  # 降低温度，提高格式一致性
+            temperature=config.LAYOUT_TEMPERATURE,
             max_tokens=self.max_tokens,
             timeout=60.0,  # 增加超时时间
             messages=[

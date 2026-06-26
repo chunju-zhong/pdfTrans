@@ -26,7 +26,8 @@ class PdfExtractor:
     
     def __init__(self, pdf_path=None, table_extractor='pymupdf',
                  ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch',
-                 translator_type='aiping'):
+                 translator_type='aiping', source_lang='en',
+                 ocr_llm_model=None):
         """初始化PdfExtractor对象
 
         Args:
@@ -36,6 +37,8 @@ class PdfExtractor:
             ocr_engine (str, optional): OCR引擎类型. Defaults to 'paddleocr'.
             ocr_lang (str, optional): OCR识别语言. Defaults to 'ch'.
             translator_type (str, optional): 翻译引擎类型. Defaults to 'aiping'.
+            source_lang (str, optional): 源语言代码，用于LLM OCR提示. Defaults to 'en'.
+            ocr_llm_model (str, optional): LLM OCR模型名称. Defaults to None.
         """
         self.pdf_path = pdf_path
         self.metadata = None
@@ -46,6 +49,8 @@ class PdfExtractor:
         self.ocr_engine = ocr_engine
         self.ocr_lang = ocr_lang
         self.translator_type = translator_type
+        self.source_lang = source_lang
+        self.ocr_llm_model = ocr_llm_model
         self._ocr_extractor = None
 
         if pdf_path:
@@ -96,6 +101,9 @@ class PdfExtractor:
             }
             if self.ocr_engine == 'llm':
                 ocr_kwargs['translator_type'] = self.translator_type
+                ocr_kwargs['source_lang'] = self.source_lang
+                if self.ocr_llm_model:
+                    ocr_kwargs['model'] = self.ocr_llm_model
             self._ocr_extractor = create_ocr_extractor(
                 self.ocr_engine,
                 **ocr_kwargs

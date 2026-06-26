@@ -10,13 +10,13 @@ pdfTrans 是一个 PDF 翻译工具，支持 **Web 界面**、**命令行（CLI�
 |------|------|
 | PDF 文本提取 | 基于 PyMuPDF 提取文本块、表格、图像及样式信息 |
 | OCR 文字识别 | 支持 PaddleOCR（PP-StructureV3 本地引擎）和 LLM OCR（DeepSeek-OCR 云端引擎） |
-| 多翻译 API 翻译 | 支持 aiping（OpenAI 兼容 API）和硅基流动 SiliconFlow（OpenAI 兼容 API） |
+| 多翻译 API 翻译 | 支持 aiping（OpenAI 兼容 API）、硅基流动 SiliconFlow（OpenAI 兼容 API）和百度千帆 Qianfan（OpenAI 兼容 API） |
 | 多格式输出 | PDF（保留原始排版）、DOCX（Word 文档）、Markdown（含章节拆分） |
 | 术语表提取 | 从 PDF 中自动提取专业术语及翻译对照表 |
 | 语义合并 | 规则合并或 LLM 语义判断合并，减少翻译碎片化 |
 | 章节识别 | 自动识别文档章节结构，支持按章节拆分输出 |
 
-### 支持的语言（8 种互译）
+### 支持的语言（9 种互译）
 
 | 代码 | 语言 | 代码 | 语言 |
 |------|------|------|------|
@@ -24,6 +24,7 @@ pdfTrans 是一个 PDF 翻译工具，支持 **Web 界面**、**命令行（CLI�
 | ja | 日语 | ko | 韩语 |
 | fr | 法语 | de | 德语 |
 | es | 西班牙语 | ru | 俄语 |
+| bo | 藏文 | | |
 
 ---
 
@@ -54,11 +55,14 @@ pdfTrans/
 │   ├── translator.py               # BaseTranslator — 翻译器基类
 │   ├── aiping_translator.py        # AipingTranslator — aiping 翻译器实现
 │   ├── silicon_flow_translator.py  # SiliconFlowTranslator — 硅基流动翻译器实现
+│   ├── qianfan_translator.py       # QianfanTranslator — 百度千帆翻译器实现
 │   ├── semantic_analyzer.py        # BaseSemanticAnalyzer — 语义分析器基类
 │   ├── aiping_semantic_analyzer.py # AipingSemanticAnalyzer — aiping 语义分析器实现
 │   ├── semantic_analyzer_factory.py# SemanticAnalyzerFactory — 语义分析器工厂
 │   ├── chapter_identifier.py       # ChapterIdentifier — 章节识别器
 │   ├── glossary_extractor.py       # GlossaryExtractor / create_glossary_extractor() — 术语提取器
+│   ├── pdf_text_renderer.py        # PdfTextRenderer — PDF 文本渲染（从 PdfGenerator 拆分）
+│   ├── pdf_table_renderer.py       # PdfTableRenderer — PDF 表格渲染（从 PdfGenerator 拆分）
 │   │
 │   ├── extractors/                 # PDF 提取子模块
 │   │   ├── __init__.py
@@ -74,11 +78,17 @@ pdfTrans/
 │       ├── factory.py              # OCR 工厂，根据引擎类型创建实例
 │       ├── paddle_extractor.py     # PaddleOCRExtractor — PaddleOCR 引擎实现
 │       ├── llm_extractor.py        # LLMOCRExtractor — LLM OCR 引擎实现（DeepSeek-OCR）
+│       ├── llm_response_parser.py  # LlmOcrResponseParser — LLM OCR 响应解析器（从 LlmOcrExtractor 拆分）
+│       ├── llm_table_parser.py     # LlmTableParser — LLM OCR 表格解析器（从 LlmOcrExtractor 拆分）
 │       ├── ocr_worker.py           # OCR 子进程管理器（心跳、超时、重试）
 │       └── system_profiler.py      # 系统资源探针（动态调整 OCR 参数）
 │
 ├── services/                       # 服务编排层
 │   ├── translation_service.py      # TranslationService — 翻译流程编排（核心业务逻辑）
+│   ├── translation_content.py      # TranslationContentTranslator — 文本翻译子模块（从 TranslationService 拆分）
+│   ├── translation_extractor.py    # TranslationExtractor — 翻译器创建与提取子模块（从 TranslationService 拆分）
+│   ├── translation_output.py       # TranslationOutputGenerator — 输出生成子模块（从 TranslationService 拆分）
+│   ├── translation_table.py        # TranslationTableHandler — 表格翻译子模块（从 TranslationService 拆分）
 │   ├── task_service.py             # TaskService — 任务管理（创建、查询、取消）
 │   └── glossary_service.py         # GlossaryService — 术语提取流程编排
 │
@@ -88,6 +98,14 @@ pdfTrans/
 │   ├── glossary_command.py         # glossary 子命令处理
 │   ├── list_languages_command.py   # list-languages 子命令处理
 │   └── progress_display.py         # CLI 进度条显示
+│
+├── prompts/                        # 提示词规则系统
+│   ├── __init__.py                 # 模块初始化
+│   ├── rule_registry.py            # PromptRuleRegistry — 语言专项规则注册表（单例）
+│   └── language_rules/             # 语言专项规则目录
+│       ├── __init__.py             # 规则自动发现与注册
+│       ├── base.py                 # 通用基础规则
+│       └── bo_to_zh.py             # 藏文→中文专项规则
 │
 ├── utils/                          # 工具函数
 │   ├── file_utils.py               # 文件操作（上传校验、目录创建、ZIP 打包、文件删除）
@@ -197,6 +215,7 @@ pdfTrans/
 │  │  (PyMuPDF)      │  │                 │  │                 │  │
 │  │  • extract()    │  │  • PaddleOCR    │  │  • Aiping       │  │
 │  │  • get_chapters │  │  • LLM OCR     │  │  • SiliconFlow  │  │
+│  │                 │  │                 │  │  • Qianfan      │  │
 │  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘  │
 │           │                    │                     │           │
 │  ┌────────┴────────┐  ┌───────┴─────────┐  ┌───────┴─────────┐ │
@@ -478,13 +497,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY')
-    # ... 其他配置项
+    # 静态常量保留在类级别
+    MAX_CONTENT_LENGTH = 500 * 1024 * 1024
+    SUPPORTED_LANGUAGES = { ... }
+    AIPING_EXTRA_BODY = { ... }
+    QIANFAN_EXTRA_BODY = { ... }
+
+    def __init__(self):
+        """初始化配置，调用 _load() 读取环境变量"""
+        self._load()
+
+    def _load(self):
+        """（重）加载环境变量配置
+
+        将所有依赖环境变量的属性从类级别移到实例级别（惰性求值）。
+        支持在运行时修改环境变量后调用此方法刷新配置。
+        """
+        self.SECRET_KEY = os.environ.get('SECRET_KEY')
+        # ... 其他配置项
 ```
 
 - 启动时自动加载项目根目录下的 `.env` 文件
-- 所有配置项通过 `os.environ.get()` 读取，支持默认值
+- `__init__()` 调用 `_load()` 方法，将所有依赖环境变量的属性设为实例级属性
+- 不依赖环境变量的静态常量（如 `MAX_CONTENT_LENGTH`、`SUPPORTED_LANGUAGES`、`EXTRA_BODY` 字典）保留在类级别
 - `SECRET_KEY` 为必填项，缺失时抛出 `RuntimeError`
+- 支持运行时重载：修改环境变量后调用 `_load()` 即可刷新配置
 
 ### 6.2 完整配置项列表
 
@@ -523,16 +560,25 @@ class Config:
 | `SILICON_FLOW_MODEL_LAYOUT` | `SILICON_FLOW_MODEL_LAYOUT` | str | `Qwen/Qwen3-32B` | Markdown 排版模型 |
 | `SILICON_FLOW_MODEL_GLOSSARY` | `SILICON_FLOW_MODEL_GLOSSARY` | str | `Qwen/Qwen3-32B` | 术语提取模型 |
 
+#### 百度千帆 API 配置
+
+| 环境变量 | 配置属性 | 类型 | 默认值 | 说明 |
+|----------|----------|------|--------|------|
+| `QIANFAN_API_KEY` | `QIANFAN_API_KEY` | str | None | 百度千帆 API 密钥 |
+| `QIANFAN_API_URL` | `QIANFAN_API_URL` | str | `https://qianfan.baidubce.com/v2` | 百度千帆 API 地址 |
+| `QIANFAN_MODEL_TRANSLATION` | `QIANFAN_MODEL` | str | `Qwen3-32B` | 翻译模型 |
+| `QIANFAN_MODEL_LAYOUT` | `QIANFAN_MODEL_LAYOUT` | str | `Qwen3-32B` | Markdown 排版模型 |
+| `QIANFAN_MODEL_GLOSSARY` | `QIANFAN_MODEL_GLOSSARY` | str | `Qwen3-32B` | 术语提取模型 |
+
 #### 语言与文档类型
 
 | 环境变量 | 配置属性 | 类型 | 默认值 | 说明 |
 |----------|----------|------|--------|------|
-| — | `SUPPORTED_LANGUAGES` | dict | 8 种语言 | 支持的语言映射 |
+| — | `SUPPORTED_LANGUAGES` | dict | 9 种语言 | 支持的语言映射 |
 | — | `DEFAULT_SOURCE_LANGUAGE` | str | `en` | 默认源语言 |
 | — | `DEFAULT_TARGET_LANGUAGE` | str | `zh` | 默认目标语言 |
 | — | `DEFAULT_TRANSLATOR` | str | `aiping` | 默认翻译服务 |
 | `DEFAULT_DOC_TYPE` | `DEFAULT_DOC_TYPE` | str | `AI技术` | 默认文档类型 |
-| — | `SUPPORTED_DOC_TYPES` | list | 6 种类型 | 支持的文档类型列表 |
 
 #### 线程池配置
 
@@ -581,11 +627,31 @@ class Config:
 
 | 环境变量 | 配置属性 | 类型 | 默认值 | 说明 |
 |----------|----------|------|--------|------|
-| `AIPING_OCR_LLM_MODEL` | `AIPING_OCR_LLM_MODEL` | str | `DeepSeek-OCR-2` | aiping LLM OCR 模型 |
+| `AIPING_OCR_LLM_MODEL` | `AIPING_OCR_LLM_MODEL` | str | `DeepSeek-OCR` | aiping LLM OCR 模型 |
 | `SILICON_FLOW_OCR_LLM_MODEL` | `SILICON_FLOW_OCR_LLM_MODEL` | str | `deepseek-ai/DeepSeek-OCR` | 硅基流动 LLM OCR 模型 |
+| `QIANFAN_OCR_LLM_MODEL` | `QIANFAN_OCR_LLM_MODEL` | str | `DeepSeek-OCR` | 百度千帆 LLM OCR 模型 |
 | `OCR_LLM_MAX_TOKENS` | `OCR_LLM_MAX_TOKENS` | int | 8192 | LLM OCR 最大 Token 数 |
 | `OCR_LLM_TEMPERATURE` | `OCR_LLM_TEMPERATURE` | float | 0.1 | LLM OCR 温度 |
 | `OCR_LLM_DPI` | `OCR_LLM_DPI` | int | 150 | LLM OCR 渲染 DPI |
+
+#### 按模块 API 参数
+
+| 环境变量 | 配置属性 | 类型 | 默认值 | 说明 |
+|----------|----------|------|--------|------|
+| `TRANSLATION_TEMPERATURE` | `TRANSLATION_TEMPERATURE` | float | 0.1 | 翻译温度 |
+| `TRANSLATION_TOP_P` | `TRANSLATION_TOP_P` | float | 0.9 | 翻译 top_p |
+| `TRANSLATION_MAX_TOKENS` | `TRANSLATION_MAX_TOKENS` | int | 8192 | 翻译最大 token 数 |
+| `TRANSLATION_TIMEOUT` | `TRANSLATION_TIMEOUT` | int | 30 | 翻译超时（秒） |
+| `SEMANTIC_ANALYSIS_TEMPERATURE` | `SEMANTIC_ANALYSIS_TEMPERATURE` | float | 0.1 | 语义分析温度 |
+| `SEMANTIC_ANALYSIS_TOP_P` | `SEMANTIC_ANALYSIS_TOP_P` | float | 0.9 | 语义分析 top_p |
+| `SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS` | `SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS` | int | 1024 | 语义分析单条最大 token |
+| `SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS` | `SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS` | int | 2048 | 语义分析批量最大 token |
+| `SEMANTIC_ANALYSIS_TIMEOUT` | `SEMANTIC_ANALYSIS_TIMEOUT` | int | 30 | 语义分析超时（秒） |
+| `GLOSSARY_TEMPERATURE` | `GLOSSARY_TEMPERATURE` | float | 0.3 | 术语提取温度 |
+| `GLOSSARY_MAX_TOKENS` | `GLOSSARY_MAX_TOKENS` | int | 4096 | 术语提取最大 token 数 |
+| `GLOSSARY_TIMEOUT` | `GLOSSARY_TIMEOUT` | int | 30 | 术语提取超时（秒） |
+| `LAYOUT_TEMPERATURE` | `LAYOUT_TEMPERATURE` | float | 0.1 | Markdown 排版温度 |
+| `LAYOUT_MAX_TOKENS` | `LAYOUT_MAX_TOKENS` | int | 8192 | Markdown 排版最大 token 数 |
 
 ---
 
@@ -607,7 +673,7 @@ class Config:
 | 翻译 | `AIPING_MODEL` | `Qwen3-32B` |
 | Markdown 排版 | `AIPING_MODEL_LAYOUT` | `Qwen3-32B` |
 | 术语提取 | `AIPING_MODEL_GLOSSARY` | `Qwen3-32B` |
-| LLM OCR | `AIPING_OCR_LLM_MODEL` | `DeepSeek-OCR-2` |
+| LLM OCR | `AIPING_OCR_LLM_MODEL` | `DeepSeek-OCR` |
 
 **额外请求参数（`AIPING_EXTRA_BODY`）：**
 
@@ -653,7 +719,33 @@ class Config:
 }
 ```
 
-### 7.3 PaddleOCR
+### 7.3 百度千帆 Qianfan
+
+| 项目 | 说明 |
+|------|------|
+| **用途** | 翻译、语义分析、术语提取、LLM OCR、Markdown 排版 |
+| **API 格式** | OpenAI 兼容 API（`/v2/chat/completions`） |
+| **API 地址** | `https://qianfan.baidubce.com/v2` |
+| **认证方式** | Bearer Token（`QIANFAN_API_KEY`） |
+
+**默认模型：**
+
+| 功能 | 配置项 | 默认模型 |
+|------|--------|----------|
+| 翻译 | `QIANFAN_MODEL` | `Qwen3-32B` |
+| Markdown 排版 | `QIANFAN_MODEL_LAYOUT` | `Qwen3-32B` |
+| 术语提取 | `QIANFAN_MODEL_GLOSSARY` | `Qwen3-32B` |
+| LLM OCR | `QIANFAN_OCR_LLM_MODEL` | `DeepSeek-OCR` |
+
+**额外请求参数（`QIANFAN_EXTRA_BODY`）：**
+
+```python
+{
+    "enable_thinking": False
+}
+```
+
+### 7.4 PaddleOCR
 
 | 项目 | 说明 |
 |------|------|

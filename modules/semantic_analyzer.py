@@ -22,11 +22,12 @@ class SemanticAnalyzer:
         self.client = OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
+            timeout=config.SEMANTIC_ANALYSIS_TIMEOUT,
         )
-        # 设置max_tokens属性，默认值为1024（用于单个语义分析）
-        self.max_tokens = 1024
-        # 设置batch_max_tokens属性，默认值为2048（用于批量语义分析）
-        self.batch_max_tokens = 2048
+        # 设置max_tokens属性（使用config的常量）
+        self.max_tokens = config.SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS
+        # 设置batch_max_tokens属性
+        self.batch_max_tokens = config.SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS
         self.supported_languages = {
             'zh': '中文',
             'en': '英语',
@@ -35,7 +36,8 @@ class SemanticAnalyzer:
             'fr': '法语',
             'de': '德语',
             'es': '西班牙语',
-            'ru': '俄语'
+            'ru': '俄语',
+            'bo': '藏语'
         }
     
     def analyze_semantic_relationship(self, text1, text2, source_lang):
@@ -63,8 +65,8 @@ class SemanticAnalyzer:
             response = self.client.chat.completions.create(
                 model=self.model,
                 stream=False,  # 非流式调用
-                temperature=0.1,  # 降低温度，提高分析准确性
-                top_p=0.9,  # 核采样参数
+                temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                 max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                 extra_body=config.SILICON_FLOW_EXTRA_BODY,
                 messages=[
@@ -144,8 +146,8 @@ class SemanticAnalyzer:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=False,  # 非流式调用
-                    temperature=0.1,  # 降低温度，提高分析准确性
-                    top_p=0.9,  # 核采样参数
+                    temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                    top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                     max_tokens=self.batch_max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.SILICON_FLOW_EXTRA_BODY,
                     messages=[
@@ -239,7 +241,7 @@ class SemanticAnalyzer:
         # 获取语言名称
         lang_name = self.supported_languages.get(source_lang, source_lang)
 
-        return f"""
+        base_prompt = f"""
 你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系。
 请使用**两步分析法**判断以下两个{lang_name}文本块是否应该合并。
 
@@ -320,7 +322,16 @@ class SemanticAnalyzer:
 请严格按照要求输出，仅返回：
 {{"merge": true/false}}
 """
-    
+        # 追加语言专项规则
+        try:
+            from prompts import rule_registry  # noqa: F811
+            return rule_registry.merge_into_prompt(
+                base_prompt, "semantic", source_lang, "*"
+            )
+        except ImportError:
+            pass
+        return base_prompt
+
     def _generate_batch_semantic_analysis_prompt(self, blocks, source_lang):
         """生成批量语义分析提示词
 
@@ -456,4 +467,12 @@ class SemanticAnalyzer:
 """
 
         logger.info(f"批量语义分析提示词生成完成，长度={len(prompt)}")
+        # 追加语言专项规则
+        try:
+            from prompts import rule_registry
+            return rule_registry.merge_into_prompt(
+                prompt, "semantic", source_lang, "*"
+            )
+        except ImportError:
+            pass
         return prompt

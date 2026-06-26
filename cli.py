@@ -134,19 +134,19 @@ def create_parser():
     translate_parser.add_argument(
         '-s', '--source',
         default='en',
-        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'],
+        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru', 'bo'],
         help='源语言代码（默认：en）'
     )
     translate_parser.add_argument(
         '-t', '--target',
         default='zh',
-        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'],
+        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru', 'bo'],
         help='目标语言代码（默认：zh）'
     )
     translate_parser.add_argument(
         '-T', '--translator',
         default='aiping',
-        choices=['aiping', 'silicon_flow'],
+        choices=['aiping', 'silicon_flow', 'qianfan'],
         help='翻译服务类型（默认：aiping）'
     )
     translate_parser.add_argument(
@@ -156,7 +156,7 @@ def create_parser():
     translate_parser.add_argument(
         '-f', '--format',
         default='pdf',
-        choices=['pdf', 'docx', 'markdown'],
+        choices=['pdf', 'docx', 'markdown', 'pdf_docx', 'all'],
         help='输出格式（默认：pdf）'
     )
     translate_parser.add_argument(
@@ -199,6 +199,27 @@ def create_parser():
         default=None,
         help='OCR识别语言（默认：根据源语言自动选择）'
     )
+    translate_parser.add_argument(
+        '--translation-model',
+        default=None,
+        help='翻译模型名称（默认：使用环境变量配置的模型）'
+    )
+    translate_parser.add_argument(
+        '--layout-model',
+        default=None,
+        help='Markdown排版模型名称（默认：使用环境变量配置的模型）'
+    )
+    translate_parser.add_argument(
+        '--glossary-model',
+        default=None,
+        help='术语提取模型名称（默认：使用环境变量配置的模型）'
+    )
+    translate_parser.add_argument(
+        '--ocr-llm-model',
+        dest='ocr_llm_model',
+        default=None,
+        help='LLM OCR模型名称（默认：使用环境变量配置的模型）'
+    )
     
     # glossary 子命令
     glossary_parser = subparsers.add_parser(
@@ -217,19 +238,19 @@ def create_parser():
     glossary_parser.add_argument(
         '-s', '--source',
         default='en',
-        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'],
+        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru', 'bo'],
         help='源语言代码（默认：en）'
     )
     glossary_parser.add_argument(
         '-t', '--target',
         default='zh',
-        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru'],
+        choices=['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru', 'bo'],
         help='目标语言代码（默认：zh）'
     )
     glossary_parser.add_argument(
         '-T', '--translator',
         default='aiping',
-        choices=['aiping', 'silicon_flow'],
+        choices=['aiping', 'silicon_flow', 'qianfan'],
         help='翻译服务类型（默认：aiping）'
     )
     glossary_parser.add_argument(
@@ -240,6 +261,11 @@ def create_parser():
         '-d', '--doc-type',
         default='AI技术',
         help='文档类型或领域说明（默认：AI技术）'
+    )
+    glossary_parser.add_argument(
+        '--glossary-model',
+        default=None,
+        help='术语提取模型名称（默认：使用环境变量配置的模型）'
     )
     
     # list-languages 子命令

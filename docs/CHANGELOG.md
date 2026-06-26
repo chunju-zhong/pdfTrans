@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-06-26
+
+- **Added Baidu Qianfan translation service (qianfan)**:
+  - Added `modules/qianfan_translator.py` (150 lines): inherits `Translator`, reuses system prompt generation + language-specific rule injection
+  - Added Qianfan config items: `QIANFAN_API_KEY/URL/MODEL/MODEL_LAYOUT/MODEL_GLOSSARY/OCR_LLM_MODEL` and `QIANFAN_EXTRA_BODY`
+  - CLI added `-T qianfan` option, Web UI dropdown added "Baidu Qianfan Translation"
+  - Semantic analyzer factory and glossary extractor both support `qianfan` type
+- **Added Tibetan (bo) language support**:
+  - Added `'bo': '藏文'` to `SUPPORTED_LANGUAGES`
+  - All language mappings (translator/semantic analyzer/glossary extractor) added `bo`
+  - CLI source/target language choices added `bo`
+  - Added `prompts/language_rules/bo_to_zh.py`: Tibetan→Chinese translation-specific rules (8KB)
+  - Added rule registry `prompts/rule_registry.py`: lookup by `(stage, source_lang, target_lang)` and append rules to prompts
+- **Added combined output formats**: CLI added `-f pdf_docx` (PDF+Word) and `-f all` (PDF+Word+Markdown), `translate_command.py` supports multi-file output
+- **Added CLI model override parameters**: `--translation-model`, `--layout-model`, `--glossary-model`, `--ocr-llm-model`, propagated through CLI → TranslationService → modules
+- **Config refactoring**: Changed from class-level attributes to instance-level + `_load()` method, supporting runtime config refresh; added per-module API parameters (temperature/top_p/max_tokens/timeout configurable via environment variables)
+- **Translation system prompt rewrite**: Restructured from 16 flat rules to 4-section format (Core Principles / Semantics & Style / Format Preservation / No Meta-Comments), with language-specific rules appended via `rule_registry.merge_into_prompt()`
+- **TranslationService major split**: 1400+ lines split into 5 sub-modules:
+  - `TranslationService` (main class, ~500 lines): orchestration
+  - `TranslationExtractor` (233 lines): PDF content extraction
+  - `TranslationContentTranslator` (583 lines): text translation
+  - `TranslationTableHandler` (384 lines): table translation
+  - `TranslationOutputGenerator` (446 lines): output file generation
+  - Main class re-exports for backward compatibility with test `@patch` paths
+- **PdfGenerator rendering logic split**: ~1641 lines reduced to ~300 lines (delegation pattern), split into `PdfTextRenderer` (1070 lines) and `PdfTableRenderer` (556 lines)
+- **LLM OCR parser split**: Added `LlmOcrResponseParser` (707 lines) and `LlmTableParser` (284 lines); added blank page detection `_is_blank_image()` and timeout retry
+- **Glossary extractor base class refactoring**: Refactored to `BaseApiGlossaryExtractor` base class encapsulating shared logic, subclasses only provide API config; added `QianfanGlossaryExtractor`
+- **Unified hardcoded parameters to Config**: All hardcoded temperature/top_p/max_tokens/timeout across modules migrated to config instance attributes
+- **Removed redundant methods**: `AipingTranslator.batch_translate()` and `SiliconFlowTranslator.batch_translate()` deleted
+- **Bug fix**: `glossary_service.py` `cell.strip()` → `cell.text.strip()`, fixing PdfCell object attribute access
+- Files changed: `config.py`, `cli.py`, `cli/translate_command.py`, `cli/glossary_command.py`, `modules/qianfan_translator.py`, `modules/translator.py`, `modules/aiping_translator.py`, `modules/silicon_flow_translator.py`, `modules/glossary_extractor.py`, `modules/semantic_analyzer.py`, `modules/semantic_analyzer_factory.py`, `modules/pdf_generator.py`, `modules/pdf_text_renderer.py`, `modules/pdf_table_renderer.py`, `modules/ocr/llm_extractor.py`, `modules/ocr/llm_response_parser.py`, `modules/ocr/llm_table_parser.py`, `services/translation_service.py`, `services/translation_content.py`, `services/translation_extractor.py`, `services/translation_table.py`, `services/translation_output.py`, `services/glossary_service.py`, `templates/index.html`, `prompts/`, `.env.example`, `tests/`
+
 ## 2026-06-23
 
 - OCR configuration cleanup and rename:

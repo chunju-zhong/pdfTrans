@@ -99,7 +99,7 @@ cp .env.example .env
 vim .env
 ```
 
-**必须配置**：至少配置一种翻译服务的 API 密钥（`AIPING_API_KEY` 或 `SILICON_FLOW_API_KEY`），以及 `SECRET_KEY`。
+**必须配置**：至少配置一种翻译服务的 API 密钥（`AIPING_API_KEY`、`SILICON_FLOW_API_KEY` 或 `QIANFAN_API_KEY`），以及 `SECRET_KEY`。
 
 ### 1.6 平台注意事项
 
@@ -142,7 +142,19 @@ vim .env
 | `SILICON_FLOW_MODEL_LAYOUT` | Markdown 排版模型 | `Qwen/Qwen3-32B` | 否 |
 | `SILICON_FLOW_MODEL_GLOSSARY` | 术语提取模型 | `Qwen/Qwen3-32B` | 否 |
 
-### 2.4 OCR 配置
+### 2.4 百度千帆 API 配置
+
+| 变量名 | 说明 | 默认值 | 必填 |
+|--------|------|--------|------|
+| `QIANFAN_API_KEY` | 百度千帆 API 密钥 | 无 | 使用 qianfan 时必填 |
+| `QIANFAN_API_URL` | 百度千帆 API 地址 | `https://qianfan.baidubce.com/v2` | 否 |
+| `QIANFAN_MODEL` | 翻译模型 | 无 | 否 |
+| `QIANFAN_MODEL_LAYOUT` | Markdown 排版模型 | 无 | 否 |
+| `QIANFAN_MODEL_GLOSSARY` | 术语提取模型 | 无 | 否 |
+| `QIANFAN_OCR_LLM_MODEL` | 千帆 LLM OCR 模型 | 无 | 否 |
+| `QIANFAN_EXTRA_BODY` | 千帆 API extra_body 参数（JSON） | `{}` | 否 |
+
+### 2.5 OCR 配置
 
 | 变量名 | 说明 | 默认值 | 必填 |
 |--------|------|--------|------|
@@ -154,7 +166,7 @@ vim .env
 | `OCR_SKIP_TABLE` | 跳过表格识别（节省内存） | `false` | 否 |
 | `OCR_SKIP_FORMULA` | 跳过公式识别（节省内存） | `false` | 否 |
 
-### 2.5 OCR 超时与重试配置
+### 2.6 OCR 超时与重试配置
 
 | 变量名 | 说明 | 默认值 | 必填 |
 |--------|------|--------|------|
@@ -165,7 +177,7 @@ vim .env
 | `OCR_RETRY_BACKOFF` | 重试间隔（秒），每次递增 1.5 倍 | `5.0` | 否 |
 | `OCR_DYNAMIC_PARAMS` | 根据系统负载动态调整 OCR 参数 | `true` | 否 |
 
-### 2.6 翻译配置
+### 2.7 翻译配置
 
 | 变量名 | 说明 | 默认值 | 必填 |
 |--------|------|--------|------|
@@ -175,17 +187,31 @@ vim .env
 | `MERGE_MAX_WORKERS` | 并行合并的最大线程数 | `5` | 否 |
 | `MERGE_BATCH_SIZE` | 每批处理的文本对数量 | `20` | 否 |
 
-### 2.7 LLM OCR 配置
+### 2.8 LLM OCR 配置
 
 | 变量名 | 说明 | 默认值 | 必填 |
 |--------|------|--------|------|
-| `AIPING_OCR_LLM_MODEL` | aiping LLM OCR 模型 | `DeepSeek-OCR-2` | 否 |
+| `AIPING_OCR_LLM_MODEL` | aiping LLM OCR 模型 | `DeepSeek-OCR` | 否 |
 | `SILICON_FLOW_OCR_LLM_MODEL` | 硅基流动 LLM OCR 模型 | `deepseek-ai/DeepSeek-OCR` | 否 |
+| `QIANFAN_OCR_LLM_MODEL` | 百度千帆 LLM OCR 模型 | 无 | 否 |
 | `OCR_LLM_MAX_TOKENS` | LLM OCR 最大 token 数 | `8192` | 否 |
 | `OCR_LLM_TEMPERATURE` | LLM OCR 温度 | `0.1` | 否 |
 | `OCR_LLM_DPI` | LLM OCR 渲染 DPI | `150` | 否 |
 
-### 2.8 其他配置
+### 2.9 按模块 API 参数配置
+
+每个翻译服务支持按模块覆盖翻译、排版、术语提取的模型和温度参数：
+
+| 变量名 | 说明 | 默认值 | 必填 |
+|--------|------|--------|------|
+| `TRANSLATION_TEMPERATURE` | 翻译温度参数 | `0.1` | 否 |
+| `SEMANTIC_ANALYSIS_TEMPERATURE` | 语义分析温度参数 | `0.1` | 否 |
+| `GLOSSARY_TEMPERATURE` | 术语提取温度参数 | `0.1` | 否 |
+| `LAYOUT_TEMPERATURE` | Markdown 排版温度参数 | `0.1` | 否 |
+
+这些参数为所有翻译器共用。CLI 参数（`--translation-model`、`--layout-model`、`--glossary-model`、`--ocr-llm-model`）可覆盖 `.env` 中的默认模型设置。
+
+### 2.10 其他配置
 
 | 变量名 | 说明 | 默认值 | 必填 |
 |--------|------|--------|------|
@@ -247,9 +273,13 @@ python cli.py translate document.pdf --ocr --ocr-engine paddleocr
 | `--output` | `-o` | str | 输出文件路径 | 自动生成 | 否 |
 | `--source` | `-s` | str | 源语言代码 | `en` | 否 |
 | `--target` | `-t` | str | 目标语言代码 | `zh` | 否 |
-| `--translator` | `-T` | str | 翻译服务类型 | `aiping` | 否 |
+| `--translator` | `-T` | str | 翻译服务类型：`aiping`/`silicon_flow`/`qianfan` | `aiping` | 否 |
+| `--translation-model` | — | str | 覆盖翻译模型（优先于配置文件默认值） | 无 | 否 |
+| `--layout-model` | — | str | 覆盖 Markdown 排版模型 | 无 | 否 |
+| `--glossary-model` | — | str | 覆盖术语提取模型 | 无 | 否 |
+| `--ocr-llm-model` | — | str | 覆盖 LLM OCR 模型 | 无 | 否 |
 | `--pages` | `-p` | str | 页码范围，如 `"1-5,7,9-10"` | 全部页面 | 否 |
-| `--format` | `-f` | str | 输出格式：`pdf`/`docx`/`markdown` | `pdf` | 否 |
+| `--format` | `-f` | str | 输出格式：`pdf`/`docx`/`markdown`/`pdf_docx`/`all` | `pdf` | 否 |
 | `--glossary` | `-g` | str | 术语表文件路径 | 无 | 否 |
 | `--doc-type` | `-d` | str | 文档类型或领域说明 | `AI技术` | 否 |
 | `--semantic-merge` | `-m` | flag | 启用语义合并 | `False` | 否 |
@@ -263,6 +293,8 @@ python cli.py translate document.pdf --ocr --ocr-engine paddleocr
 - `pdf` → 生成双语对照 PDF
 - `docx` → 生成 Word 文档
 - `markdown` → 生成 Markdown 文件（打包为 `.zip`）
+- `pdf_docx` → 同时生成 PDF 和 Word 文档
+- `all` → 同时生成 PDF、Word 和 Markdown
 
 **智能后缀处理**：工具会根据输出格式自动添加正确的文件后缀（`.pdf`、`.docx`、`.zip`）。
 
@@ -315,7 +347,7 @@ python cli.py translate document.pdf --ocr --ocr-engine paddleocr
 | `pdf_file` | file | PDF 文件（必填） | — |
 | `source_lang` | str | 源语言代码 | `en` |
 | `target_lang` | str | 目标语言代码 | `zh` |
-| `translator` | str | 翻译服务 | `silicon_flow` |
+| `translator` | str | 翻译服务：`aiping`/`silicon_flow`/`qianfan` | `silicon_flow` |
 | `doc_type` | str | 文档类型 | `AI技术` |
 | `glossary` | str | 术语表内容 | 空 |
 | `page_range` | str | 页码范围 | 空 |
@@ -695,31 +727,22 @@ def create_ocr_extractor(ocr_type='paddleocr', **kwargs):
 
 ### 7.4 修改翻译 Prompt
 
-翻译 Prompt 定义在 `modules/translator.py` 的 `_generate_system_prompt()` 方法中，包含 16 条规则：
+翻译 Prompt 定义在 `modules/translator.py` 的 `_generate_system_prompt()` 方法中，采用4节结构化设计：
 
-| 规则编号 | 内容概要 |
-|---------|---------|
-| 1 | 语义连贯：基于完整上下文理解，句式适配目标语言 |
-| 2 | 自然过渡：保持原文逻辑关系 |
-| 3 | 风格一致：保持原文档语气 |
-| 4 | 简洁精炼：长度与原文相当 |
-| 5 | 术语一致：严格使用术语表 |
-| 6 | 不增删义：不添加解释，不遗漏细节 |
-| 7 | 语法正确：符合目标语言语法 |
-| 8 | 技术精准：术语和代码保持准确 |
-| 9 | 不翻译 URL |
-| 10 | 代码段保留与格式化 |
-| 11 | 长度控制：避免翻译膨胀 |
-| 12 | 不翻译公式：保留 LaTeX 和数学符号 |
-| 13 | 不解释缩写：保持专业缩写原状 |
-| 14 | 禁止元注释和原文输出 |
-| 15 | 保持列表格式 |
-| 16 | 保留单元格分隔符 `|||` |
+| 节编号 | 节名称 | 内容概要 |
+|-------|--------|---------|
+| 一 | 核心原则 | 语义连贯、自然过渡、风格一致、简洁精炼 |
+| 二 | 语义与风格 | 术语一致、不增删义、语法正确、技术精准 |
+| 三 | 保持格式 | 不翻译 URL、保留代码格式、长度控制、不翻译公式、不解释缩写、保持列表格式、保留单元格分隔符 `|||` |
+| 四 | 禁止元注释 | 不输出元注释或原文 |
+
+提示词通过 `rule_registry.merge_into_prompt()` 注入语言专项规则（见 `prompts/rule_registry.py` 和 `prompts/language_rules/`），支持按翻译方向动态扩展。
 
 **修改注意事项**：
 - 修改 Prompt 后务必运行翻译测试验证效果
-- 规则之间有相互约束关系，修改一条可能影响其他规则的效果
+- 节之间有相互约束关系，修改一节可能影响其他节的效果
 - 建议通过 `--glossary` 参数和 `doc_type` 参数微调，而非直接修改核心规则
+- 添加语言专项规则时，在 `prompts/language_rules/` 下创建对应模块，而非修改核心提示词
 
 ### 7.5 添加新语言
 
@@ -751,6 +774,20 @@ SUPPORTED_LANGUAGES = {
 
 如果使用 OCR 模式，需在 OCR 引擎中添加新语言对应的识别语言代码。
 
+**步骤 5：添加语言专项规则（可选）**
+
+如果新语言需要特殊翻译规则（如藏文的敬语规则、特殊断句规则等），在 `prompts/language_rules/` 目录下创建规则模块：
+
+```python
+# prompts/language_rules/xx_to_yy.py
+
+RULES = """
+[语言专项规则内容]
+"""
+```
+
+然后在 `prompts/rule_registry.py` 中注册该规则，使其在对应翻译方向时通过 `merge_into_prompt()` 自动注入。
+
 ---
 
 ## 8. 代码规范与约定
@@ -764,13 +801,13 @@ SUPPORTED_LANGUAGES = {
 | OCR 提取器工厂 | `modules/ocr/factory.py` | `paddleocr`、`llm` |
 | Markdown 生成器工厂 | `modules/markdown_generator.py`（`create_markdown_generator()`） | `aiping`、`silicon_flow` |
 | 语义分析器工厂 | `modules/semantic_analyzer_factory.py` | `aiping`、`silicon_flow` |
-| 翻译器工厂 | `services/translation_service.py`（`get_translator()`） | `aiping`、`silicon_flow` |
+| 翻译器工厂 | `services/translation_service.py`（`get_translator()`） | `aiping`、`silicon_flow`、`qianfan` |
 
 ### 8.2 策略模式
 
 翻译器和 OCR 引擎采用策略模式，通过统一的基类接口实现可替换：
 
-- **翻译器**: `Translator` 基类 → `AipingTranslator`、`SiliconFlowTranslator`
+- **翻译器**: `Translator` 基类 → `AipingTranslator`、`SiliconFlowTranslator`、`QianfanTranslator`
 - **OCR 引擎**: `OcrExtractor` 基类 → `PaddleOcrExtractor`、`LlmOcrExtractor`
 
 ### 8.3 子进程隔离
@@ -866,6 +903,7 @@ OCR 模块定义了两种错误类型：
 | `de` | 德语 |
 | `es` | 西班牙语 |
 | `ru` | 俄语 |
+| `bo` | 藏文 |
 
 默认源语言：`en`（英语）
 默认目标语言：`zh`（中文）

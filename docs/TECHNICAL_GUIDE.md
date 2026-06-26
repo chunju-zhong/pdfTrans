@@ -87,6 +87,26 @@ The `_TableHtmlParser` class parses HTML-format tables output by PP-StructureV3.
    - `_parse_markdown_to_blocks()`: Parses Markdown format
 3. **Model Mapping**: `_map_ocr_blocks_to_models()` maps `OcrBlock` dataclasses to internal models
 
+#### 1.3.1a Parser Split
+
+LLM OCR response parsing has been split from `LlmOcrExtractor` into independent modules:
+
+- `modules/ocr/llm_response_parser.py` (`LlmOcrResponseParser`): Handles format detection and structured parsing of text content (`<|ref|>` tags / JSON / Markdown)
+- `modules/ocr/llm_table_parser.py` (`LlmTableParser`): Handles table layout computation, implementing the row-height-priority iterative optimization algorithm
+
+After the split, `LlmOcrExtractor` is only responsible for API calls and page-level orchestration, delegating parsing logic to the two parsers above.
+
+#### 1.3.1b Blank Page Detection
+
+`LlmOcrExtractor` adds a `_is_blank_image()` method that detects whether a page is blank before calling the LLM API:
+
+- Calculates the standard deviation of image pixels; when below a threshold, the page is determined to be blank
+- Blank pages skip the LLM call, returning empty results, saving API call costs
+
+#### 1.3.1c Timeout Handling
+
+LLM OCR calls now catch `APITimeoutError`. On timeout, a warning is logged and the current page is skipped without interrupting the overall flow.
+
 #### 1.3.2 DeepSeek-OCR Normalized Coordinates
 
 DeepSeek-OCR uses a 0-999 normalized coordinate system. `_pixel_to_pdf_coords()` handles coordinate conversion via the `is_normalized` parameter:
@@ -185,35 +205,26 @@ When memory usage exceeds 85% or load average exceeds CPU cores ×0.8, high-load
 
 ## 2. Translation Pipeline Architecture
 
-### 2.1 Dual Translator Design
+### 2.1 Triple Translator Design
 
 | Translator | Class Name | Streaming | Retry | extra_body |
 |------------|-----------|-----------|-------|------------|
 | Aiping | `AipingTranslator` | `stream=True` | `max_retries=3` | `config.AIPING_EXTRA_BODY` |
 | SiliconFlow | `SiliconFlowTranslator` | `stream=False` | No retry | `config.SILICON_FLOW_EXTRA_BODY` |
+| Baidu Qianfan | `QianfanTranslator` | `stream=False` | No retry | `config.QIANFAN_EXTRA_BODY` |
 
-Both share the base class `Translator` (`modules/translator.py`), with common parameters: `temperature=0.1`, `top_p=0.9`, `max_tokens=8192`.
+All three share the base class `Translator` (`modules/translator.py`), with common parameters: `temperature=0.1`, `top_p=0.9`, `max_tokens=8192`. `QianfanTranslator` uses the Baidu Qianfan OpenAI-compatible API (default URL `https://qianfan.baidubce.com/v2`), authenticated via `QIANFAN_API_KEY`.
 
-### 2.2 16-Rule System Prompt
+### 2.2 Four-Section Structured System Prompt
 
-`Translator._generate_system_prompt()` generates a system prompt containing 16 rules:
+`Translator._generate_system_prompt()` generates a system prompt with a 4-section structure:
 
-1. Semantic coherence
-2. Natural transitions
-3. Style consistency
-4. Conciseness
-5. Terminology consistency
-6. No additions or omissions
-7. Grammatical correctness
-8. Technical precision
-9. Do not translate URLs
-10. Preserve code formatting
-11. Length control
-12. Do not translate formulas
-13. Do not expand abbreviations
-14. No meta-annotations or source text in output
-15. Preserve list formatting
-16. Preserve cell delimiters `|||`
+1. **Core Principles**: Semantic coherence, natural transitions, style consistency, conciseness
+2. **Semantics & Style**: Terminology consistency, no additions or omissions, grammatical correctness, technical precision
+3. **Preserve Formatting**: Do not translate URLs, preserve code formatting, length control, do not translate formulas, do not expand abbreviations, preserve list formatting, preserve cell delimiters `|||`
+4. **No Meta-Annotations**: No meta-annotations or source text in output
+
+The prompt is enhanced with language-specific rules injected via `rule_registry.merge_into_prompt()` (see Section 9 "Language-Specific Rule System"), enabling dynamic extension based on translation direction.
 
 ### 2.3 Preprocessing and Postprocessing
 
@@ -315,6 +326,15 @@ Fault tolerance: 3 retries; when result count mismatches, fill with `False`; on 
 ---
 
 ## 4. PDF Generation Technology
+
+### 4.0 Renderer Split
+
+The rendering logic of `PdfGenerator` (`modules/pdf_generator.py`) has been split into two independent modules:
+
+- `modules/pdf_text_renderer.py` (`PdfTextRenderer`): Handles text rendering, including the two-pass drawing strategy, font selection chain, font size estimation, line height ratio calculation, and text overflow handling
+- `modules/pdf_table_renderer.py` (`PdfTableRenderer`): Handles table rendering, including the table two-pass strategy, merged cell processing, visible segment computation, and dynamic cell font size calculation
+
+After the split, `PdfGenerator` serves as a facade class coordinating the two renderers, keeping the external interface unchanged.
 
 ### 4.1 Two-Pass Rendering Strategy
 
@@ -614,11 +634,47 @@ $$...$$ / $...$ → __FORMULA_N__ placeholder → LLM processing → restore ori
 
 ---
 
-## 9. Glossary Extraction and Chapter Identification
+## 9. Language-Specific Rule System
 
-### 9.1 Glossary Extraction
+### 9.1 Rule Registry
 
-#### 9.1.1 Dual Extractor Design
+`PromptRuleRegistry` (`prompts/rule_registry.py`) is a singleton registry for language-specific rules, responsible for finding and injecting additional prompt rules based on translation direction (source language → target language).
+
+Core methods:
+
+- `merge_into_prompt(base_prompt, source_lang, target_lang)`: Appends matching language-specific rules to the end of the base prompt, returning the enhanced complete prompt
+- `register(source_lang, target_lang, rules)`: Registers a language-specific rule
+
+### 9.2 Rule File Organization
+
+```
+prompts/
+├── __init__.py                 # Module initialization
+├── rule_registry.py            # PromptRuleRegistry — rule registry (singleton)
+└── language_rules/             # Language-specific rules directory
+    ├── __init__.py             # Auto-discovery and registration of rules
+    ├── base.py                 # Common base rules
+    └── bo_to_zh.py             # Tibetan→Chinese specific rules
+```
+
+### 9.3 Rule Auto-Discovery
+
+`language_rules/__init__.py` automatically scans rule files in the same directory on module load, calling `rule_registry.register()` to complete registration. Adding a new language-specific rule only requires creating a rule file in the `language_rules/` directory and implementing registration — no other code modifications needed.
+
+### 9.4 Existing Rules
+
+| Source Language | Target Language | Rule File | Description |
+|----------------|----------------|-----------|-------------|
+| — | — | `base.py` | Common base rules, applicable to all translation directions |
+| `bo` | `zh` | `bo_to_zh.py` | Tibetan→Chinese specific rules, handling Tibetan-specific translation issues |
+
+---
+
+## 10. Glossary Extraction and Chapter Identification
+
+### 10.1 Glossary Extraction
+
+#### 10.1.1 Dual Extractor Design
 
 `modules/glossary_extractor.py` defines an abstract base class and two implementations:
 
@@ -629,11 +685,11 @@ $$...$$ / $...$ → __FORMULA_N__ placeholder → LLM processing → restore ori
 
 Factory function: `create_glossary_extractor(extractor_type)`, supporting `'aiping'` and `'silicon_flow'` types.
 
-#### 9.1.2 NO_GLOSSARY Sentinel Value
+#### 10.1.2 NO_GLOSSARY Sentinel Value
 
 When the LLM determines there are no specialized terms in the text, it returns the `NO_GLOSSARY` identifier. The `_format_glossary()` method skips lines containing `NO_GLOSSARY`.
 
-#### 9.1.3 Extraction Rules
+#### 10.1.3 Extraction Rules
 
 The prompt includes the following core rules:
 - Extract only genuine specialized terms from the specified domain
@@ -643,7 +699,7 @@ The prompt includes the following core rules:
 - Extract each term only once
 - Input text is truncated to the first 5000 characters
 
-#### 9.1.4 Output Format
+#### 10.1.4 Output Format
 
 One term per line, in the format `term: translation`.
 
@@ -658,7 +714,7 @@ bookmarks = doc.get_toc(simple=False)
 chapters = self._build_chapter_tree(bookmarks, doc)
 ```
 
-#### 9.2.2 Title Location
+#### 10.2.2 Title Location
 
 `_locate_title_blocks()` finds text blocks in pages corresponding to chapter titles, using a three-level matching strategy:
 
@@ -674,14 +730,14 @@ chapters = self._build_chapter_tree(bookmarks, doc)
 - Maximum depth: `max_level=3`
 - Title truncation: `max_title_length=20`, with `...` appended when exceeded
 
-#### 9.2.4 Default Chapters
+#### 10.2.4 Default Chapters
 
 When the beginning of a PDF has pages not covered by bookmarks, `_create_default_chapters()` creates default chapters:
 
 - Smart naming (`use_smart_naming=True`): Uses the first text block on the page as the title
 - Fallback naming: `{filename}-Page{page_number}`
 
-#### 9.2.5 Element Association
+#### 10.2.5 Element Association
 
 - `associate_text_blocks()`: Associates text blocks with corresponding chapters
 - `associate_tables()`: Associates tables with corresponding chapters
@@ -691,9 +747,9 @@ Association algorithm: `_find_best_chapter()` finds the best-matching chapter ba
 
 ---
 
-## 10. Error Handling and Retry Mechanisms
+## 11. Error Handling and Retry Mechanisms
 
-### 10.1 OCR Three-Layer Protection
+### 11.1 OCR Three-Layer Protection
 
 `modules/ocr/ocr_worker.py` implements a three-layer protection mechanism:
 
@@ -703,37 +759,39 @@ Association algorithm: `_find_best_chapter()` finds the best-matching chapter ba
 | Stall detection | Timeout check | Dynamic timeout = `avg_time_per_page × 1.5` |
 | Total timeout | Global timeout | User-configured timeout |
 
-#### 10.1.1 Heartbeat Timeout
+#### 11.1.1 Heartbeat Timeout
 
 The main process monitors the subprocess heartbeat; heartbeat timeout triggers a retry.
 
-#### 10.1.2 Stall Detection
+#### 11.1.2 Stall Detection
 
 `_run_ocr_once()` detects processing stalls: if the current page processing time exceeds 1.5× the average time, it is considered stalled.
 
-#### 10.1.3 Partial Result Preservation
+#### 11.1.3 Partial Result Preservation
 
 On timeout or error, successfully extracted page results are preserved. The `skip_pages` parameter allows skipping already-processed pages on retry.
 
-### 10.2 OCR Parameter Degradation
+### 11.2 OCR Parameter Degradation
 
 Parameters degrade on each retry (see 1.4.2 for details), progressively reducing resource consumption to improve success rate.
 
-### 10.3 Translation Retry
+### 11.3 Translation Retry
 
 - Aiping: `max_retries=3`, exponential backoff
 - SiliconFlow: No retry mechanism
+- Baidu Qianfan: No retry mechanism
+- LLM OCR: `APITimeoutError` is caught on timeout; the current page is skipped with a warning, without interrupting the overall flow
 
-### 10.4 Semantic Analysis Fault Tolerance
+### 11.4 Semantic Analysis Fault Tolerance
 
 - 3 retries
 - Fill with `False` when result count mismatches
 - Return `[False] * count` on JSON parse failure
 - Skip the current batch on batch analysis failure
 
-### 10.5 Generation Degradation
+### 11.5 Generation Degradation
 
-#### 10.5.1 PDF Formula Rendering Degradation
+#### 11.5.1 PDF Formula Rendering Degradation
 
 ```
 usetex → mathtext raw → mathtext preprocessed → plain text
@@ -745,19 +803,19 @@ usetex → mathtext raw → mathtext preprocessed → plain text
 Font reduction → Extreme reduction → Line height adjustment → Smart truncation → Mechanical truncation
 ```
 
-#### 10.5.3 Markdown Generation Degradation
+#### 11.5.3 Markdown Generation Degradation
 
 On layout model request failure, retry 3 times (`max_retries=3`, `retry_delay=2s`); throw an exception on final failure.
 
-### 10.6 PPStructureV3 Log Pollution Fix
+### 11.6 PPStructureV3 Log Pollution Fix
 
 `PaddleOcrExtractor._restore_logger_state()` saves and restores logger configuration before and after OCR processing, preventing PPStructureV3 from modifying the global log level.
 
 ---
 
-## 11. Progress Management Model
+## 12. Progress Management Model
 
-### 11.1 Seven-Phase Progress Configuration
+### 12.1 Seven-Phase Progress Configuration
 
 `PHASE_CONFIG` (`models/phase_config.py`) defines 7 phases for translation tasks:
 
@@ -771,7 +829,7 @@ On layout model request failure, retry 3 times (`max_retries=3`, `retry_delay=2s
 | 6 | generation | Output generation | 92-98 |
 | 7 | clean | Cleanup temporary files | 98-100 |
 
-### 11.2 Glossary Extraction Three-Phase Configuration
+### 12.2 Glossary Extraction Three-Phase Configuration
 
 `GLOSSARY_PHASE_CONFIG` defines 3 phases for glossary extraction tasks:
 
@@ -804,7 +862,7 @@ Mapping from within-phase progress to overall progress:
 overall_progress = start + round((end - start) * phase_percent / 100)
 ```
 
-### 11.5 Thread Safety
+### 12.5 Thread Safety
 
 `Task` uses `threading.RLock()` to protect all state mutation operations, ensuring data consistency in multi-threaded environments.
 

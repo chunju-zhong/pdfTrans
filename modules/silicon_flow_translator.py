@@ -1,6 +1,7 @@
 from openai import OpenAI
 from .translator import Translator
 from models.result_types import TranslationResult, TruncationInfo
+from config import config
 
 class SiliconFlowTranslator(Translator):
     """硅基流动翻译API实现
@@ -17,13 +18,13 @@ class SiliconFlowTranslator(Translator):
             model (str): 要使用的模型名称
         """
         super().__init__(api_key, api_url)
-        self.api_url = api_url
         self.model = model
-        self.max_tokens = 8192  # 默认最大token数
+        self.max_tokens = config.TRANSLATION_MAX_TOKENS
         # 初始化OpenAI客户端
         self.client = OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
+            timeout=config.TRANSLATION_TIMEOUT,
         )
     
     def translate(self, text, source_lang, target_lang, doc_type, glossary):
@@ -65,24 +66,28 @@ class SiliconFlowTranslator(Translator):
             'fr': '法文',
             'de': '德文',
             'es': '西班牙文',
-            'ru': '俄文'
+            'ru': '俄文',
+            'bo': '藏文'
         }
         
         source_lang_name = lang_map.get(source_lang, source_lang)
         target_lang_name = lang_map.get(target_lang, target_lang)
         
         # 生成提示词
-        system_prompt = self._generate_system_prompt(doc_type, source_lang_name, target_lang_name, glossary)
+        system_prompt = self._generate_system_prompt(
+            doc_type, source_lang_name, target_lang_name, glossary,
+            source_lang_code=source_lang, target_lang_code=target_lang,
+        )
         user_prompt = self._generate_user_prompt(source_lang_name, target_lang_name, doc_type, processed_text)
         
         
         try:
-            # 调用硅基流动API - 使用与aiping一致的参数
+            # 调用硅基流动API
             response = self.client.chat.completions.create(
                 model=self.model,
                 stream=False,  # 非流式调用
-                temperature=0.1,  # 降低温度，提高翻译准确性
-                top_p=0.9,  # 核采样参数
+                temperature=config.TRANSLATION_TEMPERATURE,
+                top_p=config.TRANSLATION_TOP_P,
                 messages=[
                     {
                         "role": "system",
@@ -138,34 +143,5 @@ class SiliconFlowTranslator(Translator):
                 
         except Exception as e:
             raise Exception(f"硅基流动翻译API请求失败: {str(e)}")
-    
-    def batch_translate(self, texts, source_lang, target_lang, doc_type="AI技术", glossary=""):
-        """批量翻译文本
-        
-        Args:
-            texts (list): 要翻译的文本列表
-            source_lang (str): 源语言代码
-            target_lang (str): 目标语言代码
-            doc_type (str): 文档类型
-            glossary (str): 术语表，格式为"术语1: 翻译1\n术语2: 翻译2"
-            
-        Returns:
-            list: 翻译结果对象列表，每个元素为TranslationResult实例
-        """
-        # 检查原语言与目标语言是否一致
-        if source_lang == target_lang:
-            # 语言一致，直接返回原文本列表和空截断信息
-            return [TranslationResult(
-                content=text,
-                token_usage={},
-                finish_reason="",
-                truncation_info=TruncationInfo(truncated=False, token_usage={}, finish_reason="")
-            ) for text in texts]
-        
-        results = []
-        for text in texts:
-            result = self.translate(text, source_lang, target_lang, doc_type, glossary)
-            results.append(result)
-        return results
 
 
