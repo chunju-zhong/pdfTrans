@@ -4,6 +4,7 @@ from modules.translator import Translator
 
 from modules.aiping_translator import AipingTranslator
 from modules.silicon_flow_translator import SiliconFlowTranslator
+from modules.qianfan_translator import QianfanTranslator
 
 class TestTranslator:
     """测试翻译器基类功能"""
@@ -260,6 +261,38 @@ class TestCleanupBlocks:
     def test_silicon_flow_cleanup_on_api_error(self):
         """SiliconFlowTranslator API调用失败时应返回原文"""
         translator = SiliconFlowTranslator("test_key", "https://api.siliconflow.cn/v1", "tencent/Hunyuan-MT-7B")
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_create.side_effect = Exception("API Error")
+
+            block_pairs = [
+                ("Hello", "你好"),
+            ]
+            result = translator.cleanup_blocks(block_pairs)
+            assert result == ["你好"]
+
+    def test_qianfan_cleanup_removes_footer(self):
+        """QianfanTranslator.cleanup_blocks 应移除页脚残留"""
+        translator = QianfanTranslator("test_key", "https://qianfan.baidubce.com/v2", "ernie-4.0")
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock(
+                message=MagicMock(content="---块1---\n表示学习与嵌入\n\n---块2---\n")
+            )]
+            mock_create.return_value = mock_response
+
+            block_pairs = [
+                ("Representation Learning", "表示学习与嵌入"),
+                ("x | Table of Contents", "x  |  目录"),
+            ]
+            result = translator.cleanup_blocks(block_pairs)
+            assert result[0] == "表示学习与嵌入"
+            assert result[1] == ""
+
+    def test_qianfan_cleanup_on_api_error(self):
+        """QianfanTranslator API调用失败时应返回原文"""
+        translator = QianfanTranslator("test_key", "https://qianfan.baidubce.com/v2", "ernie-4.0")
 
         with patch.object(translator.client.chat.completions, 'create') as mock_create:
             mock_create.side_effect = Exception("API Error")

@@ -132,6 +132,10 @@ class Translator:
         if not block_pairs:
             return []
 
+        # 无 API client 时回退到原文（基类或未配置的子类）
+        if not hasattr(self, 'client') or self.client is None:
+            return [pair[1] for pair in block_pairs]
+
         # 构建输入文本：每块显示原文和译文
         blocks_text = ""
         for i, (orig, trans) in enumerate(block_pairs):

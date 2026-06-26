@@ -177,7 +177,7 @@ class AipingTranslator(Translator):
                     raise Exception(f"aiping翻译API请求失败: {str(e)}")
 
     def _get_cleanup_api_kwargs(self):
-        """百度千帆API调用额外参数"""
+        """AI Ping API调用额外参数"""
         return {"extra_body": config.AIPING_EXTRA_BODY}
 
 
