@@ -246,36 +246,4 @@ class AipingTranslator(Translator):
             logger.warning(f"cleanup_blocks API调用失败: {e}")
             return [pair[1] for pair in block_pairs]
 
-    def _parse_cleanup_result(self, result_text, expected_count):
-        """解析cleanup_blocks的LLM返回结果
-
-        Args:
-            result_text: LLM返回的文本
-            expected_count: 期望的块数量
-
-        Returns:
-            list[str]: 解析出的清理后文本列表
-        """
-        import re
-        # 按 ---块N--- 标记分割
-        pattern = r'---\s*块(\d+)\s*---'
-        parts = re.split(pattern, result_text)
-
-        if len(parts) < 3:
-            # 没有标记，尝试按行分割
-            lines = [l.strip() for l in result_text.strip().split('\n') if l.strip()]
-            return lines[:expected_count]
-
-        # 解析编号和内容
-        result = {}
-        i = 1
-        while i < len(parts) - 1:
-            idx = int(parts[i])
-            content = parts[i + 1].strip()
-            result[idx] = content
-            i += 2
-
-        # 按编号排序返回
-        return [result.get(j + 1, '') for j in range(expected_count)]
-
 

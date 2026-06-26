@@ -238,6 +238,38 @@ class TestCleanupBlocks:
         assert parsed[0] == "清理后文本1"
         assert parsed[1] == "清理后文本2"
 
+    def test_silicon_flow_cleanup_removes_footer(self):
+        """SiliconFlowTranslator.cleanup_blocks 应移除页脚残留"""
+        translator = SiliconFlowTranslator("test_key", "https://api.siliconflow.cn/v1", "tencent/Hunyuan-MT-7B")
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock(
+                message=MagicMock(content="---块1---\n表示学习与嵌入\n\n---块2---\n")
+            )]
+            mock_create.return_value = mock_response
+
+            block_pairs = [
+                ("Representation Learning", "表示学习与嵌入"),
+                ("x | Table of Contents", "x  |  目录"),
+            ]
+            result = translator.cleanup_blocks(block_pairs)
+            assert result[0] == "表示学习与嵌入"
+            assert result[1] == ""
+
+    def test_silicon_flow_cleanup_on_api_error(self):
+        """SiliconFlowTranslator API调用失败时应返回原文"""
+        translator = SiliconFlowTranslator("test_key", "https://api.siliconflow.cn/v1", "tencent/Hunyuan-MT-7B")
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_create.side_effect = Exception("API Error")
+
+            block_pairs = [
+                ("Hello", "你好"),
+            ]
+            result = translator.cleanup_blocks(block_pairs)
+            assert result == ["你好"]
+
 
 # 运行所有测试
 if __name__ == "__main__":
