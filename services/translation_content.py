@@ -137,6 +137,44 @@ class TranslationContentTranslator:
                 blocks_list.append(PdfPage(page_num, []))
         translated_content['blocks'] = blocks_list
 
+        # === LLM清理步骤 ===
+        # 对每个有翻译块的页面，调用LLM清理格式问题（页脚残留、前导点号等）
+        if translator is not None:
+            for page_idx, page_blocks in enumerate(translated_content['blocks']):
+                page_num = page_blocks.page_num
+
+                if not page_blocks.text_blocks:
+                    continue
+
+                # 找出该页的原始块
+                page_original_blocks = [b for b in text_blocks if b.page_num == page_num]
+                page_original_blocks.sort(key=lambda b: getattr(b, 'block_no', 0) or 0)
+
+                if not page_original_blocks:
+                    continue
+
+                # 长度不匹配可能是合并拆分导致的，跳过清理
+                if len(page_blocks.text_blocks) != len(page_original_blocks):
+                    logger.debug(f"任务 {task.task_id} 页码 {page_num} 的块数量不匹配 (译文={len(page_blocks.text_blocks)}, 原文={len(page_original_blocks)})，跳过LLM清理")
+                    continue
+
+                # 构建 (原文, 译文) 对
+                block_pairs = [
+                    (orig.block_text, trans.block_text)
+                    for orig, trans in zip(page_original_blocks, page_blocks.text_blocks)
+                ]
+
+                try:
+                    cleaned_texts = translator.cleanup_blocks(block_pairs, target_lang)
+                    if cleaned_texts and len(cleaned_texts) == len(page_blocks.text_blocks):
+                        for i, cleaned_text in enumerate(cleaned_texts):
+                            original_translated = page_blocks.text_blocks[i].block_text
+                            if cleaned_text != original_translated:
+                                logger.info(f"任务 {task.task_id} 页面 {page_num} 块 {i+1}: LLM清理 '{original_translated[:60]}...' -> '{cleaned_text[:60]}...'")
+                                page_blocks.text_blocks[i].block_text = cleaned_text
+                except Exception as e:
+                    logger.warning(f"任务 {task.task_id} LLM清理页面 {page_num} 时出错: {e}，跳过清理")
+
         logger.info(f"任务 {task.task_id} 翻译完成，总翻译块数量: {translated_blocks}")
 
         # 直接使用原始样式信息，不再需要text_content字段

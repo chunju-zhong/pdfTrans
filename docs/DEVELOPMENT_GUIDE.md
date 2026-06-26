@@ -142,7 +142,19 @@ All configuration is set via the `.env` file or environment variables, loaded by
 | `SILICON_FLOW_MODEL_LAYOUT` | Markdown layout model | `Qwen/Qwen3-32B` | No |
 | `SILICON_FLOW_MODEL_GLOSSARY` | Glossary extraction model | `Qwen/Qwen3-32B` | No |
 
-### 2.4 OCR Configuration
+### 2.4 Baidu Qianfan API Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `QIANFAN_API_KEY` | Baidu Qianfan API key | None | Required when using qianfan |
+| `QIANFAN_API_URL` | Baidu Qianfan API endpoint | `https://qianfan.baidubce.com/v2` | No |
+| `QIANFAN_MODEL` | Translation model | None | No |
+| `QIANFAN_MODEL_LAYOUT` | Markdown layout model | None | No |
+| `QIANFAN_MODEL_GLOSSARY` | Glossary extraction model | None | No |
+| `QIANFAN_OCR_LLM_MODEL` | Qianfan LLM OCR model | None | No |
+| `QIANFAN_EXTRA_BODY` | Qianfan API extra_body parameter (JSON) | `{}` | No |
+
+### 2.5 OCR Configuration
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
@@ -154,7 +166,7 @@ All configuration is set via the `.env` file or environment variables, loaded by
 | `OCR_SKIP_TABLE` | Skip table recognition (saves memory) | `false` | No |
 | `OCR_SKIP_FORMULA` | Skip formula recognition (saves memory) | `false` | No |
 
-### 2.5 OCR Timeout and Retry Configuration
+### 2.6 OCR Timeout and Retry Configuration
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
@@ -165,7 +177,7 @@ All configuration is set via the `.env` file or environment variables, loaded by
 | `OCR_RETRY_BACKOFF` | Retry interval (seconds), increases by 1.5x each time | `5.0` | No |
 | `OCR_DYNAMIC_PARAMS` | Dynamically adjust OCR parameters based on system load | `true` | No |
 
-### 2.6 Translation Configuration
+### 2.7 Translation Configuration
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
@@ -175,17 +187,31 @@ All configuration is set via the `.env` file or environment variables, loaded by
 | `MERGE_MAX_WORKERS` | Maximum threads for parallel merge | `5` | No |
 | `MERGE_BATCH_SIZE` | Number of text pairs per batch | `20` | No |
 
-### 2.7 LLM OCR Configuration
+### 2.8 LLM OCR Configuration
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `AIPING_OCR_LLM_MODEL` | aiping LLM OCR model | `DeepSeek-OCR-2` | No |
+| `AIPING_OCR_LLM_MODEL` | aiping LLM OCR model | `DeepSeek-OCR` | No |
 | `SILICON_FLOW_OCR_LLM_MODEL` | SiliconFlow LLM OCR model | `deepseek-ai/DeepSeek-OCR` | No |
+| `QIANFAN_OCR_LLM_MODEL` | Qianfan LLM OCR model | None | No |
 | `OCR_LLM_MAX_TOKENS` | LLM OCR maximum tokens | `8192` | No |
 | `OCR_LLM_TEMPERATURE` | LLM OCR temperature | `0.1` | No |
 | `OCR_LLM_DPI` | LLM OCR rendering DPI | `150` | No |
 
-### 2.8 Other Configuration
+### 2.9 Per-Module API Parameter Configuration
+
+Each translation service supports per-module overrides for translation, layout, glossary extraction model and temperature parameters:
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `TRANSLATION_TEMPERATURE` | Translation temperature parameter | `0.1` | No |
+| `SEMANTIC_ANALYSIS_TEMPERATURE` | Semantic analysis temperature parameter | `0.1` | No |
+| `GLOSSARY_TEMPERATURE` | Glossary extraction temperature parameter | `0.1` | No |
+| `LAYOUT_TEMPERATURE` | Markdown layout temperature parameter | `0.1` | No |
+
+These parameters are shared across all translators. CLI parameters (`--translation-model`, `--layout-model`, `--glossary-model`, `--ocr-llm-model`) can override the default model settings in `.env`.
+
+### 2.10 Other Configuration
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
@@ -247,9 +273,13 @@ python cli.py translate document.pdf --ocr --ocr-engine paddleocr
 | `--output` | `-o` | str | Output file path | Auto-generated | No |
 | `--source` | `-s` | str | Source language code | `en` | No |
 | `--target` | `-t` | str | Target language code | `zh` | No |
-| `--translator` | `-T` | str | Translation service type | `aiping` | No |
+| `--translator` | `-T` | str | Translation service type: `aiping`/`silicon_flow`/`qianfan` | `aiping` | No |
+| `--translation-model` | — | str | Override translation model (takes precedence over config file default) | None | No |
+| `--layout-model` | — | str | Override Markdown layout model | None | No |
+| `--glossary-model` | — | str | Override glossary extraction model | None | No |
+| `--ocr-llm-model` | — | str | Override LLM OCR model | None | No |
 | `--pages` | `-p` | str | Page range, e.g. `"1-5,7,9-10"` | All pages | No |
-| `--format` | `-f` | str | Output format: `pdf`/`docx`/`markdown` | `pdf` | No |
+| `--format` | `-f` | str | Output format: `pdf`/`docx`/`markdown`/`pdf_docx`/`all` | `pdf` | No |
 | `--glossary` | `-g` | str | Glossary file path | None | No |
 | `--doc-type` | `-d` | str | Document type or domain description | `AI技术` | No |
 | `--semantic-merge` | `-m` | flag | Enable semantic merge | `False` | No |
@@ -263,6 +293,8 @@ python cli.py translate document.pdf --ocr --ocr-engine paddleocr
 - `pdf` → Generates a bilingual side-by-side PDF
 - `docx` → Generates a Word document
 - `markdown` → Generates Markdown files (packaged as `.zip`)
+- `pdf_docx` → Generates both PDF and Word documents
+- `all` → Generates PDF, Word, and Markdown
 
 **Smart suffix handling**: The tool automatically adds the correct file suffix (`.pdf`, `.docx`, `.zip`) based on the output format.
 
@@ -315,7 +347,7 @@ Submit a translation task (asynchronous).
 | `pdf_file` | file | PDF file (required) | — |
 | `source_lang` | str | Source language code | `en` |
 | `target_lang` | str | Target language code | `zh` |
-| `translator` | str | Translation service | `silicon_flow` |
+| `translator` | str | Translation service: `aiping`/`silicon_flow`/`qianfan` | `silicon_flow` |
 | `doc_type` | str | Document type | `AI技术` |
 | `glossary` | str | Glossary content | Empty |
 | `page_range` | str | Page range | Empty |
@@ -695,31 +727,22 @@ Add the new format to the `choices` of the `--format` parameter in `cli.py`, and
 
 ### 7.4 Modifying Translation Prompts
 
-Translation prompts are defined in the `_generate_system_prompt()` method of `modules/translator.py`, containing 16 rules:
+Translation prompts are defined in the `_generate_system_prompt()` method of `modules/translator.py`, organized into 4 sections:
 
-| Rule # | Summary |
-|--------|---------|
-| 1 | Semantic coherence: Understand from full context, adapt sentence structure to target language |
-| 2 | Natural transitions: Preserve original logical relationships |
-| 3 | Consistent style: Maintain original document tone |
-| 4 | Concise and refined: Length comparable to original |
-| 5 | Terminology consistency: Strictly follow the glossary |
-| 6 | No addition or omission: Do not add explanations, do not omit details |
-| 7 | Grammatical correctness: Conform to target language grammar |
-| 8 | Technical precision: Keep terminology and code accurate |
-| 9 | Do not translate URLs |
-| 10 | Preserve and format code blocks |
-| 11 | Length control: Avoid translation bloat |
-| 12 | Do not translate formulas: Preserve LaTeX and math symbols |
-| 13 | Do not expand abbreviations: Keep professional abbreviations as-is |
-| 14 | No meta-commentary or original text output |
-| 15 | Preserve list formatting |
-| 16 | Preserve cell separator `|||` |
+| Section | Rules | Summary |
+|---------|-------|---------|
+| I. Core Principles | 1-4 | Semantic coherence, natural transitions, consistent style, concise and refined |
+| II. Semantics & Style | 5-8 | Terminology consistency, no addition or omission, grammatical correctness, technical precision |
+| III. Preserve Formatting | 9-13 | Do not translate URLs, preserve code blocks, length control, do not translate formulas, do not expand abbreviations |
+| IV. No Meta-Commentary | 14-16 | No meta-commentary or original text output, preserve list formatting, preserve cell separator `|||` |
+
+Language-specific rules are managed via `prompts/rule_registry.py`. The `rule_registry.merge_into_prompt()` function injects language-specific rules into the base prompt based on the source-target language pair, allowing per-language customization without modifying core rules.
 
 **Modification notes**:
 - After modifying prompts, always run translation tests to verify results
 - Rules have interdependent constraints; modifying one may affect the effectiveness of others
-- It is recommended to fine-tune via the `--glossary` parameter and `doc_type` parameter rather than directly modifying core rules
+- It is recommended to add language-specific rules via `prompts/language_rules/` rather than directly modifying core rules
+- Fine-tune via the `--glossary` parameter and `doc_type` parameter for domain-specific adjustments
 
 ### 7.5 Adding a New Language
 
@@ -751,6 +774,16 @@ Add the new language to the `supported_languages` dictionary in `modules/transla
 
 If using OCR mode, add the corresponding recognition language code for the new language in the OCR engine.
 
+**Step 5: Add language-specific rules (optional)**
+
+If the new language requires special translation rules, create a rule module under `prompts/language_rules/`:
+
+1. Create a file named `<source>_to_<target>.py` (e.g., `bo_to_zh.py` for Tibetan-to-Chinese)
+2. Define a `get_rules()` function that returns a list of rule strings specific to this language pair
+3. Register the rule module in `prompts/rule_registry.py`
+
+The `rule_registry.merge_into_prompt()` function will automatically inject these rules into the base prompt when the corresponding language pair is used.
+
 ---
 
 ## 8. Code Conventions and Practices
@@ -764,13 +797,13 @@ The factory pattern is widely used throughout the project to create different ty
 | OCR extractor factory | `modules/ocr/factory.py` | `paddleocr`, `llm` |
 | Markdown generator factory | `modules/markdown_generator.py` (`create_markdown_generator()`) | `aiping`, `silicon_flow` |
 | Semantic analyzer factory | `modules/semantic_analyzer_factory.py` | `aiping`, `silicon_flow` |
-| Translator factory | `services/translation_service.py` (`get_translator()`) | `aiping`, `silicon_flow` |
+| Translator factory | `services/translation_service.py` (`get_translator()`) | `aiping`, `silicon_flow`, `qianfan` |
 
 ### 8.2 Strategy Pattern
 
 Translators and OCR engines use the strategy pattern, achieving interchangeability through unified base class interfaces:
 
-- **Translators**: `Translator` base class → `AipingTranslator`, `SiliconFlowTranslator`
+- **Translators**: `Translator` base class → `AipingTranslator`, `SiliconFlowTranslator`, `QianfanTranslator`
 - **OCR engines**: `OcrExtractor` base class → `PaddleOcrExtractor`, `LlmOcrExtractor`
 
 ### 8.3 Subprocess Isolation
@@ -866,6 +899,7 @@ The OCR module defines two error types:
 | `de` | German |
 | `es` | Spanish |
 | `ru` | Russian |
+| `bo` | Tibetan |
 
 Default source language: `en` (English)
 Default target language: `zh` (Chinese)

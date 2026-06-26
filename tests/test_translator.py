@@ -163,6 +163,82 @@ class TestTranslatorImplementations:
             translation_result = translator.translate('Hello', 'en', 'zh', doc_type="AI技术", glossary=None)
             assert translation_result.content == '你好'
 
+
+class TestCleanupBlocks:
+    """测试翻译后清理功能"""
+
+    def test_base_cleanup_returns_original(self):
+        """基类 cleanup_blocks 应直接返回原文"""
+        translator = Translator("test_key")
+
+        block_pairs = [
+            ("Hello World", "你好世界"),
+            ("Goodbye", "再见"),
+        ]
+        result = translator.cleanup_blocks(block_pairs)
+        assert result == ["你好世界", "再见"]
+
+    def test_base_cleanup_empty_input(self):
+        """空输入应返回空列表"""
+        translator = Translator("test_key")
+        result = translator.cleanup_blocks([])
+        assert result == []
+
+    def test_aiping_cleanup_removes_footer(self):
+        """AipingTranslator.cleanup_blocks 应移除页脚残留"""
+        translator = AipingTranslator("test_key", "https://test-api.aiping.com/v1", "Qwen3-32B")
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_response = MagicMock()
+            # 模拟LLM返回：块2被清空（页脚），块1保持不变
+            mock_response.choices = [MagicMock(
+                message=MagicMock(content="---块1---\n表示学习与嵌入\n\n---块2---\n")
+            )]
+            mock_create.return_value = mock_response
+
+            block_pairs = [
+                ("Representation Learning", "表示学习与嵌入"),
+                ("x | Table of Contents", "x  |  目录"),
+            ]
+            result = translator.cleanup_blocks(block_pairs)
+            assert result[0] == "表示学习与嵌入"
+            assert result[1] == ""
+
+    def test_aiping_cleanup_on_api_error(self):
+        """API调用失败时应返回原文"""
+        translator = AipingTranslator("test_key", "https://test-api.aiping.com/v1", "Qwen3-32B")
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_create.side_effect = Exception("API Error")
+
+            block_pairs = [
+                ("Hello", "你好"),
+            ]
+            result = translator.cleanup_blocks(block_pairs)
+            assert result == ["你好"]
+
+    def test_parse_cleanup_result_with_markers(self):
+        """_parse_cleanup_result 应正确解析带标记的结果"""
+        translator = AipingTranslator("test_key", "https://test-api.aiping.com/v1", "Qwen3-32B")
+
+        result_text = "---块1---\n清理后文本1\n\n---块2---\n清理后文本2\n\n---块3---\n"
+        parsed = translator._parse_cleanup_result(result_text, 3)
+        assert len(parsed) == 3
+        assert parsed[0] == "清理后文本1"
+        assert parsed[1] == "清理后文本2"
+        assert parsed[2] == ""
+
+    def test_parse_cleanup_result_without_markers(self):
+        """_parse_cleanup_result 对无标记的结果应尽量按行解析"""
+        translator = AipingTranslator("test_key", "https://test-api.aiping.com/v1", "Qwen3-32B")
+
+        result_text = "清理后文本1\n清理后文本2"
+        parsed = translator._parse_cleanup_result(result_text, 2)
+        assert len(parsed) == 2
+        assert parsed[0] == "清理后文本1"
+        assert parsed[1] == "清理后文本2"
+
+
 # 运行所有测试
 if __name__ == "__main__":
     pytest.main([__file__])

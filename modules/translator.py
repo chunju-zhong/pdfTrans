@@ -104,14 +104,30 @@ class Translator:
     
     def _validate_language(self, lang_code):
         """验证语言代码是否支持
-        
+
         Args:
             lang_code (str): 语言代码
-            
+
         Returns:
             bool: 如果支持返回True，否则返回False
         """
         return lang_code in self.supported_languages
+
+    def cleanup_blocks(self, block_pairs, target_lang="zh"):
+        """使用LLM清理翻译后的文本块
+
+        对翻译完成且拆分后的文本块做后处理格式清理，
+        修复页脚残留、前导点号、错位拼接等问题。
+
+        Args:
+            block_pairs: 同一页上的 (原文, 译文) 对列表
+            target_lang: 目标语言代码
+
+        Returns:
+            list[str]: 清理后的译文文本列表，与输入一一对应
+        """
+        # 默认实现：不做清理，直接返回原文
+        return [pair[1] for pair in block_pairs]
     
     def _preprocess_text(self, text):
         """文本预处理
