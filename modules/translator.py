@@ -119,6 +119,9 @@ class Translator:
         对翻译完成且拆分后的文本块做后处理格式清理，
         修复页脚残留、前导点号、错位拼接等问题。
 
+        基类实现调用 self._get_cleanup_api_kwargs() 获取平台特异的
+        extra_body 等参数，子类只需覆盖该钩子方法即可。
+
         Args:
             block_pairs: 同一页上的 (原文, 译文) 对列表
             target_lang: 目标语言代码
@@ -126,8 +129,73 @@ class Translator:
         Returns:
             list[str]: 清理后的译文文本列表，与输入一一对应
         """
-        # 默认实现：不做清理，直接返回原文
-        return [pair[1] for pair in block_pairs]
+        if not block_pairs:
+            return []
+
+        # 构建输入文本：每块显示原文和译文
+        blocks_text = ""
+        for i, (orig, trans) in enumerate(block_pairs):
+            blocks_text += f"--- 块{i+1} ---\n原文: {orig}\n译文: {trans}\n\n"
+
+        system_prompt = """你是一个PDF翻译排版质量检查助手。你的工作是检查并清理翻译后的文本块。
+
+对每个文本块，你都会看到它的英文原文和当前的中文译文。
+
+需要修复的问题类型：
+1. **页脚残留**：如果译文是罗马数字+竖线+标题（如"x | 目录"、"目录  |  xi"）→ 清空该块
+2. **前导点号**：如果译文以" . . . . ."开头 → 去掉前导点号
+3. **纯点号内容**：如果译文只剩点号、空白和数字 → 清空该块
+4. **错位拼接**：如果译文中包含不属于原文的片段（如原文不含"319"但译文有"319 13. 设计模式"）→ 移除不属于原文的片段
+
+严格规则：
+- 只做修剪和清理，不新增内容，不修改正确的翻译
+- 如果一个块因清理变为空，输出空字符串
+- 如果不确定，输出译文不变
+- 不要输出任何格式标记
+
+输出格式：每个清理后的块单独一行，用 ---块N--- 标记。"""
+
+        user_prompt = f"请清理以下翻译文本块：\n\n{blocks_text}"
+
+        try:
+            api_kwargs = self._get_cleanup_api_kwargs()
+            response = self.client.chat.completions.create(
+                model=self.model,
+                stream=False,
+                temperature=0.1,
+                max_tokens=4096,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                **api_kwargs
+            )
+
+            result_text = response.choices[0].message.content or ""
+
+            # 解析结果：按 ---块N--- 标记分割
+            cleaned = self._parse_cleanup_result(result_text, len(block_pairs))
+
+            if len(cleaned) != len(block_pairs):
+                return [pair[1] for pair in block_pairs]
+
+            return cleaned
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"cleanup_blocks API调用失败: {e}")
+            return [pair[1] for pair in block_pairs]
+
+    def _get_cleanup_api_kwargs(self):
+        """获取cleanup API调用的额外参数
+
+        子类可覆盖此方法以传入平台特定的参数（如 extra_body）。
+
+        Returns:
+            dict: 传递给 chat.completions.create 的额外关键字参数
+        """
+        return {}
 
     def _parse_cleanup_result(self, result_text, expected_count):
         """解析cleanup_blocks的LLM返回结果

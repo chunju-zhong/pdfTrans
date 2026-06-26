@@ -146,5 +146,9 @@ class QianfanTranslator(Translator):
         except Exception as e:
             raise Exception(f"百度千帆翻译API请求失败: {str(e)}")
 
+    def _get_cleanup_api_kwargs(self):
+        """百度千帆API调用额外参数"""
+        return {"extra_body": config.QIANFAN_EXTRA_BODY}
+
 
 
