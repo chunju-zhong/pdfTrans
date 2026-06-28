@@ -2,6 +2,12 @@
 
 ## 2026-06-28
 
+- **修复千帆 GLM-5.1 思考模式未关闭**：
+  - 根因：`QIANFAN_EXTRA_BODY = {"enable_thinking": False}` 中的 `enable_thinking` 是 Qwen3 特有参数，对 GLM-5.1 完全无效。GLM-5.1 需使用 `thinking: {"type": "disabled"}` 关闭思考模式（参考智谱 BigModel 官方文档）
+  - 现象：GLM-5.1 翻译藏文时生成 10164 字符的 `reasoning_content` 耗尽 `max_tokens`，`content` 为空，被 fallback 误当作翻译结果
+  - 修复：`config.py` 中 `QIANFAN_EXTRA_BODY` 扩展为同时包含 `enable_thinking: False`（Qwen3 系列）和 `thinking: {"type": "disabled"}`（GLM-4.5+/5.x 系列），各模型服务端忽略自身不识别的参数
+  - 增强：`qianfan_translator.py` 新增 INFO 诊断日志，当 `reasoning_content` 非空时记录长度、`finish_reason`、原文前 100 字符，用于监控思考模式是否真正关闭
+  - 相关文件：`config.py`、`modules/qianfan_translator.py`
 - **新增 LLM 错误处理统一模块**：
   - 新增 `modules/llm_error_handler.py`：`classify_llm_error(e)` 将 OpenAI 异常（AuthenticationError/RateLimitError/BadRequestError/APITimeoutError/APIConnectionError/InternalServerError）映射为统一结构（category/user_message/is_retryable/original_message），提供中文用户友好消息
   - 翻译器（SiliconFlow/Qianfan/Aiping）、语义分析器、Markdown 生成器全部接入 `classify_llm_error`，替换原先的 `str(e)` 裸消息

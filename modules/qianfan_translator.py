@@ -137,6 +137,15 @@ class QianfanTranslator(Translator):
             translated_text = translated_text_raw.strip()
             reasoning_content = reasoning_content_raw.strip()
 
+            # reasoning_content 非空时记录 INFO 诊断日志（用于监控思考模式是否真正关闭）
+            if reasoning_content:
+                import logging
+                _diag_logger = logging.getLogger(__name__)
+                _diag_logger.info(
+                    f"百度千帆翻译残留 reasoning_content: 长度={len(reasoning_content)}, "
+                    f"finish_reason={finish_reason}, 原文前100字符='{text[:100]}'"
+                )
+
             # 翻译结果为空时记录诊断日志并尝试从 reasoning_content fallback
             if not translated_text:
                 import logging

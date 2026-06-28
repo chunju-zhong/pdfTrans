@@ -47,7 +47,10 @@ class Config:
     SILICON_FLOW_EXTRA_BODY = {"enable_thinking": False}
 
     # 百度千帆 extra body
-    QIANFAN_EXTRA_BODY = {"enable_thinking": False}
+    QIANFAN_EXTRA_BODY = {
+        "enable_thinking": False,            # Qwen3 系列关闭思考
+        "thinking": {"type": "disabled"},    # GLM-4.5+/5.x 系列关闭思考
+    }
 
     def __init__(self):
         """初始化配置，调用 _load() 读取环境变量"""

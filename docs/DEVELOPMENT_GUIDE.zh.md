@@ -154,6 +154,8 @@ vim .env
 | `QIANFAN_OCR_LLM_MODEL` | 千帆 LLM OCR 模型 | 无 | 否 |
 | `QIANFAN_EXTRA_BODY` | 千帆 API extra_body 参数（JSON） | `{}` | 否 |
 
+> **代码级默认值**：当 `QIANFAN_EXTRA_BODY` 环境变量未设置时，代码使用类级别默认值 `{"enable_thinking": False, "thinking": {"type": "disabled"}}`，同时关闭 Qwen3 系列（`enable_thinking`）和 GLM-4.5+/5.x 系列（`thinking.type`）的思考模式。详见 [ARCHITECTURE.zh.md](ARCHITECTURE.zh.md) 7.3 节。
+
 ### 2.5 OCR 配置
 
 | 变量名 | 说明 | 默认值 | 必填 |

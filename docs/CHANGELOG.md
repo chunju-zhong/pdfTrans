@@ -2,6 +2,12 @@
 
 ## 2026-06-28
 
+- **Fixed Qianfan GLM-5.1 thinking mode not disabled**:
+  - Root cause: `QIANFAN_EXTRA_BODY = {"enable_thinking": False}` — `enable_thinking` is a Qwen3-specific parameter with no effect on GLM-5.1. GLM-5.1 requires `thinking: {"type": "disabled"}` to disable thinking mode (per Zhipu BigModel official docs)
+  - Symptom: GLM-5.1 generated 10164 chars of `reasoning_content` exhausting `max_tokens` when translating Tibetan, leaving `content` empty; fallback then incorrectly used reasoning content as translation
+  - Fix: `config.py` `QIANFAN_EXTRA_BODY` expanded to include both `enable_thinking: False` (Qwen3 series) and `thinking: {"type": "disabled"}` (GLM-4.5+/5.x series); each model server ignores parameters it doesn't recognize
+  - Enhancement: `qianfan_translator.py` adds INFO diagnostic log when `reasoning_content` is non-empty, recording length, `finish_reason`, and first 100 chars of source text — used to monitor whether thinking mode is truly disabled
+  - Files changed: `config.py`, `modules/qianfan_translator.py`
 - **Added unified LLM error handling module**:
   - Added `modules/llm_error_handler.py`: `classify_llm_error(e)` maps OpenAI exceptions (AuthenticationError/RateLimitError/BadRequestError/APITimeoutError/APIConnectionError/InternalServerError) to a unified structure (category/user_message/is_retryable/original_message), providing Chinese user-friendly messages
   - Translators (SiliconFlow/Qianfan/Aiping), semantic analyzers, and Markdown generator all integrated `classify_llm_error`, replacing raw `str(e)` messages

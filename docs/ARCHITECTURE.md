@@ -742,9 +742,12 @@ class Config:
 
 ```python
 {
-    "enable_thinking": False
+    "enable_thinking": False,            # Disable thinking for Qwen3 series
+    "thinking": {"type": "disabled"},    # Disable thinking for GLM-4.5+/5.x series
 }
 ```
+
+> **Note**: The Qianfan platform uses both GLM-5.1 (translation) and Qwen3-32B (layout/glossary), and the two model families use different parameters to disable thinking. `enable_thinking` is Qwen3-specific, while `thinking.type` is GLM-4.5+-specific. Each model server ignores parameters it doesn't recognize, so they don't conflict.
 
 ### 7.4 PaddleOCR
 

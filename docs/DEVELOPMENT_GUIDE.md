@@ -154,6 +154,8 @@ All configuration is set via the `.env` file or environment variables, loaded by
 | `QIANFAN_OCR_LLM_MODEL` | Qianfan LLM OCR model | None | No |
 | `QIANFAN_EXTRA_BODY` | Qianfan API extra_body parameter (JSON) | `{}` | No |
 
+> **Code-level default**: When the `QIANFAN_EXTRA_BODY` environment variable is not set, the code uses the class-level default `{"enable_thinking": False, "thinking": {"type": "disabled"}}`, which disables thinking for both Qwen3 series (`enable_thinking`) and GLM-4.5+/5.x series (`thinking.type`). See [ARCHITECTURE.md](ARCHITECTURE.md) Section 7.3 for details.
+
 ### 2.5 OCR Configuration
 
 | Variable | Description | Default | Required |

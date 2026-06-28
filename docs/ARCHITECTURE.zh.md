@@ -742,9 +742,12 @@ class Config:
 
 ```python
 {
-    "enable_thinking": False
+    "enable_thinking": False,            # Qwen3 系列关闭思考
+    "thinking": {"type": "disabled"},    # GLM-4.5+/5.x 系列关闭思考
 }
 ```
+
+> **说明**：千帆平台同时使用 GLM-5.1（翻译）和 Qwen3-32B（排版/术语），两类模型使用不同的思考关闭参数。`enable_thinking` 是 Qwen3 特有参数，`thinking.type` 是 GLM-4.5+ 特有参数，各模型服务端会忽略自身不识别的参数，互不冲突。
 
 ### 7.4 PaddleOCR
 

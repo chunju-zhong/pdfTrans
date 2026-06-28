@@ -1,0 +1,9 @@
+- [x] `config.py` 第 50 行 `QIANFAN_EXTRA_BODY` 同时包含 `enable_thinking: False` 和 `thinking: {"type": "disabled"}` 两个字段
+- [x] `QIANFAN_EXTRA_BODY` 字典语法正确，无 trailing comma 或类型错误
+- [x] `modules/qianfan_translator.py` 在 `reasoning_content` 非空时记录 INFO 诊断日志，包含长度、finish_reason、原文前 100 字符
+- [x] 新增 INFO 日志不替换原有 WARNING 日志（原第 144-147 行，现因插入 INFO 块下移至第 149-158 行），两者共存
+- [ ] 千帆平台 + GLM-5.1 翻译藏文：`reasoning_content` 长度为 0，`content` 字段含中文翻译（需运行时验证）
+- [ ] 千帆平台 + GLM-5.1 翻译藏文：`finish_reason` 不为 `length`（未被思考内容耗尽 max_tokens）（需运行时验证）
+- [x] 千帆平台 + qwen3-32b 排版/术语调用：`glossary_extractor.py:250` 引用 `config.QIANFAN_EXTRA_BODY`，新参数自动生效（代码层面通过；4xx 无错误需运行时验证）
+- [ ] 翻译结果不再出现"1. **分析源文本**"等思考过程内容（需运行时验证）
+- [x] `silicon_flow_translator.py` 和 `aiping_translator.py` 未被修改（`git status` 确认仅 `config.py` 和 `modules/qianfan_translator.py` 被改动）
