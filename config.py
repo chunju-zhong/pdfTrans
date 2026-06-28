@@ -150,6 +150,8 @@ class Config:
         self.QIANFAN_OCR_LLM_MODEL = os.environ.get('QIANFAN_OCR_LLM_MODEL') or 'DeepSeek-OCR'
         self.OCR_LLM_MAX_TOKENS = int(os.environ.get('OCR_LLM_MAX_TOKENS', '8000'))
         self.OCR_LLM_TEMPERATURE = float(os.environ.get('OCR_LLM_TEMPERATURE', '0.1'))
+        self.OCR_LLM_FREQUENCY_PENALTY = float(os.environ.get('OCR_LLM_FREQUENCY_PENALTY', '0.0'))
+        self.OCR_LLM_PRESENCE_PENALTY = float(os.environ.get('OCR_LLM_PRESENCE_PENALTY', '0.0'))
         self.OCR_LLM_DPI = int(os.environ.get('OCR_LLM_DPI', '150'))
         self.OCR_LLM_TIMEOUT = int(os.environ.get('OCR_LLM_TIMEOUT', '300'))
 

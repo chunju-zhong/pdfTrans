@@ -40,6 +40,8 @@ class TextBlock(CopyableMixin):
         self.strikethrough = False
         # 对齐方式
         self.alignment = 0  # 0=左对齐, 1=居中, 2=右对齐
+        # 翻译失败标记：当翻译失败回退到原文时设为 True，下游 format_blocks 跳过该块
+        self.translation_failed = False
     
     def update_style(self, font="", font_size=0.0, color=0, flags=0):
         """更新文本块样式信息
@@ -92,6 +94,7 @@ class TextBlock(CopyableMixin):
         obj.underline = data.get('underline', False)
         obj.strikethrough = data.get('strikethrough', False)
         obj.alignment = data.get('alignment', 0)
+        obj.translation_failed = data.get('translation_failed', False)
         return obj
 
     def to_dict(self):
@@ -121,4 +124,5 @@ class TextBlock(CopyableMixin):
             'underline': self.underline,
             'strikethrough': self.strikethrough,
             'alignment': self.alignment,
+            'translation_failed': self.translation_failed,
         }

@@ -44,8 +44,8 @@ def _auto_register_rules() -> None:
             rules: List[PromptRule] = getattr(module, "RULES", [])
             if rules:
                 registry.register_rules(rules)
-                logger.info(
-                    "已加载语言规则模块 '%s': %d 条规则",
+                logger.debug(
+                    "已注册语言规则模块 '%s': %d 条规则到全局注册表（按语言对过滤后才会应用）",
                     modname, len(rules),
                 )
             else:

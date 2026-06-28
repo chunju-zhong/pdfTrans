@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from config import config
+from modules.llm_error_handler import classify_llm_error
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,8 @@ autonomous problem-solving: 自主问题解决
             return self._format_glossary(glossary_text)
 
         except Exception as e:
-            logger.error(f"{self.provider_name}术语提取失败: {str(e)}")
+            error_info = classify_llm_error(e)
+            logger.error(f"{self.provider_name}术语提取失败: {error_info['user_message']}")
             return ""
 
     def _format_glossary(self, glossary_text):

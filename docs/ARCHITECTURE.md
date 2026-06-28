@@ -63,6 +63,7 @@ pdfTrans/
 │   ├── glossary_extractor.py       # GlossaryExtractor / create_glossary_extractor() — glossary extractor
 │   ├── pdf_text_renderer.py        # PdfTextRenderer — PDF text rendering (split from PdfGenerator)
 │   ├── pdf_table_renderer.py       # PdfTableRenderer — PDF table rendering (split from PdfGenerator)
+│   ├── llm_error_handler.py        # classify_llm_error() — unified LLM error classification (Chinese user-friendly messages)
 │   │
 │   ├── extractors/                 # PDF extraction sub-module
 │   │   ├── __init__.py

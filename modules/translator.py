@@ -1,4 +1,40 @@
+import logging
+import re
+
 from models.result_types import TranslationResult, TruncationInfo
+
+logger = logging.getLogger(__name__)
+
+_FORMAT_SYSTEM_PROMPT = """你是一个PDF翻译排版质量检查助手。你的工作是检查并优化文本块的格式排版，
+使内容在格式上更清晰、更美观、更专业。
+
+【输出格式要求（最高优先级，必须严格遵守）】
+- 输出每个块前必须以 `---块N---` 标记开头（N 为块编号，从 1 开始，与输入一致）。
+- `---块N---` 标记是结构分隔符，必须在输出中按相同位置回显，不得剥离或省略。
+- 一个块对应一个 `---块N---` 标记，块之间不得合并。
+
+示例：
+输入：
+---块1---
+这是第一段译文。
+---块2---
+这是第二段译文。
+
+正确输出：
+---块1---
+这是第一段译文。
+---块2---
+这是第二段译文。
+
+（标记原样回显，仅对正文做格式排版优化。）
+
+严格规则：
+- 只做格式排版优化，**不新增内容、不修改正确的文本**
+- **结构保留（最高优先级）**：保留目录、列表、多行结构化文本的逐行换行。识别目录模式（条目+页码、序号. 条目 页码、含前导点号的目录行）和页脚/页眉多行结构（如"页码 | 章节名"），逐行保留，不得将结构化文本的换行替换为空格或合并多行为一行。保留原文的换行结构，不得擅自合并行或把换行改为空格。
+- 不要改写、润色或重述原文意思
+- 如果一个块经处理后变为空，输出空字符串
+- 如果不确定，保持文本**完全不变**
+- 不要输出解释、注释、备注、思考过程"""
 
 
 class Translator:
@@ -16,6 +52,7 @@ class Translator:
         """
         self.api_key = api_key
         self.api_url = api_url
+        self.client = None
         self.supported_languages = {
             'zh': '中文',
             'en': '英语',
@@ -113,86 +150,78 @@ class Translator:
         """
         return lang_code in self.supported_languages
 
-    def cleanup_blocks(self, block_pairs, target_lang="zh"):
-        """使用LLM清理翻译后的文本块
+    def format_blocks(self, translated_texts, target_lang="zh"):
+        """使用LLM对翻译后的文本块进行格式排版优化
 
-        对翻译完成且拆分后的文本块做后处理格式清理，
-        修复页脚残留、前导点号、错位拼接等问题。
+        对翻译完成后的文本块做后处理格式排版，
+        包括标点符号规范、中英文混排间距、多余空白清理、
+        以及页脚残留、前导点号等异常内容清理。
 
-        基类实现调用 self._get_cleanup_api_kwargs() 获取平台特异的
+        基类实现调用 self._get_format_api_kwargs() 获取平台特异的
         extra_body 等参数，子类只需覆盖该钩子方法即可。
 
         Args:
-            block_pairs: 同一页上的 (原文, 译文) 对列表
+            translated_texts: 同一页上的译文文本列表（不需要原文配对）
             target_lang: 目标语言代码
 
         Returns:
-            list[str]: 清理后的译文文本列表，与输入一一对应
+            list[str]: 格式排版优化后的文本列表，与输入一一对应
         """
-        if not block_pairs:
+        if not translated_texts:
             return []
 
         # 无 API client 时回退到原文（基类或未配置的子类）
-        if not hasattr(self, 'client') or self.client is None:
-            return [pair[1] for pair in block_pairs]
+        if self.client is None:
+            return translated_texts
 
-        # 构建输入文本：每块显示原文和译文
-        blocks_text = ""
-        for i, (orig, trans) in enumerate(block_pairs):
-            blocks_text += f"--- 块{i+1} ---\n原文: {orig}\n译文: {trans}\n\n"
+        # 构建输入文本
+        parts = [f"---块{i+1}---\n{text}\n\n" for i, text in enumerate(translated_texts)]
+        blocks_text = "".join(parts)
 
-        system_prompt = """你是一个PDF翻译排版质量检查助手。你的工作是检查并清理翻译后的文本块。
+        # 注入目标语言名称，使 LLM 按目标语言排版规范优化标点和间距
+        target_lang_name = self.supported_languages.get(target_lang, target_lang)
 
-对每个文本块，你都会看到它的英文原文和当前的中文译文。
+        user_prompt = (
+            "请对以下文本块进行格式排版优化。\n"
+            f"目标语言为{target_lang_name}，请按{target_lang_name}排版规范优化标点、间距等。\n"
+            "输入中的 `---块N---` 标记是结构分隔符，输出时必须为每个块保留对应编号的标记，不得剥离。\n\n"
+            f"{blocks_text}"
+        )
 
-需要修复的问题类型：
-1. **页脚残留**：如果译文是罗马数字+竖线+标题（如"x | 目录"、"目录  |  xi"）→ 清空该块
-2. **前导点号**：如果译文以" . . . . ."开头 → 去掉前导点号
-3. **纯点号内容**：如果译文只剩点号、空白和数字 → 清空该块
-4. **错位拼接**：如果译文中包含不属于原文的片段（如原文不含"319"但译文有"319 13. 设计模式"）→ 移除不属于原文的片段
+        # 异常向上抛出由调用方统一处理（task.add_warning 上报 UI）
+        api_kwargs = self._get_format_api_kwargs()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            stream=True,
+            temperature=0.1,
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": _FORMAT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            **api_kwargs
+        )
 
-严格规则：
-- 只做修剪和清理，不新增内容，不修改正确的翻译
-- 如果一个块因清理变为空，输出空字符串
-- 如果不确定，输出译文不变
-- 不要输出任何格式标记
+        result_text = ""
+        for chunk in response:
+            if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, "content") and delta.content:
+                    result_text += delta.content
 
-输出格式：每个清理后的块单独一行，用 ---块N--- 标记。"""
+        # 解析结果：按 ---块N--- 标记分割
+        cleaned = self._parse_format_result(result_text, len(translated_texts))
 
-        user_prompt = f"请清理以下翻译文本块：\n\n{blocks_text}"
-
-        try:
-            api_kwargs = self._get_cleanup_api_kwargs()
-            response = self.client.chat.completions.create(
-                model=self.model,
-                stream=False,
-                temperature=0.1,
-                max_tokens=4096,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                **api_kwargs
+        if len(cleaned) != len(translated_texts):
+            logger.warning(
+                f"format_blocks: LLM返回了{len(cleaned)}个块（期望{len(translated_texts)}个），回退到原文"
             )
+            return translated_texts
 
-            result_text = response.choices[0].message.content or ""
+        return cleaned
 
-            # 解析结果：按 ---块N--- 标记分割
-            cleaned = self._parse_cleanup_result(result_text, len(block_pairs))
-
-            if len(cleaned) != len(block_pairs):
-                return [pair[1] for pair in block_pairs]
-
-            return cleaned
-
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"cleanup_blocks API调用失败: {e}")
-            return [pair[1] for pair in block_pairs]
-
-    def _get_cleanup_api_kwargs(self):
-        """获取cleanup API调用的额外参数
+    def _get_format_api_kwargs(self):
+        """获取format API调用的额外参数
 
         子类可覆盖此方法以传入平台特定的参数（如 extra_body）。
 
@@ -201,26 +230,32 @@ class Translator:
         """
         return {}
 
-    def _parse_cleanup_result(self, result_text, expected_count):
-        """解析cleanup_blocks的LLM返回结果
+    def _parse_format_result(self, result_text, expected_count):
+        """解析format_blocks的LLM返回结果
 
-        按 ---块N--- 标记分割LLM返回的清理结果文本。
+        按 ---块N--- 标记分割LLM返回的格式化排版结果文本。
 
         Args:
             result_text: LLM返回的文本
             expected_count: 期望的块数量
 
         Returns:
-            list[str]: 解析出的清理后文本列表
+            list[str]: 解析出的格式化排版文本列表
         """
-        import re
         pattern = r'---\s*块(\d+)\s*---'
         parts = re.split(pattern, result_text)
 
         if len(parts) < 3:
-            # 没有标记，尝试按行分割
+            # 缺少标记，尝试按非空行分割回退
             lines = [l.strip() for l in result_text.strip().split('\n') if l.strip()]
-            return lines[:expected_count]
+            if len(lines) >= expected_count:
+                return lines[:expected_count]
+            # 行级回退数量仍不足，返回空列表触发整页回退
+            # （返回 [] 使 format_blocks 的长度检查 len([]) != expected_count 恒为 True）
+            logger.warning(
+                "_parse_format_result: LLM返回结果缺少 ---块N--- 标记且回退行数不足，回退到原文"
+            )
+            return []
 
         # 解析编号和内容
         result = {}
@@ -279,7 +314,7 @@ class Translator:
 8. **公式不翻译**：数学公式、LaTeX表达式、数学符号（如 $...$、\\frac{{}}{{}}、α、β、∑ 等），保持原状不翻译；
 9. **缩写不解释**：专业缩写（如 AI、LLM、API、CPU 等），保持原状不展开解释；
 10. **URL不翻译**：原文中的URL地址，保持原状不翻译；
-11. **列表格式保持**：原文中的列表格式（换行、项目符号如•、-、数字编号等），在翻译结果中保持，不将列表项合并为连续段落；
+11. **列表与多行结构保持**：原文中的列表格式（换行、项目符号如•、-、数字编号等）、目录（条目+页码的多行结构，含"序号. 条目 页码"、"条目 ........ 页码"、含前导点号的目录行）、以及其它多行结构化文本（页脚/页眉的"页码 | 章节名"等多行结构），在翻译结果中保持逐行换行，不合并为连续段落，不将换行替换为空格；
 12. **单元格分隔符保留**：输入文本包含 "|||" 分隔符时，在翻译结果的对应位置保留每个 "|||"，每个分隔段独立翻译，不合并相邻段内容。
 
 四、禁止元注释

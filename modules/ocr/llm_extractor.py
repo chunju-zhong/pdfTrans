@@ -28,6 +28,7 @@ from modules.ocr.base import OcrExtractor
 from modules.ocr.llm_response_parser import LlmOcrResponseParser
 from modules.ocr.llm_table_parser import LlmTableParser
 from config import config
+from modules.llm_error_handler import classify_llm_error
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ VLM_JSON_SYSTEM_PROMPT = """你是一个专业的文档OCR引擎。分析提供�
 5. type为header/footer/footnote/page_number时is_body为false
 6. 如果某类内容为空，对应数组为空列表
 7. 仅输出JSON，不要输出其他内容"""
+
 
 
 def _is_deepseek_ocr_model(model_name):
@@ -126,21 +128,24 @@ class LlmOcrExtractor(OcrExtractor):
                 self._client = OpenAI(
                     base_url=config.AIPING_API_URL,
                     api_key=config.AIPING_API_KEY,
-                    timeout=config.OCR_LLM_TIMEOUT
+                    timeout=config.OCR_LLM_TIMEOUT,
+                    max_retries=0
                 )
                 self._model = self._model_override or config.AIPING_OCR_LLM_MODEL
             elif self.translator_type == 'silicon_flow':
                 self._client = OpenAI(
                     base_url=config.SILICON_FLOW_API_URL,
                     api_key=config.SILICON_FLOW_API_KEY,
-                    timeout=config.OCR_LLM_TIMEOUT
+                    timeout=config.OCR_LLM_TIMEOUT,
+                    max_retries=0
                 )
                 self._model = self._model_override or config.SILICON_FLOW_OCR_LLM_MODEL
             elif self.translator_type == 'qianfan':
                 self._client = OpenAI(
                     base_url=config.QIANFAN_API_URL,
                     api_key=config.QIANFAN_API_KEY,
-                    timeout=config.OCR_LLM_TIMEOUT
+                    timeout=config.OCR_LLM_TIMEOUT,
+                    max_retries=0
                 )
                 self._model = self._model_override or config.QIANFAN_OCR_LLM_MODEL
             else:
@@ -294,6 +299,25 @@ class LlmOcrExtractor(OcrExtractor):
         except Exception:
             return False
 
+    def _build_lang_hint(self) -> str:
+        """根据 source_lang 从规则注册表加载 OCR 语言专项提示
+
+        Returns:
+            str: 拼接好的语言专项提示文本，末尾带 "\n\n"；
+                 无匹配规则或加载失败时返回空字符串
+        """
+        try:
+            from prompts import rule_registry
+            ocr_rules = rule_registry.get_rules("ocr", self.source_lang, "*")
+            if ocr_rules:
+                hint_parts = []
+                for r in ocr_rules:
+                    hint_parts.append(r.content.strip())
+                return "\n".join(hint_parts) + "\n\n" if hint_parts else ''
+        except ImportError:
+            pass
+        return ''
+
     def _extract_page(self, img_base64, page_num, page_info=None, page=None, temp_images_dir=None):
         """调用LLM视觉模型提取单页内容
 
@@ -319,7 +343,9 @@ class LlmOcrExtractor(OcrExtractor):
             effective_max_tokens = config.OCR_LLM_MAX_TOKENS
 
             if use_deepseek_prompt:
-                # DeepSeek-OCR 原生格式：prompt放在user消息的文本部分
+                # DeepSeek-OCR 原生格式 prompt（不含藏文 Unicode 字符，
+                # 避免服务端 tokenizer 解析失败返回 500）
+                user_text = DEEPSEEK_OCR_PROMPT
                 messages = [
                     {
                         "role": "user",
@@ -332,26 +358,17 @@ class LlmOcrExtractor(OcrExtractor):
                             },
                             {
                                 "type": "text",
-                                "text": DEEPSEEK_OCR_PROMPT
+                                "text": user_text
                             }
                         ]
                     }
                 ]
             else:
                 # 通用VLM模型：system prompt + user消息
-                # 根据源语言构建特定提示
-                lang_hint = ''
-                try:
-                    from prompts import rule_registry
-                    ocr_rules = rule_registry.get_rules("ocr", self.source_lang, "*")
-                    if ocr_rules:
-                        hint_parts = []
-                        for r in ocr_rules:
-                            hint_parts.append(r.content.strip())
-                        lang_hint = "\n".join(hint_parts) + "\n\n" if hint_parts else ''
-                except ImportError:
-                    pass
-                user_text = f"{lang_hint}请提取第{page_num}页PDF中的所有文字、表格和图表信息。"
+                lang_hint = self._build_lang_hint()
+                lang_name_zh = config.SUPPORTED_LANGUAGES.get(self.source_lang or '', '')
+                lang_prefix = f"该文档主要语言为{lang_name_zh}。" if lang_name_zh else ''
+                user_text = f"{lang_hint}{lang_prefix}请提取第{page_num}页PDF中的所有文字、表格和图表信息。"
                 messages = [
                     {"role": "system", "content": VLM_JSON_SYSTEM_PROMPT},
                     {
@@ -385,6 +402,8 @@ class LlmOcrExtractor(OcrExtractor):
                         messages=messages,
                         temperature=config.OCR_LLM_TEMPERATURE,
                         max_tokens=effective_max_tokens,
+                        frequency_penalty=config.OCR_LLM_FREQUENCY_PENALTY,
+                        presence_penalty=config.OCR_LLM_PRESENCE_PENALTY,
                     )
 
                     if not response.choices:
@@ -393,11 +412,11 @@ class LlmOcrExtractor(OcrExtractor):
                     result_text = response.choices[0].message.content
                     finish_reason = response.choices[0].finish_reason
                     usage = response.usage
-                    logger.info(f"LLM OCR第{page_num}页原始响应(前500字): {result_text[:500]}")
+                    logger.info(f"LLM OCR第{page_num}页原始响应(前1000字): {result_text[:1000]}")
                     if finish_reason == 'length':
                         logger.warning(
                             f"第{page_num}页LLM OCR响应被截断（finish_reason=length），"
-                            f"当前输出={len(result_text)}字符，可考虑增大OCR_LLM_MAX_TOKENS"
+                            f"当前输出={len(result_text)}字符，请检查输出是否含重复短语，或调高 OCR_LLM_FREQUENCY_PENALTY"
                         )
                     if usage:
                         logger.info(
@@ -428,7 +447,11 @@ class LlmOcrExtractor(OcrExtractor):
 
         except Exception as e:
             logger.error(f"LLM OCR提取第{page_num}页失败: {e}", exc_info=True)
-            error_msg = f"LLM OCR API 请求失败: {str(e)}"
+            error_info = classify_llm_error(e)
+            error_msg = f"LLM OCR API 请求失败: {error_info['user_message']}"
+            # max_tokens 超限时追加当前配置值
+            if error_info['category'] == 'bad_request_max_tokens':
+                error_msg += f"（当前 OCR_LLM_MAX_TOKENS={config.OCR_LLM_MAX_TOKENS}）"
             return (None, error_msg)
 
         # 不应到达此处，但为类型安全保留

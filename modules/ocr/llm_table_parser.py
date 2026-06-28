@@ -231,8 +231,9 @@ class LlmTableParser:
                 clamped_colspan = min(colspan, n_cols - col_idx)
 
                 # 在起始位置放置 PdfCell（bbox 稍后计算）
+                # 保留换行符：单元格内的多行结构需要保留 \n
                 matrix[row_idx][col_idx] = PdfCell(
-                    text=cell_text.replace('\n', ' '),
+                    text=cell_text,
                     bbox=(0, 0, 0, 0),
                     row_idx=row_idx,
                     col_idx=col_idx,

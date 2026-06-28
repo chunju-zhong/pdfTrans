@@ -310,6 +310,8 @@ class TranslationTableHandler:
             return table_idx, row_idx, result, table_pages.get(table_idx, 0)
         except Exception as e:
             logger.warning(f"任务 {task.task_id} 表格行翻译失败: {e}")
+            # 新增 UI 上报
+            task.add_warning("表格行翻译失败，已回退到原文", {"process": "table_translation", "error": str(e)})
             result = {}
             for col_idx, text in non_empty_cells:
                 cell = row_cells[col_idx]

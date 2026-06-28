@@ -2,6 +2,7 @@ from openai import OpenAI
 from .translator import Translator
 from models.result_types import TranslationResult, TruncationInfo
 from config import config
+from modules.llm_error_handler import classify_llm_error
 
 class SiliconFlowTranslator(Translator):
     """硅基流动翻译API实现
@@ -25,6 +26,7 @@ class SiliconFlowTranslator(Translator):
             base_url=self.api_url,
             api_key=self.api_key,
             timeout=config.TRANSLATION_TIMEOUT,
+            max_retries=0,  # 禁用SDK内置重试，避免请求超时后静默重试拖延整体流程
         )
     
     def translate(self, text, source_lang, target_lang, doc_type, glossary):
@@ -82,12 +84,14 @@ class SiliconFlowTranslator(Translator):
         
         
         try:
-            # 调用硅基流动API
+            # 调用硅基流动API - 流式调用以避免长请求整体超时
             response = self.client.chat.completions.create(
                 model=self.model,
-                stream=False,  # 非流式调用
+                stream=True,  # 流式调用，避免长请求整体超时
                 temperature=config.TRANSLATION_TEMPERATURE,
                 top_p=config.TRANSLATION_TOP_P,
+                max_tokens=self.max_tokens,
+                extra_body=config.SILICON_FLOW_EXTRA_BODY,  # 补传 extra_body
                 messages=[
                     {
                         "role": "system",
@@ -99,26 +103,48 @@ class SiliconFlowTranslator(Translator):
                     }
                 ]
             )
-            
-            # 处理响应 - stream=False时直接处理非流式响应
-            translated_text = ""
+
+            # 处理响应 - 累积流式 chunk
+            translated_text_raw = ""
+            reasoning_content_raw = ""
             token_usage = {}
             finish_reason = ""
-            
-            if hasattr(response, "choices") and len(response.choices) > 0:
-                choice = response.choices[0]
-                if hasattr(choice, "message") and hasattr(choice.message, "content"):
-                    translated_text = choice.message.content.strip()
-                if hasattr(choice, "finish_reason"):
-                    finish_reason = choice.finish_reason
-            
-            # 捕获token使用信息
-            if hasattr(response, "usage") and response.usage:
-                token_usage = {
-                    "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
-                    "completion_tokens": getattr(response.usage, "completion_tokens", 0),
-                    "total_tokens": getattr(response.usage, "total_tokens", 0)
-                }
+
+            for chunk in response:
+                if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                    choice = chunk.choices[0]
+                    delta = choice.delta if hasattr(choice, "delta") else None
+                    if delta is not None:
+                        # 累积主翻译内容
+                        if hasattr(delta, "content") and delta.content:
+                            translated_text_raw += delta.content
+                        # 累积 reasoning_content（用于 fallback）
+                        if hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                            reasoning_content_raw += delta.reasoning_content
+                    # 读取 finish_reason（通常出现在最后一个 chunk）
+                    if hasattr(choice, "finish_reason") and choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                # 读取 token usage（通常出现在最后一个 chunk）
+                if hasattr(chunk, "usage") and chunk.usage:
+                    token_usage = {
+                        "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
+                        "total_tokens": getattr(chunk.usage, "total_tokens", 0)
+                    }
+
+            translated_text = translated_text_raw.strip()
+            reasoning_content = reasoning_content_raw.strip()
+
+            # 翻译结果为空时记录诊断日志并尝试从 reasoning_content fallback
+            if not translated_text:
+                import logging
+                _diag_logger = logging.getLogger(__name__)
+                _diag_logger.warning(
+                    f"硅基流动翻译结果为空: reasoning_content长度={len(reasoning_content)}, "
+                    f"finish_reason={finish_reason}, 原文前100字符='{text[:100]}'"
+                )
+                if reasoning_content:
+                    translated_text = reasoning_content
             
             # 检查是否被截断
             truncated = finish_reason == "length"
@@ -142,9 +168,10 @@ class SiliconFlowTranslator(Translator):
             )
                 
         except Exception as e:
-            raise Exception(f"硅基流动翻译API请求失败: {str(e)}")
+            error_info = classify_llm_error(e)
+            raise Exception(f"硅基流动翻译API请求失败: {error_info['user_message']}") from e
 
-    def _get_cleanup_api_kwargs(self):
+    def _get_format_api_kwargs(self):
         """硅基流动API调用额外参数"""
         return {"extra_body": config.SILICON_FLOW_EXTRA_BODY}
 

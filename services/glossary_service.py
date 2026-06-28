@@ -124,11 +124,14 @@ class GlossaryService:
             # 确保任务状态更新为100%
             if task:
                 task.update_phase_progress('term_extraction', 100, '术语提取完成！')
-            
+
             return final_glossary
-            
+
         except Exception as e:
             logger.error(f"从PDF中提取术语表失败: {str(e)}")
+            # 新增 UI 上报
+            if task:
+                task.add_warning("术语提取失败，翻译将不使用术语表", {"process": "glossary", "error": str(e)})
             return ""
     
     def extract_glossary_sync(self, pdf_path, source_lang, target_lang, extractor_type='aiping', pages=None, doc_type=None, glossary_model=None, task=None, progress_callback=None, tmp_dir=None):

@@ -1,5 +1,28 @@
 # 更新日志
 
+## 2026-06-28
+
+- **新增 LLM 错误处理统一模块**：
+  - 新增 `modules/llm_error_handler.py`：`classify_llm_error(e)` 将 OpenAI 异常（AuthenticationError/RateLimitError/BadRequestError/APITimeoutError/APIConnectionError/InternalServerError）映射为统一结构（category/user_message/is_retryable/original_message），提供中文用户友好消息
+  - 翻译器（SiliconFlow/Qianfan/Aiping）、语义分析器、Markdown 生成器全部接入 `classify_llm_error`，替换原先的 `str(e)` 裸消息
+- **翻译器切换为流式调用**：
+  - `SiliconFlowTranslator` 和 `QianfanTranslator` 从 `stream=False` 改为 `stream=True`，与 `AipingTranslator` 一致
+  - 所有翻译器 `max_retries=0`（禁用 SDK 内置重试，由应用层控制）
+- **语义分析器健壮性增强**：
+  - 新增 3 级 JSON 提取容错（直接解析 / ```json 围栏 / 大括号扫描），`_extract_json_from_response()` 兼容模型返回 markdown 包裹或带前后缀的 JSON
+  - 流式响应 `content` 为空时从 `reasoning_content` fallback（兼容推理模型被截断的场景）
+- **Code Review v7 修复（6 项）**：
+  - **Issue 1 (HIGH)**：`_parse_format_result` sentinel 数据损坏 — 失败分支返回 `[]` 而非 `["fallback_invalid_format"]`，避免单块+空响应时哨兵字符串被写入译文
+  - **Issue 2**：删除 `llm_extractor.py` 中 `_build_short_english_hint` 死代码及 `_SOURCE_LANG_ENGLISH_NAMES` 字典
+  - **Issue 3**：`format_blocks` 移除内部 try/except，异常向上抛出由调用方 `translation_content.py` 通过 `task.add_warning` 上报 UI
+  - **Issue 4**：删除 `llm_response_parser.py` 未使用的 `numpy`/`PIL` 导入
+  - **Issue 5**：`format_blocks` 在 user_prompt 注入目标语言名称（如"目标语言为中文"），提升排版准确性
+  - **Issue 6**：`format_blocks` 调用方使用 `classify_llm_error` 生成友好消息
+- **translation_failed 标志传播**：`TextBlock`/`MergedBlock` 新增 `translation_failed` 字段，翻译失败的块在后续管线中可被识别
+- **LLM OCR 日志增强**：原始响应日志从前 500 字扩展到前 1000 字，便于调试解析失败
+- **测试 mock 同步**：修复 3 个翻译器测试在流式切换后 mock 失效的问题（`test_silicon_flow_translate` / `test_silicon_flow_translator.test_translate` / `test_qianfan_translator.test_translate`），更新为流式响应 mock 格式
+- 相关文件：`modules/llm_error_handler.py`（新增）、`modules/translator.py`、`modules/silicon_flow_translator.py`、`modules/qianfan_translator.py`、`modules/aiping_translator.py`、`modules/semantic_analyzer.py`、`modules/aiping_semantic_analyzer.py`、`modules/markdown_generator.py`、`modules/ocr/llm_extractor.py`、`modules/ocr/llm_response_parser.py`、`services/translation_content.py`、`models/text_block.py`、`models/merged_block.py`、`tests/test_translator.py`、`tests/test_semantic_analyzer_json_extraction.py`（新增）
+
 ## 2026-06-26
 
 - **新增百度千帆翻译服务（qianfan）**：

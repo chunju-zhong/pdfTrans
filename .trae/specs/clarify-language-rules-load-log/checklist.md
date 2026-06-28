@@ -1,0 +1,9 @@
+- [x] `language_rules/__init__.py` 加载日志从 INFO 降为 DEBUG
+- [x] 加载日志文案从"已加载"改为"已注册...到全局注册表（按语言对过滤后才会应用）"
+- [x] `language_rules/__init__.py` 的 `_auto_register_rules` 注册逻辑不变
+- [x] `rule_registry.py` 的 `merge_into_prompt` 无匹配规则时新增 INFO 日志
+- [x] `rule_registry.py` 的 `merge_into_prompt` 有匹配规则时的 INFO 日志保持不变
+- [x] `rule_registry.py` 的 `get_rules` 匹配逻辑不变
+- [x] 不改动 `bo_to_zh.py` / `base.py` 的规则定义
+- [x] 相关测试全部通过
+- [x] en→zh 翻译启动时不再在 INFO 级别输出 bo_to_zh 加载日志

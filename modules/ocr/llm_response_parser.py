@@ -121,7 +121,7 @@ class LlmOcrResponseParser:
             ocr_blocks = self._parse_markdown_to_blocks(result_text)
 
         if not ocr_blocks:
-            logger.warning(f"第{page_num}页LLM OCR结果解析失败，原始响应(前500字): {result_text[:500]}")
+            logger.warning(f"第{page_num}页LLM OCR结果解析失败，原始响应(前1000字): {result_text[:1000]}")
             return None
 
         # 阶段2: 模型映射
@@ -554,6 +554,9 @@ class LlmOcrResponseParser:
             y1 = max(0, min(y1, 999))
             x2 = max(0, min(x2, 999))
             y2 = max(0, min(y2, 999))
+
+            # 归一化坐标相对于整个渲染图像，渲染图像完全覆盖 PDF 页面
+            # 因此直接映射到整个页面
             return (x1 / 999 * page_width, y1 / 999 * page_height,
                     x2 / 999 * page_width, y2 / 999 * page_height)
         else:

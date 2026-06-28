@@ -1,0 +1,19 @@
+- [x] `modules/ocr/llm_extractor.py` DeepSeek-OCR 分支（`if use_deepseek_prompt:`）仍调用 `_build_lang_hint()`
+- [x] `modules/ocr/llm_extractor.py` DeepSeek-OCR 分支在 `lang_hint` 非空时使用 `f"<image>\n{lang_hint}<|grounding|>Convert the document to markdown."`
+- [x] `modules/ocr/llm_extractor.py` DeepSeek-OCR 分支在 `lang_hint` 为空时使用 `DEEPSEEK_OCR_PROMPT`（fallback）
+- [x] `modules/ocr/llm_extractor.py` DeepSeek-OCR 分支不再使用 `DEEPSEEK_OCR_PROMPT + lang_hint`（追加到末尾的旧方式）
+- [x] `modules/ocr/llm_extractor.py` DeepSeek-OCR 分支的 `lang_hint` 位于 `<image>` 之后、`<|grounding|>` 之前
+- [x] `modules/ocr/llm_extractor.py` DeepSeek-OCR 分支的 `<|grounding|>Convert the document to markdown.` 保持原生格式不变
+- [x] `modules/ocr/llm_extractor.py` DeepSeek-OCR 分支添加了注释说明 lang_hint 插入位置的原因
+- [x] `modules/ocr/llm_extractor.py` VLM 分支（`else:`）仍调用 `_build_lang_hint()`
+- [x] `modules/ocr/llm_extractor.py` VLM 分支的 `user_text` 仍为 `f"{lang_hint}请提取第{page_num}页PDF中的所有文字、表格和图表信息。"`
+- [x] `modules/ocr/llm_extractor.py` VLM 分支的 system 消息仍为 `VLM_JSON_SYSTEM_PROMPT`
+- [x] `_build_lang_hint` 方法仍然存在（未被删除）
+- [x] `_build_lang_hint` 方法逻辑未被修改
+- [x] `config.py` 中 `OCR_LLM_TEMPERATURE` 默认值保持 `0.1`
+- [x] `config.py` 中 `OCR_LLM_MAX_TOKENS` 默认值保持 `8000`
+- [x] `config.py` 中 `OCR_LLM_FREQUENCY_PENALTY` 默认值保持 `0.0`
+- [x] `config.py` 中 `OCR_LLM_PRESENCE_PENALTY` 默认值保持 `0.0`
+- [x] `DEEPSEEK_OCR_PROMPT` 常量保持 `"<image>\n<|grounding|>Convert the document to markdown."`
+- [x] `prompts/language_rules/bo_to_zh.py` OCR 规则内容未被修改
+- [x] DeepSeek-OCR 分支的 messages 结构为单一 user 消息（无 system 消息）

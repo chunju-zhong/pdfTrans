@@ -2,6 +2,7 @@ from openai import OpenAI
 from .translator import Translator
 from models.result_types import TranslationResult, TruncationInfo
 from config import config
+from modules.llm_error_handler import classify_llm_error
 
 class AipingTranslator(Translator):
     """aiping翻译API实现
@@ -174,9 +175,10 @@ class AipingTranslator(Translator):
                     time.sleep(retry_delay)
                 else:
                     # 最后一次尝试失败，抛出异常
-                    raise Exception(f"aiping翻译API请求失败: {str(e)}")
+                    error_info = classify_llm_error(e)
+                    raise Exception(f"aiping翻译API请求失败: {error_info['user_message']}") from e
 
-    def _get_cleanup_api_kwargs(self):
+    def _get_format_api_kwargs(self):
         """AI Ping API调用额外参数"""
         return {"extra_body": config.AIPING_EXTRA_BODY}
 

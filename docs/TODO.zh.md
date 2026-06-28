@@ -68,6 +68,10 @@
 - [x] PDF 和 Word 表格对齐方式匹配原文（提取层从字符位置推断对齐）
 - [ ] Markdown 合并单元格支持（需实现占位符保护机制，防止 LLM 覆盖 HTML 表格）
 - [ ] 修复表格标题/脚注被错误合并进单元格（后处理分离方案）
+- [x] 修复流式切换导致的 3 个翻译器测试 mock 失效
+  - 涉及测试：`test_translator.py::TestTranslatorImplementations::test_silicon_flow_translate`、`test_silicon_flow_translator.py::TestSiliconFlowTranslator::test_translate`、`test_qianfan_translator.py::TestQianfanTranslator::test_translate`
+  - 原因：`silicon_flow_translator.py` 和 `qianfan_translator.py` 切换为流式调用（`stream=True`，读取 `chunk.choices[0].delta.content`），但测试仍 mock 非流式响应（`mock_response.choices[0].message.content`），导致流式循环读不到内容，`translated_text_raw` 为空，回退到原文
+  - 解决方案：更新 3 个测试的 mock 为流式响应格式，参考 `test_aiping_translate` 的 mock 模式（`mock_stream_chunk.choices = [MagicMock(delta=MagicMock(content='你好'))]`，`mock_create.return_value = [mock_stream_chunk]`）
 
 ## 中优先级
 - [x] 修复 test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages

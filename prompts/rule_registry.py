@@ -164,6 +164,10 @@ class PromptRuleRegistry:
         """
         rules = self.get_rules(task_type, source_lang, target_lang)
         if not rules:
+            logger.info(
+                "为 task_type=%s, source=%s, target=%s 未匹配到语言专项规则，使用基础提示词",
+                task_type, source_lang, target_lang,
+            )
             return base_prompt
 
         extra_parts = []

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 from models.result_types import MarkdownResult, TruncationInfo
 from config import config
+from modules.llm_error_handler import classify_llm_error
 
 logger = logging.getLogger(__name__)
 
@@ -184,62 +185,66 @@ class MarkdownGenerator:
         """
         # 调用布局模型API（使用流式）
         from config import config
-        stream = self.client.chat.completions.create(
-            model=self.model,
-            stream=True,  # 启用流式响应
-            temperature=config.LAYOUT_TEMPERATURE,
-            max_tokens=self.max_tokens,  # 使用类属性作为最大token数
-            timeout=60.0,  # 增加超时时间
-            extra_body=config.SILICON_FLOW_EXTRA_BODY,
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_prompt
-                }
-            ]
-        )
-        
-        # 处理流式响应 - 逐块接收并拼接
-        formatted_text = ""
-        token_usage = {}
-        finish_reason = ""
-        start_time = time.time()
-        max_processing_time = 3000  # 最大处理时间（秒）
-        chunk_count = 0
-        
-        for chunk in stream:
-            # 检查是否超时
-            if time.time() - start_time > max_processing_time:
-                logger.warning(f"流式响应处理超时，已处理 {chunk_count} 个块，当前文本长度: {len(formatted_text)}")
-                break
-            
-            chunk_count += 1
-            if chunk_count % 10 == 0:
-                logger.info(f"处理中，已接收 {chunk_count} 个块，文本长度: {len(formatted_text)}")
-            
-            if chunk.choices and len(chunk.choices) > 0:
-                choice = chunk.choices[0]
-                if choice.delta and choice.delta.content:
-                    formatted_text += choice.delta.content
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
-                    logger.info(f"收到响应结束标记: {finish_reason}")
-            
-            # 捕获token使用信息
-            if hasattr(chunk, "usage") and chunk.usage:
-                token_usage = {
-                    "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
-                    "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
-                    "total_tokens": getattr(chunk.usage, "total_tokens", 0)
-                }
-                logger.info(f"Token使用情况: {token_usage}")
-        
-        processing_time = time.time() - start_time
-        logger.info(f"流式响应处理完成，耗时: {processing_time:.2f}秒，处理了 {chunk_count} 个块")
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                stream=True,  # 启用流式响应
+                temperature=config.LAYOUT_TEMPERATURE,
+                max_tokens=self.max_tokens,  # 使用类属性作为最大token数
+                timeout=60.0,  # 增加超时时间
+                extra_body=config.SILICON_FLOW_EXTRA_BODY,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt
+                    }
+                ]
+            )
+
+            # 处理流式响应 - 逐块接收并拼接
+            formatted_text = ""
+            token_usage = {}
+            finish_reason = ""
+            start_time = time.time()
+            max_processing_time = 3000  # 最大处理时间（秒）
+            chunk_count = 0
+
+            for chunk in stream:
+                # 检查是否超时
+                if time.time() - start_time > max_processing_time:
+                    logger.warning(f"流式响应处理超时，已处理 {chunk_count} 个块，当前文本长度: {len(formatted_text)}")
+                    break
+
+                chunk_count += 1
+                if chunk_count % 10 == 0:
+                    logger.info(f"处理中，已接收 {chunk_count} 个块，文本长度: {len(formatted_text)}")
+
+                if chunk.choices and len(chunk.choices) > 0:
+                    choice = chunk.choices[0]
+                    if choice.delta and choice.delta.content:
+                        formatted_text += choice.delta.content
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                        logger.info(f"收到响应结束标记: {finish_reason}")
+
+                # 捕获token使用信息
+                if hasattr(chunk, "usage") and chunk.usage:
+                    token_usage = {
+                        "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
+                        "total_tokens": getattr(chunk.usage, "total_tokens", 0)
+                    }
+                    logger.info(f"Token使用情况: {token_usage}")
+
+            processing_time = time.time() - start_time
+            logger.info(f"流式响应处理完成，耗时: {processing_time:.2f}秒，处理了 {chunk_count} 个块")
+        except Exception as e:
+            error_info = classify_llm_error(e)
+            raise Exception(f"排版API调用失败: {error_info['user_message']}") from e
         
         # 检查是否被截断
         # 标准的 OpenAI 截断标记是 "length"
@@ -1341,62 +1346,66 @@ class AipingMarkdownGenerator(MarkdownGenerator):
         extra_body = config.AIPING_EXTRA_BODY
         
         # 调用布局模型API（使用流式）
-        stream = self.client.chat.completions.create(
-            model=self.model,
-            stream=True,  # 启用流式响应
-            temperature=config.LAYOUT_TEMPERATURE,
-            max_tokens=self.max_tokens,
-            timeout=60.0,  # 增加超时时间
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_prompt
-                }
-            ],
-            extra_body=extra_body  # 添加aiping特定参数
-        )
-        
-        # 处理流式响应 - 逐块接收并拼接
-        formatted_text = ""
-        token_usage = {}
-        finish_reason = ""
-        start_time = time.time()
-        max_processing_time = 3000  # 最大处理时间（秒）
-        chunk_count = 0
-        
-        for chunk in stream:
-            # 检查是否超时
-            if time.time() - start_time > max_processing_time:
-                logger.warning(f"Aiping API 流式响应处理超时，已处理 {chunk_count} 个块，当前文本长度: {len(formatted_text)}")
-                break
-            
-            chunk_count += 1
-            if chunk_count % 10 == 0:
-                logger.info(f"Aiping API 处理中，已接收 {chunk_count} 个块，文本长度: {len(formatted_text)}")
-            
-            if chunk.choices and len(chunk.choices) > 0:
-                choice = chunk.choices[0]
-                if choice.delta and choice.delta.content:
-                    formatted_text += choice.delta.content
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
-                    logger.info(f"Aiping API 收到响应结束标记: {finish_reason}")
-            
-            # 捕获token使用信息
-            if hasattr(chunk, "usage") and chunk.usage:
-                token_usage = {
-                    "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
-                    "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
-                    "total_tokens": getattr(chunk.usage, "total_tokens", 0)
-                }
-                logger.info(f"Aiping API Token使用情况: {token_usage}")
-        
-        processing_time = time.time() - start_time
-        logger.info(f"Aiping API 流式响应处理完成，耗时: {processing_time:.2f}秒，处理了 {chunk_count} 个块")
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                stream=True,  # 启用流式响应
+                temperature=config.LAYOUT_TEMPERATURE,
+                max_tokens=self.max_tokens,
+                timeout=60.0,  # 增加超时时间
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt
+                    }
+                ],
+                extra_body=extra_body  # 添加aiping特定参数
+            )
+
+            # 处理流式响应 - 逐块接收并拼接
+            formatted_text = ""
+            token_usage = {}
+            finish_reason = ""
+            start_time = time.time()
+            max_processing_time = 3000  # 最大处理时间（秒）
+            chunk_count = 0
+
+            for chunk in stream:
+                # 检查是否超时
+                if time.time() - start_time > max_processing_time:
+                    logger.warning(f"Aiping API 流式响应处理超时，已处理 {chunk_count} 个块，当前文本长度: {len(formatted_text)}")
+                    break
+
+                chunk_count += 1
+                if chunk_count % 10 == 0:
+                    logger.info(f"Aiping API 处理中，已接收 {chunk_count} 个块，文本长度: {len(formatted_text)}")
+
+                if chunk.choices and len(chunk.choices) > 0:
+                    choice = chunk.choices[0]
+                    if choice.delta and choice.delta.content:
+                        formatted_text += choice.delta.content
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                        logger.info(f"Aiping API 收到响应结束标记: {finish_reason}")
+
+                # 捕获token使用信息
+                if hasattr(chunk, "usage") and chunk.usage:
+                    token_usage = {
+                        "prompt_tokens": getattr(chunk.usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(chunk.usage, "completion_tokens", 0),
+                        "total_tokens": getattr(chunk.usage, "total_tokens", 0)
+                    }
+                    logger.info(f"Aiping API Token使用情况: {token_usage}")
+
+            processing_time = time.time() - start_time
+            logger.info(f"Aiping API 流式响应处理完成，耗时: {processing_time:.2f}秒，处理了 {chunk_count} 个块")
+        except Exception as e:
+            error_info = classify_llm_error(e)
+            raise Exception(f"排版API调用失败: {error_info['user_message']}") from e
         
         # 检查是否被截断
         # 标准的 OpenAI 截断标记是 "length"

@@ -18,6 +18,32 @@ from modules.extractors.coordinate_utils import detect_text_block_alignment
 logger = logging.getLogger(__name__)
 
 
+def _is_title_like_text(text):
+    """判断文本是否像标题（用于决定是否清理换行符）
+
+    pdf_extractor 没有 PaddleOCR 的布局标签信息，使用文本特征启发式判断：
+    - 行数较少（<=3 行）：标题通常不超过3行
+    - 总长度较短（<=100 字符）：标题通常不长
+
+    用于区分标题（清理换行保持单行）与目录/列表/多行正文（保留换行维持结构），
+    与 paddle_extractor 的 TITLE_LABELS 语义对齐。
+
+    Args:
+        text (str): 待判断的文本
+
+    Returns:
+        bool: True 表示像标题，应清理换行；False 表示像多行结构化文本，应保留换行
+    """
+    if not text:
+        return False
+    lines = text.split('\n')
+    if len(lines) > 3:
+        return False
+    if len(text.strip()) > 100:
+        return False
+    return True
+
+
 class PdfExtractor:
     """PDF文本提取类
     
@@ -451,8 +477,9 @@ class PdfExtractor:
                         block_type=block_type,
                         page_num=current_page_num
                     )
-                    # 删除换行符
-                    if '\n' in text:
+                    # 仅对标题类文本清理换行符保持单行；
+                    # 目录/列表/多行正文保留换行维持多行结构
+                    if '\n' in text and _is_title_like_text(text):
                         text_block.block_text = text_block.block_text.replace('\n', ' ')
                     # 检测文本块对齐方式
                     page_width = page.rect.width

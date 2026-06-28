@@ -210,8 +210,8 @@ GPU 可用时，模型级别自动提升一级。
 | 翻译器 | 类名 | 流式 | 重试 | extra_body |
 |--------|------|------|------|-----------|
 | Aiping | `AipingTranslator` | `stream=True` | `max_retries=3` | `config.AIPING_EXTRA_BODY` |
-| SiliconFlow | `SiliconFlowTranslator` | `stream=False` | 无重试 | `config.SILICON_FLOW_EXTRA_BODY` |
-| 百度千帆 | `QianfanTranslator` | `stream=False` | 无重试 | `config.QIANFAN_EXTRA_BODY` |
+| SiliconFlow | `SiliconFlowTranslator` | `stream=True` | `max_retries=0` | `config.SILICON_FLOW_EXTRA_BODY` |
+| 百度千帆 | `QianfanTranslator` | `stream=True` | `max_retries=0` | `config.QIANFAN_EXTRA_BODY` |
 
 三者共享基类 `Translator`（`modules/translator.py`），通用参数：`temperature=0.1`，`top_p=0.9`，`max_tokens=8192`。`QianfanTranslator` 使用百度千帆 OpenAI 兼容 API（默认地址 `https://qianfan.baidubce.com/v2`），通过 `QIANFAN_API_KEY` 认证。
 
@@ -241,15 +241,17 @@ if finish_reason == "length":
     truncation_info = TruncationInfo(truncated=True, ...)
 ```
 
-### 2.5 Aiping 流式处理
+### 2.5 流式响应处理
 
-`AipingTranslator` 处理流式响应时跳过 `reasoning_content`（推理内容），仅统计其长度用于诊断：
+三个翻译器均使用 `stream=True` 流式调用，逐 chunk 拼接 `delta.content`。`AipingTranslator` 额外跳过 `reasoning_content`（推理内容），仅统计其长度用于诊断：
 
 ```python
 if hasattr(chunk.choices[0].delta, 'reasoning_content') and chunk.choices[0].delta.reasoning_content:
     reasoning_length += len(chunk.choices[0].delta.reasoning_content)
     continue  # 跳过推理内容
 ```
+
+`format_blocks` 排版调用同样使用流式，但异常不内部捕获，向上抛出由调用方 `translation_content.py` 通过 `task.add_warning` 上报 UI（详见 10.3）。
 
 ---
 
@@ -739,12 +741,13 @@ chapters = self._build_chapter_tree(bookmarks, doc)
 
 每次重试时参数退化（详见 1.4.2），逐步降低资源消耗以提高成功率。
 
-### 10.3 翻译重试
+### 10.3 翻译重试与错误分类
 
 - Aiping：`max_retries=3`，指数退避
-- SiliconFlow：无重试机制
-- 百度千帆：无重试机制
-- 所有翻译器均捕获 `APITimeoutError`，超时时记录警告并跳过当前文本块，不中断整体流程
+- SiliconFlow：`max_retries=0`（无 SDK 重试）
+- 百度千帆：`max_retries=0`（无 SDK 重试）
+- 所有翻译器均捕获异常并通过 `modules/llm_error_handler.py` 的 `classify_llm_error(e)` 统一分类，映射为中文用户友好消息（如认证失败/速率限制/请求超时/服务内部错误等），超时时记录警告并跳过当前文本块，不中断整体流程
+- `format_blocks` 排版调用异常不再内部吞没，向上抛出由 `translation_content.py` 通过 `task.add_warning` 上报 UI，使用 `classify_llm_error` 生成友好消息
 
 ### 10.4 语义分析容错
 

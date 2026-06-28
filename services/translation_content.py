@@ -5,6 +5,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from models.extraction import PdfPage
+from modules.llm_error_handler import classify_llm_error
 from utils.text_processing import merge_semantic_blocks, merge_semantic_blocks_with_llm, merge_semantic_blocks_with_llm_two_phase, split_translated_result
 from utils.logging_config import get_logger
 
@@ -137,43 +138,42 @@ class TranslationContentTranslator:
                 blocks_list.append(PdfPage(page_num, []))
         translated_content['blocks'] = blocks_list
 
-        # === LLM清理步骤 ===
-        # 对每个有翻译块的页面，调用LLM清理格式问题（页脚残留、前导点号等）
+        # === LLM格式排版步骤 ===
+        # 对每个有翻译块的页面，调用LLM优化格式排版（标点规范、间距清理等）
         if translator is not None:
-            for page_idx, page_blocks in enumerate(translated_content['blocks']):
-                page_num = page_blocks.page_num
-
+            for page_blocks in translated_content['blocks']:
                 if not page_blocks.text_blocks:
                     continue
 
-                # 找出该页的原始块
-                page_original_blocks = [b for b in text_blocks if b.page_num == page_num]
-                page_original_blocks.sort(key=lambda b: getattr(b, 'block_no', 0) or 0)
-
-                if not page_original_blocks:
+                # 跳过翻译失败的块（已回退到原文，不应参与 LLM 格式排版）
+                candidate_indices = [i for i, tb in enumerate(page_blocks.text_blocks) if not getattr(tb, 'translation_failed', False)]
+                if not candidate_indices:
                     continue
 
-                # 长度不匹配可能是合并拆分导致的，跳过清理
-                if len(page_blocks.text_blocks) != len(page_original_blocks):
-                    logger.debug(f"任务 {task.task_id} 页码 {page_num} 的块数量不匹配 (译文={len(page_blocks.text_blocks)}, 原文={len(page_original_blocks)})，跳过LLM清理")
-                    continue
-
-                # 构建 (原文, 译文) 对
-                block_pairs = [
-                    (orig.block_text, trans.block_text)
-                    for orig, trans in zip(page_original_blocks, page_blocks.text_blocks)
-                ]
+                # 仅将未失败的块送入 format_blocks
+                translated_texts = [page_blocks.text_blocks[i].block_text for i in candidate_indices]
 
                 try:
-                    cleaned_texts = translator.cleanup_blocks(block_pairs, target_lang)
-                    if cleaned_texts and len(cleaned_texts) == len(page_blocks.text_blocks):
-                        for i, cleaned_text in enumerate(cleaned_texts):
-                            original_translated = page_blocks.text_blocks[i].block_text
-                            if cleaned_text != original_translated:
-                                logger.info(f"任务 {task.task_id} 页面 {page_num} 块 {i+1}: LLM清理 '{original_translated[:60]}...' -> '{cleaned_text[:60]}...'")
-                                page_blocks.text_blocks[i].block_text = cleaned_text
+                    formatted_texts = translator.format_blocks(translated_texts, target_lang)
+                    if formatted_texts:
+                        for j, formatted_text in enumerate(formatted_texts):
+                            if j < len(candidate_indices):
+                                i = candidate_indices[j]
+                                original = page_blocks.text_blocks[i].block_text
+                                if formatted_text != original:
+                                    logger.info(f"任务 {task.task_id} 页面 {page_blocks.page_num} 块 {i+1}: 格式排版 '{original[:60]}...' -> '{formatted_text[:60]}...'")
+                                    page_blocks.text_blocks[i].block_text = formatted_text
                 except Exception as e:
-                    logger.warning(f"任务 {task.task_id} LLM清理页面 {page_num} 时出错: {e}，跳过清理")
+                    error_info = classify_llm_error(e)
+                    logger.warning(
+                        f"任务 {task.task_id} LLM格式排版页面 {page_blocks.page_num} 时出错: "
+                        f"{error_info['user_message']}（原始: {error_info['original_message']}），跳过排版"
+                    )
+                    # UI 上报：使用友好消息
+                    task.add_warning(
+                        f"排版失败：{error_info['user_message']}，已回退到未排版译文",
+                        {"process": "format", "error": error_info['original_message']}
+                    )
 
         logger.info(f"任务 {task.task_id} 翻译完成，总翻译块数量: {translated_blocks}")
 
@@ -375,9 +375,21 @@ class TranslationContentTranslator:
                 logger.error(f"任务 {task.task_id} 翻译合并块时出错: {str(e)}")
                 # 回退到原文，避免空白
                 block, index = future_to_block[future]
-                results[index] = (block, [
-                    (b.page_num, b.copy()) for b in block.original_blocks
-                ])
+                # 标记合并块翻译失败
+                block.translation_failed = True
+                fallback_copies = []
+                for b in block.original_blocks:
+                    copied = b.copy()
+                    copied.translation_failed = True
+                    fallback_copies.append((b.page_num, copied))
+                results[index] = (block, fallback_copies)
+                # 通知用户此块翻译失败
+                task.add_warning("翻译合并块失败，已回退到原文", {
+                    "process": "translation",
+                    "block_index": index,
+                    "error": str(e),
+                    "original_text": block.block_text[:200]
+                })
 
         # 所有任务完成后，按原始顺序处理结果
         for index in sorted(results.keys()):
@@ -600,8 +612,17 @@ class TranslationContentTranslator:
                     max_width=width,
                     max_height=height
                 )
+                fallback_merged.translation_failed = True
                 fallback_text_block = block.copy()
+                fallback_text_block.translation_failed = True
                 results[index] = (block.page_num, fallback_text_block, fallback_merged)
+                # 通知用户此块翻译失败
+                task.add_warning("翻译原始块失败，已回退到原文", {
+                    "process": "translation",
+                    "block_index": index,
+                    "error": str(e),
+                    "original_text": block.block_text[:200]
+                })
 
         # 所有任务完成后，按原始顺序处理结果
         for index in sorted(results.keys()):

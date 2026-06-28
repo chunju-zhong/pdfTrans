@@ -84,6 +84,16 @@ class TranslationExtractor:
         if ocr_mode:
             # 步骤1+2已合并为逐页处理，进度直接按页数计算
             def _ocr_progress_cb(msg_type, payload):
+                # page_error 单独处理：上报到 task 警告，不走进度更新分支
+                if msg_type == 'page_error':
+                    page_num = payload.get('page_num')
+                    error_msg = payload.get('error', '未知错误')
+                    task.add_warning(
+                        f"第 {page_num} 页 OCR 提取失败: {error_msg}",
+                        context={"process": "extraction", "page": page_num, "error": error_msg}
+                    )
+                    return
+
                 step = payload.get('step', 1)
                 step_name = payload.get('step_name', '')
                 pages_done = payload.get('pages_done', 0)

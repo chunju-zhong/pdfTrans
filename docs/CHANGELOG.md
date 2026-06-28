@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-06-28
+
+- **Added unified LLM error handling module**:
+  - Added `modules/llm_error_handler.py`: `classify_llm_error(e)` maps OpenAI exceptions (AuthenticationError/RateLimitError/BadRequestError/APITimeoutError/APIConnectionError/InternalServerError) to a unified structure (category/user_message/is_retryable/original_message), providing Chinese user-friendly messages
+  - Translators (SiliconFlow/Qianfan/Aiping), semantic analyzers, and Markdown generator all integrated `classify_llm_error`, replacing raw `str(e)` messages
+- **Translators switched to streaming calls**:
+  - `SiliconFlowTranslator` and `QianfanTranslator` changed from `stream=False` to `stream=True`, consistent with `AipingTranslator`
+  - All translators use `max_retries=0` (disable SDK built-in retry, controlled by application layer)
+- **Semantic analyzer robustness enhancement**:
+  - Added 3-level JSON extraction fallback (direct parse / ```json fence / brace scan), `_extract_json_from_response()` handles markdown-wrapped or affixed JSON
+  - When streaming response `content` is empty, fall back to `reasoning_content` (handles truncated reasoning models)
+- **Code Review v7 fixes (6 items)**:
+  - **Issue 1 (HIGH)**: `_parse_format_result` sentinel data corruption — failure branch returns `[]` instead of `["fallback_invalid_format"]`, preventing sentinel string from being written into translation on single-block + empty-response
+  - **Issue 2**: Removed `_build_short_english_hint` dead code and `_SOURCE_LANG_ENGLISH_NAMES` dict from `llm_extractor.py`
+  - **Issue 3**: `format_blocks` removed internal try/except, exceptions propagate to caller `translation_content.py` which reports to UI via `task.add_warning`
+  - **Issue 4**: Removed unused `numpy`/`PIL` imports from `llm_response_parser.py`
+  - **Issue 5**: `format_blocks` injects target language name into user_prompt (e.g. "目标语言为中文"), improving typography accuracy
+  - **Issue 6**: `format_blocks` caller uses `classify_llm_error` for friendly messages
+- **translation_failed flag propagation**: `TextBlock`/`MergedBlock` added `translation_failed` field, allowing failed blocks to be identified in downstream pipeline
+- **LLM OCR log enhancement**: Raw response log expanded from first 500 chars to 1000 chars for easier debugging of parse failures
+- **Test mock sync**: Fixed 3 translator tests with stale non-streaming mocks after streaming switch (`test_silicon_flow_translate` / `test_silicon_flow_translator.test_translate` / `test_qianfan_translator.test_translate`), updated to streaming response mock format
+- Files changed: `modules/llm_error_handler.py` (new), `modules/translator.py`, `modules/silicon_flow_translator.py`, `modules/qianfan_translator.py`, `modules/aiping_translator.py`, `modules/semantic_analyzer.py`, `modules/aiping_semantic_analyzer.py`, `modules/markdown_generator.py`, `modules/ocr/llm_extractor.py`, `modules/ocr/llm_response_parser.py`, `services/translation_content.py`, `models/text_block.py`, `models/merged_block.py`, `tests/test_translator.py`, `tests/test_semantic_analyzer_json_extraction.py` (new)
+
 ## 2026-06-26
 
 - **Added Baidu Qianfan translation service (qianfan)**:

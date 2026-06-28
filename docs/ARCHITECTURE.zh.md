@@ -63,6 +63,7 @@ pdfTrans/
 │   ├── glossary_extractor.py       # GlossaryExtractor / create_glossary_extractor() — 术语提取器
 │   ├── pdf_text_renderer.py        # PdfTextRenderer — PDF 文本渲染（从 PdfGenerator 拆分）
 │   ├── pdf_table_renderer.py       # PdfTableRenderer — PDF 表格渲染（从 PdfGenerator 拆分）
+│   ├── llm_error_handler.py        # classify_llm_error() — LLM 错误统一分类（生成中文用户友好消息）
 │   │
 │   ├── extractors/                 # PDF 提取子模块
 │   │   ├── __init__.py

@@ -68,6 +68,10 @@
 - [x] PDF and Word table alignment matching original PDF (alignment inferred from character positions at extraction layer)
 - [ ] Markdown merged cell support (needs placeholder protection to prevent LLM from overwriting HTML tables)
 - [ ] Fix table caption/footnote incorrectly merged into cells (post-processing separation)
+- [x] Fix 3 translator tests with stale non-streaming mocks after streaming switch
+  - Affected tests: `test_translator.py::TestTranslatorImplementations::test_silicon_flow_translate`, `test_silicon_flow_translator.py::TestSiliconFlowTranslator::test_translate`, `test_qianfan_translator.py::TestQianfanTranslator::test_translate`
+  - Reason: `silicon_flow_translator.py` and `qianfan_translator.py` switched to streaming calls (`stream=True`, reading `chunk.choices[0].delta.content`), but tests still mock non-streaming response (`mock_response.choices[0].message.content`), causing the streaming loop to read empty content and fall back to original text
+  - Solution: Update all 3 tests' mocks to streaming response format, following `test_aiping_translate`'s mock pattern (`mock_stream_chunk.choices = [MagicMock(delta=MagicMock(content='你好'))]`, `mock_create.return_value = [mock_stream_chunk]`)
 
 ## Medium Priority
 - [x] Fix test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages

@@ -210,8 +210,8 @@ When memory usage exceeds 85% or load average exceeds CPU cores ×0.8, high-load
 | Translator | Class Name | Streaming | Retry | extra_body |
 |------------|-----------|-----------|-------|------------|
 | Aiping | `AipingTranslator` | `stream=True` | `max_retries=3` | `config.AIPING_EXTRA_BODY` |
-| SiliconFlow | `SiliconFlowTranslator` | `stream=False` | No retry | `config.SILICON_FLOW_EXTRA_BODY` |
-| Baidu Qianfan | `QianfanTranslator` | `stream=False` | No retry | `config.QIANFAN_EXTRA_BODY` |
+| SiliconFlow | `SiliconFlowTranslator` | `stream=True` | `max_retries=0` | `config.SILICON_FLOW_EXTRA_BODY` |
+| Baidu Qianfan | `QianfanTranslator` | `stream=True` | `max_retries=0` | `config.QIANFAN_EXTRA_BODY` |
 
 All three share the base class `Translator` (`modules/translator.py`), with common parameters: `temperature=0.1`, `top_p=0.9`, `max_tokens=8192`. `QianfanTranslator` uses the Baidu Qianfan OpenAI-compatible API (default URL `https://qianfan.baidubce.com/v2`), authenticated via `QIANFAN_API_KEY`.
 
@@ -241,15 +241,17 @@ if finish_reason == "length":
     truncation_info = TruncationInfo(truncated=True, ...)
 ```
 
-### 2.5 Aiping Stream Processing
+### 2.5 Streaming Response Processing
 
-`AipingTranslator` skips `reasoning_content` (reasoning content) when processing streaming responses, only tracking its length for diagnostics:
+All three translators use `stream=True` for streaming calls, concatenating `delta.content` chunk by chunk. `AipingTranslator` additionally skips `reasoning_content` (reasoning content), only tracking its length for diagnostics:
 
 ```python
 if hasattr(chunk.choices[0].delta, 'reasoning_content') and chunk.choices[0].delta.reasoning_content:
     reasoning_length += len(chunk.choices[0].delta.reasoning_content)
     continue  # Skip reasoning content
 ```
+
+The `format_blocks` typography call also uses streaming, but exceptions are not caught internally — they propagate to the caller `translation_content.py`, which reports to the UI via `task.add_warning` (see 11.3).
 
 ---
 
@@ -775,12 +777,13 @@ On timeout or error, successfully extracted page results are preserved. The `ski
 
 Parameters degrade on each retry (see 1.4.2 for details), progressively reducing resource consumption to improve success rate.
 
-### 11.3 Translation Retry
+### 11.3 Translation Retry & Error Classification
 
 - Aiping: `max_retries=3`, exponential backoff
-- SiliconFlow: No retry mechanism
-- Baidu Qianfan: No retry mechanism
-- LLM OCR: `APITimeoutError` is caught on timeout; the current page is skipped with a warning, without interrupting the overall flow
+- SiliconFlow: `max_retries=0` (no SDK retry)
+- Baidu Qianfan: `max_retries=0` (no SDK retry)
+- All translators catch exceptions and classify them via `classify_llm_error(e)` from `modules/llm_error_handler.py`, mapping to Chinese user-friendly messages (e.g. authentication failed / rate limit / request timeout / internal server error); on timeout, a warning is logged and the current text block is skipped without interrupting the overall flow
+- `format_blocks` typography call exceptions are no longer swallowed internally — they propagate to `translation_content.py`, which reports to the UI via `task.add_warning` using `classify_llm_error` for friendly messages
 
 ### 11.4 Semantic Analysis Fault Tolerance
 
