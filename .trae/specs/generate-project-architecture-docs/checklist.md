@@ -1,0 +1,29 @@
+- [x] `docs/ARCHITECTURE.md` 包含项目定位与核心功能概述
+- [x] `docs/ARCHITECTURE.md` 包含完整目录结构说明（每个目录和关键文件的职责）
+- [x] `docs/ARCHITECTURE.md` 包含系统架构图（三层架构：入口层、服务编排层、核心模块层）
+- [x] `docs/ARCHITECTURE.md` 包含核心数据流（从 PDF 输入到多格式输出，含 7 阶段进度模型）
+- [x] `docs/ARCHITECTURE.md` 包含关键数据模型及关系（TextBlock、PdfPage、PdfTable、PdfCell、PdfImage、PdfExtraction、MergedBlock、Task 等）
+- [x] `docs/ARCHITECTURE.md` 包含配置系统说明（Config 类、.env 变量、各配置项含义和默认值）
+- [x] `docs/ARCHITECTURE.md` 包含外部服务依赖（aiping、硅基流动、PaddleOCR）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含 OCR 管线架构（双引擎、工厂模式、子进程隔离、系统自适应）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含翻译管线架构（双翻译器、Prompt 规则、并行翻译、截断检测、回退策略）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含语义合并策略（规则合并、LLM 合并、两阶段并行合并）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含 PDF 生成技术（两遍绘制、字体选择、公式渲染降级、溢出处理、表格绘制）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含 DOCX 生成技术（OMML 转换链、合并单元格、图表定位）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含 Markdown 生成技术（LLM 排版、公式保护、章节拆分）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含表格处理管线（双引擎提取、字符分配、合并单元格、网格布局）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含公式检测与渲染（检测规则、LaTeX 清理、多级降级）
+- [x] `docs/TECHNICAL_GUIDE.md` 包含术语表提取与章节识别
+- [x] `docs/TECHNICAL_GUIDE.md` 包含错误处理与重试机制
+- [x] `docs/TECHNICAL_GUIDE.md` 包含进度管理模型
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含环境要求与搭建步骤
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含 .env 配置说明
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含三种运行方式（Web / CLI / Skill）
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含 CLI 完整命令参考
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含 Web API 接口参考
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含测试方法
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含常见开发任务指南
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含代码规范与约定
+- [x] `docs/DEVELOPMENT_GUIDE.md` 包含支持语言列表
+- [x] 三份文档内容准确，与项目实际代码一致
+- [x] 三份文档语言为中文，格式清晰，适合 AI 和新开发人员阅读

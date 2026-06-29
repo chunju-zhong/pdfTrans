@@ -1,0 +1,6 @@
+- [x] `_pixel_to_pdf_coords`(llm_extractor) 中像素坐标 Y 轴正确翻转
+- [x] `_pixel_to_pdf_coords`(llm_extractor) 中归一化坐标 Y 轴正确翻转
+- [x] `_pixel_to_pdf_coords`(paddle_extractor) 中像素坐标 Y 轴正确翻转（已有）
+- [x] 第6页文本 bbox [176, 85, 1234, 195] 正确转换为 PDF y≈185~211（页面顶部）
+- [ ] 转换日志记录原始像素坐标和转换后 PDF 坐标
+- [ ] 第6页实际显示位置与原文一致

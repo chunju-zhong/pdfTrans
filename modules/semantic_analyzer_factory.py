@@ -12,7 +12,7 @@ class SemanticAnalyzerFactory:
         """创建语义分析器实例
         
         Args:
-            analyzer_type (str): 分析器类型，可选值: "aiping", "silicon_flow"
+            analyzer_type (str): 分析器类型，可选值: "aiping", "silicon_flow", "qianfan"
             api_key (str): API密钥
             api_url (str): API请求地址
             model (str): 要使用的模型名称
@@ -22,7 +22,7 @@ class SemanticAnalyzerFactory:
         """
         if analyzer_type == "aiping":
             return AipingSemanticAnalyzer(api_key, api_url, model)
-        else:  # silicon_flow or other
+        else:  # silicon_flow, qianfan or other
             return SemanticAnalyzer(api_key, api_url, model)
     
     @staticmethod
@@ -32,4 +32,4 @@ class SemanticAnalyzerFactory:
         Returns:
             list: 可用的分析器类型列表
         """
-        return ["aiping", "silicon_flow"]
+        return ["aiping", "silicon_flow", "qianfan"]

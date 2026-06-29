@@ -97,6 +97,7 @@ def glossary_handler(args):
             extractor_type=args.translator,
             pages=pages,
             doc_type=args.doc_type,
+            glossary_model=args.glossary_model,
             task=task,
             progress_callback=TaskProgressCallback(progress),
             tmp_dir=tmp_dir

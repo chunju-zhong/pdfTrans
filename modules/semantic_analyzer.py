@@ -1,5 +1,7 @@
+import re
 from openai import OpenAI
 from config import config
+from modules.llm_error_handler import classify_llm_error
 
 class SemanticAnalyzer:
     """语义分析基类
@@ -22,11 +24,12 @@ class SemanticAnalyzer:
         self.client = OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
+            timeout=config.SEMANTIC_ANALYSIS_TIMEOUT,
         )
-        # 设置max_tokens属性，默认值为1024（用于单个语义分析）
-        self.max_tokens = 1024
-        # 设置batch_max_tokens属性，默认值为2048（用于批量语义分析）
-        self.batch_max_tokens = 2048
+        # 设置max_tokens属性（使用config的常量）
+        self.max_tokens = config.SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS
+        # 设置batch_max_tokens属性
+        self.batch_max_tokens = config.SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS
         self.supported_languages = {
             'zh': '中文',
             'en': '英语',
@@ -35,9 +38,48 @@ class SemanticAnalyzer:
             'fr': '法语',
             'de': '德语',
             'es': '西班牙语',
-            'ru': '俄语'
+            'ru': '俄语',
+            'bo': '藏语'
         }
-    
+
+    def _extract_json_from_response(self, text):
+        """从LLM响应中提取JSON（3级容错）
+
+        Args:
+            text (str): LLM返回的原始文本
+
+        Returns:
+            dict | None: 解析后的JSON字典，或None
+        """
+        import json
+
+        # 1. 尝试直接解析（仅当文本以{开头时）
+        stripped = text.strip()
+        if stripped.startswith('{'):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+
+        # 2. 尝试从markdown代码块中提取（兼容 ```json 和裸 ``` 围栏）
+        match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # 3. 尝试找到第一个 { 和最后一个 } 之间的内容
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+
+        return None
+
     def analyze_semantic_relationship(self, text1, text2, source_lang):
         """分析两个文本块之间的语义关系，判断是否应该合并
 
@@ -63,8 +105,8 @@ class SemanticAnalyzer:
             response = self.client.chat.completions.create(
                 model=self.model,
                 stream=False,  # 非流式调用
-                temperature=0.1,  # 降低温度，提高分析准确性
-                top_p=0.9,  # 核采样参数
+                temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                 max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                 extra_body=config.SILICON_FLOW_EXTRA_BODY,
                 messages=[
@@ -81,15 +123,36 @@ class SemanticAnalyzer:
 
             # 处理响应
             analysis_result = ""
+            reasoning_content = ""
+            finish_reason = ""
             if hasattr(response, "choices") and len(response.choices) > 0:
-                analysis_result = response.choices[0].message.content.strip()
+                choice = response.choices[0]
+                if hasattr(choice, "message"):
+                    if hasattr(choice.message, "content") and choice.message.content:
+                        analysis_result = choice.message.content.strip()
+                    # 读取 reasoning_content（用于 fallback）
+                    if hasattr(choice.message, "reasoning_content") and choice.message.reasoning_content:
+                        reasoning_content = choice.message.reasoning_content.strip()
+                if hasattr(choice, "finish_reason"):
+                    finish_reason = choice.finish_reason
+
+            # content 为空时记录诊断日志并尝试从 reasoning_content fallback
+            if not analysis_result:
+                logger.warning(
+                    f"语义分析结果 content 为空: reasoning_content长度={len(reasoning_content)}, "
+                    f"finish_reason={finish_reason}, 块1前100字符='{text1[:100]}', 块2前100字符='{text2[:100]}'"
+                )
+                if reasoning_content:
+                    analysis_result = reasoning_content
 
             logger.info(f"LLM返回的原始分析结果: '{analysis_result}'")
 
             # 解析LLM的分析结果
-            analysis_json = json.loads(analysis_result)
+            analysis_json = self._extract_json_from_response(analysis_result)
+            if analysis_json is None:
+                raise json.JSONDecodeError("无法从响应中提取JSON", analysis_result, 0)
             logger.info(f"解析后的JSON结果: {analysis_json}")
-            
+
             should_merge = analysis_json.get("merge", False)
             logger.info(f"最终合并决策: {should_merge}，块1='{text1}', 块2='{text2}'")
             return bool(should_merge)
@@ -98,7 +161,8 @@ class SemanticAnalyzer:
             # 分析失败时，返回默认值
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"语义分析API请求失败: {str(e)}，返回默认值False")
+            error_info = classify_llm_error(e)
+            logger.error(f"语义分析API请求失败: {error_info['user_message']}，返回默认值False")
             logger.error(f"失败时的文本块: 块1='{text1}', 块2='{text2}'")
             return False
     
@@ -144,8 +208,8 @@ class SemanticAnalyzer:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=False,  # 非流式调用
-                    temperature=0.1,  # 降低温度，提高分析准确性
-                    top_p=0.9,  # 核采样参数
+                    temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                    top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                     max_tokens=self.batch_max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.SILICON_FLOW_EXTRA_BODY,
                     messages=[
@@ -162,19 +226,40 @@ class SemanticAnalyzer:
 
                 # 处理响应
                 analysis_result = ""
+                reasoning_content = ""
+                finish_reason = ""
                 logger.info("开始处理响应")
                 if hasattr(response, "choices") and len(response.choices) > 0:
-                    analysis_result = response.choices[0].message.content.strip()
-                    logger.info(f"获取到响应内容，长度={len(analysis_result)}")
+                    choice = response.choices[0]
+                    if hasattr(choice, "message"):
+                        if hasattr(choice.message, "content") and choice.message.content:
+                            analysis_result = choice.message.content.strip()
+                            logger.info(f"获取到响应内容，长度={len(analysis_result)}")
+                        # 读取 reasoning_content（用于 fallback）
+                        if hasattr(choice.message, "reasoning_content") and choice.message.reasoning_content:
+                            reasoning_content = choice.message.reasoning_content.strip()
+                    if hasattr(choice, "finish_reason"):
+                        finish_reason = choice.finish_reason
                 else:
                     logger.error("响应中没有有效的choices字段")
+
+                # content 为空时记录诊断日志并尝试从 reasoning_content fallback
+                if not analysis_result:
+                    logger.warning(
+                        f"批量语义分析结果 content 为空: reasoning_content长度={len(reasoning_content)}, "
+                        f"finish_reason={finish_reason}, 文本块数量={len(blocks)}, 块1前100字符='{blocks[0][:100] if blocks else ''}'"
+                    )
+                    if reasoning_content:
+                        analysis_result = reasoning_content
 
                 logger.info(f"LLM返回的原始批量分析结果: '{analysis_result}'")
 
                 # 解析LLM的分析结果
-                analysis_json = json.loads(analysis_result)
+                analysis_json = self._extract_json_from_response(analysis_result)
+                if analysis_json is None:
+                    raise json.JSONDecodeError("无法从响应中提取JSON", analysis_result, 0)
                 logger.info(f"解析后的JSON结果: {analysis_json}")
-                
+
                 merge_results = analysis_json.get("merge", [])
                 logger.info(f"最终批量合并决策: {merge_results}")
                 
@@ -239,7 +324,7 @@ class SemanticAnalyzer:
         # 获取语言名称
         lang_name = self.supported_languages.get(source_lang, source_lang)
 
-        return f"""
+        base_prompt = f"""
 你是专业的文本语义分析专家，负责分析相邻文本块之间的语义关系。
 请使用**两步分析法**判断以下两个{lang_name}文本块是否应该合并。
 
@@ -320,7 +405,16 @@ class SemanticAnalyzer:
 请严格按照要求输出，仅返回：
 {{"merge": true/false}}
 """
-    
+        # 追加语言专项规则
+        try:
+            from prompts import rule_registry  # noqa: F811
+            return rule_registry.merge_into_prompt(
+                base_prompt, "semantic", source_lang, "*"
+            )
+        except ImportError:
+            pass
+        return base_prompt
+
     def _generate_batch_semantic_analysis_prompt(self, blocks, source_lang):
         """生成批量语义分析提示词
 
@@ -456,4 +550,12 @@ class SemanticAnalyzer:
 """
 
         logger.info(f"批量语义分析提示词生成完成，长度={len(prompt)}")
+        # 追加语言专项规则
+        try:
+            from prompts import rule_registry
+            return rule_registry.merge_into_prompt(
+                prompt, "semantic", source_lang, "*"
+            )
+        except ImportError:
+            pass
         return prompt

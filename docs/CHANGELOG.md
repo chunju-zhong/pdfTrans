@@ -1,5 +1,79 @@
 # Changelog
 
+## 2026-06-28
+
+- **Fixed Qianfan GLM-5.1 thinking mode not disabled**:
+  - Root cause: `QIANFAN_EXTRA_BODY = {"enable_thinking": False}` — `enable_thinking` is a Qwen3-specific parameter with no effect on GLM-5.1. GLM-5.1 requires `thinking: {"type": "disabled"}` to disable thinking mode (per Zhipu BigModel official docs)
+  - Symptom: GLM-5.1 generated 10164 chars of `reasoning_content` exhausting `max_tokens` when translating Tibetan, leaving `content` empty; fallback then incorrectly used reasoning content as translation
+  - Fix: `config.py` `QIANFAN_EXTRA_BODY` expanded to include both `enable_thinking: False` (Qwen3 series) and `thinking: {"type": "disabled"}` (GLM-4.5+/5.x series); each model server ignores parameters it doesn't recognize
+  - Enhancement: `qianfan_translator.py` adds INFO diagnostic log when `reasoning_content` is non-empty, recording length, `finish_reason`, and first 100 chars of source text — used to monitor whether thinking mode is truly disabled
+  - Files changed: `config.py`, `modules/qianfan_translator.py`
+- **Added unified LLM error handling module**:
+  - Added `modules/llm_error_handler.py`: `classify_llm_error(e)` maps OpenAI exceptions (AuthenticationError/RateLimitError/BadRequestError/APITimeoutError/APIConnectionError/InternalServerError) to a unified structure (category/user_message/is_retryable/original_message), providing Chinese user-friendly messages
+  - Translators (SiliconFlow/Qianfan/Aiping), semantic analyzers, and Markdown generator all integrated `classify_llm_error`, replacing raw `str(e)` messages
+- **Translators switched to streaming calls**:
+  - `SiliconFlowTranslator` and `QianfanTranslator` changed from `stream=False` to `stream=True`, consistent with `AipingTranslator`
+  - All translators use `max_retries=0` (disable SDK built-in retry, controlled by application layer)
+- **Semantic analyzer robustness enhancement**:
+  - Added 3-level JSON extraction fallback (direct parse / ```json fence / brace scan), `_extract_json_from_response()` handles markdown-wrapped or affixed JSON
+  - When streaming response `content` is empty, fall back to `reasoning_content` (handles truncated reasoning models)
+- **Code Review v7 fixes (6 items)**:
+  - **Issue 1 (HIGH)**: `_parse_format_result` sentinel data corruption — failure branch returns `[]` instead of `["fallback_invalid_format"]`, preventing sentinel string from being written into translation on single-block + empty-response
+  - **Issue 2**: Removed `_build_short_english_hint` dead code and `_SOURCE_LANG_ENGLISH_NAMES` dict from `llm_extractor.py`
+  - **Issue 3**: `format_blocks` removed internal try/except, exceptions propagate to caller `translation_content.py` which reports to UI via `task.add_warning`
+  - **Issue 4**: Removed unused `numpy`/`PIL` imports from `llm_response_parser.py`
+  - **Issue 5**: `format_blocks` injects target language name into user_prompt (e.g. "目标语言为中文"), improving typography accuracy
+  - **Issue 6**: `format_blocks` caller uses `classify_llm_error` for friendly messages
+- **translation_failed flag propagation**: `TextBlock`/`MergedBlock` added `translation_failed` field, allowing failed blocks to be identified in downstream pipeline
+- **LLM OCR log enhancement**: Raw response log expanded from first 500 chars to 1000 chars for easier debugging of parse failures
+- **Test mock sync**: Fixed 3 translator tests with stale non-streaming mocks after streaming switch (`test_silicon_flow_translate` / `test_silicon_flow_translator.test_translate` / `test_qianfan_translator.test_translate`), updated to streaming response mock format
+- Files changed: `modules/llm_error_handler.py` (new), `modules/translator.py`, `modules/silicon_flow_translator.py`, `modules/qianfan_translator.py`, `modules/aiping_translator.py`, `modules/semantic_analyzer.py`, `modules/aiping_semantic_analyzer.py`, `modules/markdown_generator.py`, `modules/ocr/llm_extractor.py`, `modules/ocr/llm_response_parser.py`, `services/translation_content.py`, `models/text_block.py`, `models/merged_block.py`, `tests/test_translator.py`, `tests/test_semantic_analyzer_json_extraction.py` (new)
+
+## 2026-06-26
+
+- **Added Baidu Qianfan translation service (qianfan)**:
+  - Added `modules/qianfan_translator.py` (150 lines): inherits `Translator`, reuses system prompt generation + language-specific rule injection
+  - Added Qianfan config items: `QIANFAN_API_KEY/URL/MODEL/MODEL_LAYOUT/MODEL_GLOSSARY/OCR_LLM_MODEL` and `QIANFAN_EXTRA_BODY`
+  - CLI added `-T qianfan` option, Web UI dropdown added "Baidu Qianfan Translation"
+  - Semantic analyzer factory and glossary extractor both support `qianfan` type
+- **Added Tibetan (bo) language support**:
+  - Added `'bo': '藏文'` to `SUPPORTED_LANGUAGES`
+  - All language mappings (translator/semantic analyzer/glossary extractor) added `bo`
+  - CLI source/target language choices added `bo`
+  - Added `prompts/language_rules/bo_to_zh.py`: Tibetan→Chinese translation-specific rules (8KB)
+  - Added rule registry `prompts/rule_registry.py`: lookup by `(stage, source_lang, target_lang)` and append rules to prompts
+- **Added combined output formats**: CLI added `-f pdf_docx` (PDF+Word) and `-f all` (PDF+Word+Markdown), `translate_command.py` supports multi-file output
+- **Added CLI model override parameters**: `--translation-model`, `--layout-model`, `--glossary-model`, `--ocr-llm-model`, propagated through CLI → TranslationService → modules
+- **Config refactoring**: Changed from class-level attributes to instance-level + `_load()` method, supporting runtime config refresh; added per-module API parameters (temperature/top_p/max_tokens/timeout configurable via environment variables)
+- **Translation system prompt rewrite**: Restructured from 16 flat rules to 4-section format (Core Principles / Semantics & Style / Format Preservation / No Meta-Comments), with language-specific rules appended via `rule_registry.merge_into_prompt()`
+- **TranslationService major split**: 1400+ lines split into 5 sub-modules:
+  - `TranslationService` (main class, ~500 lines): orchestration
+  - `TranslationExtractor` (233 lines): PDF content extraction
+  - `TranslationContentTranslator` (583 lines): text translation
+  - `TranslationTableHandler` (384 lines): table translation
+  - `TranslationOutputGenerator` (446 lines): output file generation
+  - Main class re-exports for backward compatibility with test `@patch` paths
+- **PdfGenerator rendering logic split**: ~1641 lines reduced to ~300 lines (delegation pattern), split into `PdfTextRenderer` (1070 lines) and `PdfTableRenderer` (556 lines)
+- **LLM OCR parser split**: Added `LlmOcrResponseParser` (707 lines) and `LlmTableParser` (284 lines); added blank page detection `_is_blank_image()` and timeout retry
+- **Glossary extractor base class refactoring**: Refactored to `BaseApiGlossaryExtractor` base class encapsulating shared logic, subclasses only provide API config; added `QianfanGlossaryExtractor`
+- **Unified hardcoded parameters to Config**: All hardcoded temperature/top_p/max_tokens/timeout across modules migrated to config instance attributes
+- **Removed redundant methods**: `AipingTranslator.batch_translate()` and `SiliconFlowTranslator.batch_translate()` deleted
+- **Bug fix**: `glossary_service.py` `cell.strip()` → `cell.text.strip()`, fixing PdfCell object attribute access
+- Files changed: `config.py`, `cli.py`, `cli/translate_command.py`, `cli/glossary_command.py`, `modules/qianfan_translator.py`, `modules/translator.py`, `modules/aiping_translator.py`, `modules/silicon_flow_translator.py`, `modules/glossary_extractor.py`, `modules/semantic_analyzer.py`, `modules/semantic_analyzer_factory.py`, `modules/pdf_generator.py`, `modules/pdf_text_renderer.py`, `modules/pdf_table_renderer.py`, `modules/ocr/llm_extractor.py`, `modules/ocr/llm_response_parser.py`, `modules/ocr/llm_table_parser.py`, `services/translation_service.py`, `services/translation_content.py`, `services/translation_extractor.py`, `services/translation_table.py`, `services/translation_output.py`, `services/glossary_service.py`, `templates/index.html`, `prompts/`, `.env.example`, `tests/`
+
+## 2026-06-23
+
+- OCR configuration cleanup and rename:
+  - **Removed `OCR_DPI`**: This config item was never referenced by any code (legacy artifact), removed from `config.py`
+  - **Renamed `OCR_RENDER_DPI` → `OCR_PADDLE_DPI`**: Symmetric naming with `OCR_LLM_DPI`, clearly indicating it's the PaddleOCR engine-specific DPI config
+  - Affected scope: `config.py`, `modules/ocr/paddle_extractor.py` (3 references)
+- SKILL.md documentation update — added LLM OCR feature documentation:
+  - Updated `--ocr-engine` parameter description to show both `paddleocr` and `llm` options
+  - Added LLM OCR engine feature description (working principle, supported models, response formats, feature list)
+  - Added LLM OCR environment variable configuration (e.g., `AIPING_OCR_LLM_MODEL`, `OCR_LLM_DPI`)
+  - Added LLM OCR usage examples and notes
+- Files changed: `config.py`, `modules/ocr/paddle_extractor.py`, `SKILL.md`
+
 ## 2026-06-22
 
 - LLM OCR title-type text blocks not translated fix:

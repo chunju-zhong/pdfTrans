@@ -1,0 +1,16 @@
+- [x] `config.py` 包含 `QIANFAN_*` 全部配置项，含默认值
+- [x] `.env.example` 包含百度千帆平台的环境变量模板
+- [x] `modules/qianfan_translator.py` 已创建，继承 `Translator`，实现非流式翻译
+- [x] `services/translation_service.py` 的 `get_translator()` 支持 `'qianfan'`
+- [x] `services/translation_service.py` 的 `get_semantic_analyzer()` 支持 `'qianfan'`
+- [x] `services/translation_service.py` 的 `_get_markdown_generator_config()` 支持 `'qianfan'`
+- [x] `modules/semantic_analyzer_factory.py` 的 `create_analyzer()` 支持 `'qianfan'`
+- [x] `modules/semantic_analyzer_factory.py` 的 `get_available_analyzers()` 包含 `'qianfan'`
+- [x] `modules/glossary_extractor.py` 的 `create_glossary_extractor()` 支持 `'qianfan'`
+- [x] `modules/glossary_extractor.py` 包含 `QianfanGlossaryExtractor` 类
+- [x] `modules/ocr/llm_extractor.py` 的 `client` property 支持 `'qianfan'`
+- [x] `cli.py` 中 translate 子命令的 `--translator` choices 包含 `'qianfan'`
+- [x] `cli.py` 中 glossary 子命令的 `--translator` choices 包含 `'qianfan'`
+- [x] `templates/index.html` 的翻译服务下拉框包含百度千帆选项
+- [x] `tests/test_qianfan_translator.py` 已创建，包含基本测试用例
+- [x] 所有测试通过

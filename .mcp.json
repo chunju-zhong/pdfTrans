@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "superpowers-mcp": {
+      "command": "node",
+      "args": [
+        "/Users/chunju/.npm/_npx/bf2a6a7d6a9468d1/node_modules/superpowers-mcp/out/server.js"
+      ]
+    }
+  }
+}

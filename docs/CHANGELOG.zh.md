@@ -1,5 +1,79 @@
 # 更新日志
 
+## 2026-06-28
+
+- **修复千帆 GLM-5.1 思考模式未关闭**：
+  - 根因：`QIANFAN_EXTRA_BODY = {"enable_thinking": False}` 中的 `enable_thinking` 是 Qwen3 特有参数，对 GLM-5.1 完全无效。GLM-5.1 需使用 `thinking: {"type": "disabled"}` 关闭思考模式（参考智谱 BigModel 官方文档）
+  - 现象：GLM-5.1 翻译藏文时生成 10164 字符的 `reasoning_content` 耗尽 `max_tokens`，`content` 为空，被 fallback 误当作翻译结果
+  - 修复：`config.py` 中 `QIANFAN_EXTRA_BODY` 扩展为同时包含 `enable_thinking: False`（Qwen3 系列）和 `thinking: {"type": "disabled"}`（GLM-4.5+/5.x 系列），各模型服务端忽略自身不识别的参数
+  - 增强：`qianfan_translator.py` 新增 INFO 诊断日志，当 `reasoning_content` 非空时记录长度、`finish_reason`、原文前 100 字符，用于监控思考模式是否真正关闭
+  - 相关文件：`config.py`、`modules/qianfan_translator.py`
+- **新增 LLM 错误处理统一模块**：
+  - 新增 `modules/llm_error_handler.py`：`classify_llm_error(e)` 将 OpenAI 异常（AuthenticationError/RateLimitError/BadRequestError/APITimeoutError/APIConnectionError/InternalServerError）映射为统一结构（category/user_message/is_retryable/original_message），提供中文用户友好消息
+  - 翻译器（SiliconFlow/Qianfan/Aiping）、语义分析器、Markdown 生成器全部接入 `classify_llm_error`，替换原先的 `str(e)` 裸消息
+- **翻译器切换为流式调用**：
+  - `SiliconFlowTranslator` 和 `QianfanTranslator` 从 `stream=False` 改为 `stream=True`，与 `AipingTranslator` 一致
+  - 所有翻译器 `max_retries=0`（禁用 SDK 内置重试，由应用层控制）
+- **语义分析器健壮性增强**：
+  - 新增 3 级 JSON 提取容错（直接解析 / ```json 围栏 / 大括号扫描），`_extract_json_from_response()` 兼容模型返回 markdown 包裹或带前后缀的 JSON
+  - 流式响应 `content` 为空时从 `reasoning_content` fallback（兼容推理模型被截断的场景）
+- **Code Review v7 修复（6 项）**：
+  - **Issue 1 (HIGH)**：`_parse_format_result` sentinel 数据损坏 — 失败分支返回 `[]` 而非 `["fallback_invalid_format"]`，避免单块+空响应时哨兵字符串被写入译文
+  - **Issue 2**：删除 `llm_extractor.py` 中 `_build_short_english_hint` 死代码及 `_SOURCE_LANG_ENGLISH_NAMES` 字典
+  - **Issue 3**：`format_blocks` 移除内部 try/except，异常向上抛出由调用方 `translation_content.py` 通过 `task.add_warning` 上报 UI
+  - **Issue 4**：删除 `llm_response_parser.py` 未使用的 `numpy`/`PIL` 导入
+  - **Issue 5**：`format_blocks` 在 user_prompt 注入目标语言名称（如"目标语言为中文"），提升排版准确性
+  - **Issue 6**：`format_blocks` 调用方使用 `classify_llm_error` 生成友好消息
+- **translation_failed 标志传播**：`TextBlock`/`MergedBlock` 新增 `translation_failed` 字段，翻译失败的块在后续管线中可被识别
+- **LLM OCR 日志增强**：原始响应日志从前 500 字扩展到前 1000 字，便于调试解析失败
+- **测试 mock 同步**：修复 3 个翻译器测试在流式切换后 mock 失效的问题（`test_silicon_flow_translate` / `test_silicon_flow_translator.test_translate` / `test_qianfan_translator.test_translate`），更新为流式响应 mock 格式
+- 相关文件：`modules/llm_error_handler.py`（新增）、`modules/translator.py`、`modules/silicon_flow_translator.py`、`modules/qianfan_translator.py`、`modules/aiping_translator.py`、`modules/semantic_analyzer.py`、`modules/aiping_semantic_analyzer.py`、`modules/markdown_generator.py`、`modules/ocr/llm_extractor.py`、`modules/ocr/llm_response_parser.py`、`services/translation_content.py`、`models/text_block.py`、`models/merged_block.py`、`tests/test_translator.py`、`tests/test_semantic_analyzer_json_extraction.py`（新增）
+
+## 2026-06-26
+
+- **新增百度千帆翻译服务（qianfan）**：
+  - 新增 `modules/qianfan_translator.py`（150行）：继承 `Translator`，复用系统提示词生成 + 语言专项规则注入
+  - 新增千帆相关配置项：`QIANFAN_API_KEY/URL/MODEL/MODEL_LAYOUT/MODEL_GLOSSARY/OCR_LLM_MODEL` 及 `QIANFAN_EXTRA_BODY`
+  - CLI 新增 `-T qianfan` 选项，Web UI 下拉框新增"百度千帆翻译"
+  - 语义分析器工厂、术语提取器均支持 `qianfan` 类型
+- **新增藏语（bo）支持**：
+  - `SUPPORTED_LANGUAGES` 新增 `'bo': '藏文'`
+  - 所有语言映射（翻译器/语义分析器/术语提取器）新增 `bo`
+  - CLI 源/目标语言 choices 新增 `bo`
+  - 新增 `prompts/language_rules/bo_to_zh.py`：藏→中翻译专项规则（8KB）
+  - 新增规则注册表 `prompts/rule_registry.py`：按 `(stage, source_lang, target_lang)` 查找并追加规则到提示词
+- **新增组合输出格式**：CLI 新增 `-f pdf_docx`（PDF+Word）和 `-f all`（PDF+Word+Markdown），`translate_command.py` 支持多文件输出
+- **新增 CLI 模型覆盖参数**：`--translation-model`、`--layout-model`、`--glossary-model`、`--ocr-llm-model`，贯穿 CLI → TranslationService → 各模块
+- **Config 重构**：从类级别属性改为实例级别 + `_load()` 方法，支持运行时刷新配置；新增功能级 API 参数（各模块的 temperature/top_p/max_tokens/timeout 可通过环境变量覆盖）
+- **翻译系统提示词重写**：从16条平铺规则重组为四段式结构（核心原则/语义与风格/保持格式/禁止元注释），末尾通过 `rule_registry.merge_into_prompt()` 追加语言专项规则
+- **TranslationService 大规模拆分**：1400+ 行拆分为5个子模块：
+  - `TranslationService`（主类，~500行）：流程编排
+  - `TranslationExtractor`（233行）：PDF内容提取
+  - `TranslationContentTranslator`（583行）：文本翻译
+  - `TranslationTableHandler`（384行）：表格翻译
+  - `TranslationOutputGenerator`（446行）：输出文件生成
+  - 主类 re-export 维护测试 `@patch` 路径向后兼容
+- **PdfGenerator 渲染逻辑拆分**：~1641行删减至~300行（委派模式），拆分为 `PdfTextRenderer`（1070行）和 `PdfTableRenderer`（556行）
+- **LLM OCR 解析器拆分**：新增 `LlmOcrResponseParser`（707行）和 `LlmTableParser`（284行）；新增空白页检测 `_is_blank_image()` 和超时重试
+- **术语提取器基类重构**：重构为 `BaseApiGlossaryExtractor` 基类封装共享逻辑，子类仅提供 API 配置；新增 `QianfanGlossaryExtractor`
+- **硬编码参数统一到 Config**：所有模块中硬编码的 temperature/top_p/max_tokens/timeout 统一迁移到 config 实例属性
+- **删除冗余方法**：`AipingTranslator.batch_translate()` 和 `SiliconFlowTranslator.batch_translate()` 已删除
+- **Bug修复**：`glossary_service.py` 中 `cell.strip()` → `cell.text.strip()`，修复对 PdfCell 对象属性的访问方式
+- 相关文件：`config.py`、`cli.py`、`cli/translate_command.py`、`cli/glossary_command.py`、`modules/qianfan_translator.py`、`modules/translator.py`、`modules/aiping_translator.py`、`modules/silicon_flow_translator.py`、`modules/glossary_extractor.py`、`modules/semantic_analyzer.py`、`modules/semantic_analyzer_factory.py`、`modules/pdf_generator.py`、`modules/pdf_text_renderer.py`、`modules/pdf_table_renderer.py`、`modules/ocr/llm_extractor.py`、`modules/ocr/llm_response_parser.py`、`modules/ocr/llm_table_parser.py`、`services/translation_service.py`、`services/translation_content.py`、`services/translation_extractor.py`、`services/translation_table.py`、`services/translation_output.py`、`services/glossary_service.py`、`templates/index.html`、`prompts/`、`.env.example`、`tests/`
+
+## 2026-06-23
+
+- OCR 配置项清理与重命名：
+  - **删除 `OCR_DPI`**：该配置项从未被代码引用，属于历史遗留，已从 `config.py` 中移除
+  - **重命名 `OCR_RENDER_DPI` → `OCR_PADDLE_DPI`**：与 `OCR_LLM_DPI` 命名对称，明确表示为 PaddleOCR 引擎专用 DPI 配置
+  - 影响范围：`config.py`、`modules/ocr/paddle_extractor.py`（3 处引用）
+- SKILL.md 文档更新 — 补充 LLM OCR 功能说明：
+  - 更新 `--ocr-engine` 参数说明，标注支持 `paddleocr` 和 `llm` 两个选项
+  - 新增 LLM OCR 引擎功能说明（工作原理、支持模型、响应格式、功能列表）
+  - 新增 LLM OCR 环境变量配置说明（`AIPING_OCR_LLM_MODEL`、`OCR_LLM_DPI` 等）
+  - 新增 LLM OCR 使用示例和注意事项
+- 相关文件：`config.py`、`modules/ocr/paddle_extractor.py`、`SKILL.md`
+
 ## 2026-06-22
 
 - LLM OCR 标题类型文本块未翻译修复：

@@ -1,0 +1,6 @@
+- [x] LlmOcrExtractor 构造函数接受 `source_lang` 参数并存储为实例属性
+- [x] DeepSeek-OCR prompt 中包含源语言提示（藏文时有特别强调）
+- [x] 通用 VLM prompt 中包含源语言提示（藏文时有特别强调）
+- [x] PdfExtractor 将 source_lang 传递到 LlmOcrExtractor
+- [x] translation_service 将 source_lang 传递到 PdfExtractor
+- [x] 源语言为英文时 OCR 行为无回归

@@ -1,0 +1,8 @@
+- [x] docs/ARCHITECTURE.zh.md 存在且内容为中文版
+- [x] docs/TECHNICAL_GUIDE.zh.md 存在且内容为中文版
+- [x] docs/DEVELOPMENT_GUIDE.zh.md 存在且内容为中文版
+- [x] docs/ARCHITECTURE.md 存在且内容为英文版，与中文版内容一致
+- [x] docs/TECHNICAL_GUIDE.md 存在且内容为英文版，与中文版内容一致
+- [x] docs/DEVELOPMENT_GUIDE.md 存在且内容为英文版，与中文版内容一致
+- [x] 英文版术语翻译准确，无中式英语
+- [x] prompt/update_doc.md 中的文档路径引用已更新为双语格式

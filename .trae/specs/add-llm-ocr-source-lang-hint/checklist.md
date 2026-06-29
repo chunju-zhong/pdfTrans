@@ -1,0 +1,18 @@
+- [x] `_SOURCE_LANG_ENGLISH_NAMES` 常量已新增，位于模块级 `VLM_JSON_SYSTEM_PROMPT` 之后
+- [x] `_SOURCE_LANG_ENGLISH_NAMES` 覆盖 9 种语言（zh/en/ja/ko/fr/de/es/ru/bo）
+- [x] `_build_short_english_hint()` 在 `parts` 开头追加 `"The document is primarily in {english_name}."`
+- [x] 藏文最终返回值含 `"The document is primarily in Tibetan. For Tibetan: ... Do not repeat the same sentence."`
+- [x] 英文最终返回值含 `"The document is primarily in English. Do not repeat the same sentence."`
+- [x] 未知语言时不追加语言提示，仅返回 `"Do not repeat the same sentence."`
+- [x] `source_lang` 为 None 时不报错（使用 `or ''` 兜底）
+- [x] VLM 分支 user_text 追加 `"该文档主要语言为{中文名称}。"` 前缀
+- [x] VLM 分支未知语言时不追加语言前缀
+- [x] VLM 分支 user_text 格式为 `f"{lang_hint}{lang_prefix}请提取第{page_num}页..."`
+- [x] DeepSeek-OCR 分支调用逻辑未变（仍为 `f"{DEEPSEEK_OCR_PROMPT} {short_hint}"`）
+- [x] DeepSeek-OCR 分支提示内容仅包含 ASCII 字符
+- [x] `_build_lang_hint()` 方法保留未删除
+- [x] `DEEPSEEK_OCR_PROMPT` 常量未修改
+- [x] `bo_to_zh.py` OCR 规则未修改
+- [x] config.py 未修改
+- [ ] 实际运行藏文 OCR 任务，prompt 包含 "The document is primarily in Tibetan."
+- [ ] 实际运行 API 请求成功返回（HTTP 200）

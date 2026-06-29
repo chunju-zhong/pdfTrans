@@ -1,0 +1,15 @@
+- [x] `LlmOcrExtractor._build_short_english_hint()` 方法已新增，位于 `_build_lang_hint()` 之后
+- [x] `_build_short_english_hint()` 在 `source_lang == "bo"` 时返回纯 ASCII 英文提示
+- [x] 提示内容为 `"For Tibetan: keep full line bbox width, preserve Tibetan numerals and punctuation, retain ||| separators."`
+- [x] `_build_short_english_hint()` 在未知语言时返回空字符串 `""`
+- [x] DeepSeek-OCR 分支调用 `_build_short_english_hint()` 而非 `_build_lang_hint()`
+- [x] DeepSeek-OCR 分支 `user_text` 格式为 `f"{DEEPSEEK_OCR_PROMPT} {short_hint}"`
+- [x] DeepSeek-OCR 分支 short_hint 为空时回退到 `DEEPSEEK_OCR_PROMPT` 原生格式
+- [x] 注释说明使用纯英文提示的原因（避免藏文 Unicode 导致 500 错误）
+- [x] VLM 分支（else 分支）保持不变，仍使用 `_build_lang_hint()` 加载中文规则
+- [x] VLM 分支 user_text 格式未变（`f"{lang_hint}请提取第{page_num}页..."`）
+- [x] `_build_lang_hint()` 方法保留未删除（VLM 分支仍在使用）
+- [x] `DEEPSEEK_OCR_PROMPT` 常量未修改
+- [x] `bo_to_zh.py` OCR 规则未修改
+- [x] config.py 中 OCR 参数未修改
+- [ ] 实际运行藏文 OCR 任务（page 6-10），不再出现 HTTP 500 错误

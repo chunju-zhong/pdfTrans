@@ -1,5 +1,98 @@
 # AI 开发进度记录
 
+### 2026-06-28
+- **当前状态**：已完成千帆 GLM-5.1 思考模式未关闭问题的修复
+- **已完成任务**：
+  - 修复千帆 GLM-5.1 翻译藏文时输出思考过程的问题：
+    - 修改 `config.py` 第 50 行 `QIANFAN_EXTRA_BODY`，从 `{"enable_thinking": False}` 扩展为同时包含 `enable_thinking: False` 和 `thinking: {"type": "disabled"}`
+    - 在 `modules/qianfan_translator.py` 流式累积 `reasoning_content` 后新增 INFO 诊断日志，监控思考模式是否真正关闭
+  - 文档同步更新：
+    - `docs/CHANGELOG.zh.md` / `docs/CHANGELOG.md`：新增本次修复条目
+    - `docs/ARCHITECTURE.zh.md` / `docs/ARCHITECTURE.md`：7.3 节 QIANFAN_EXTRA_BODY 参数说明更新
+    - `docs/DEVELOPMENT_GUIDE.zh.md` / `docs/DEVELOPMENT_GUIDE.md`：2.4 节添加代码级默认值说明
+- **技术实现**：
+  - 根因定位：`enable_thinking` 是 Qwen3 特有参数，对 GLM-5.1 无效；GLM-5.1 需使用 `thinking: {"type": "disabled"}` 关闭思考模式（参考智谱 BigModel 官方文档）
+  - 多模型参数兼容：千帆平台同时使用 GLM-5.1（翻译）和 Qwen3-32B（排版/术语），两类模型使用不同的思考关闭参数；通过在 extra_body 中同时包含两个参数实现兼容，各模型服务端会忽略自身不识别的参数
+  - 诊断日志策略：在既有 WARNING 日志（空响应 fallback）之外新增 INFO 日志（reasoning_content 非空），两层日志共存，便于监控修复效果
+- **影响**：
+  - 修复 GLM-5.1 翻译藏文时思考内容耗尽 max_tokens 导致翻译结果为空的问题
+  - 翻译结果不再出现"1. **分析源文本**"等思考过程内容
+  - 不影响硅基流动、aiping 平台（不在本次修改范围）
+  - qwen3-32b 排版/术语模块自动获得新参数（通过共享 QIANFAN_EXTRA_BODY），无需单独改动
+- **遇到的问题**：
+  - 初始定位时易误判为 fallback 逻辑问题，实际根因是思考模式参数不匹配；spec 阶段通过查阅智谱官方文档确认正确参数
+- **后续计划**：
+  - 运行时验证：在实际环境中翻译藏文，确认 `reasoning_content` 长度为 0、`finish_reason` 不为 `length`
+  - 监控 INFO 诊断日志：若修复生效，`百度千帆翻译残留 reasoning_content` 日志不应再出现
+
+### 2026-06-26
+- **当前状态**：已完成百度千帆翻译服务、藏语支持、语言专项规则系统、模块拆分等多项重大功能更新
+- **已完成任务**：
+  - 新增百度千帆翻译服务（qianfan）：
+    - 新增 `modules/qianfan_translator.py`（150行），继承 `Translator`，复用系统提示词生成 + 语言专项规则注入
+    - Config 新增 `QIANFAN_API_KEY/URL/MODEL/MODEL_LAYOUT/MODEL_GLOSSARY/OCR_LLM_MODEL` 及 `QIANFAN_EXTRA_BODY`
+    - CLI 新增 `-T qianfan`，Web UI 下拉框新增"百度千帆翻译"
+    - 语义分析器工厂、术语提取器均支持 `qianfan`
+  - 新增藏语（bo）支持：
+    - `SUPPORTED_LANGUAGES` 新增 `'bo': '藏文'`
+    - 新增 `prompts/language_rules/bo_to_zh.py`（8KB）：藏→中翻译专项规则
+    - 新增 `prompts/rule_registry.py`：按 `(stage, source_lang, target_lang)` 查找并追加规则到提示词
+  - 新增组合输出格式：CLI `-f pdf_docx` 和 `-f all`
+  - 新增 CLI 模型覆盖参数：`--translation-model`、`--layout-model`、`--glossary-model`、`--ocr-llm-model`
+  - Config 重构：类级别→实例级别 + `_load()` 方法，支持运行时刷新
+  - 翻译系统提示词重写：16条平铺→四段式结构 + 语言专项规则注入
+  - TranslationService 拆分（1400+→5个子模块）：
+    - `TranslationExtractor`（233行）
+    - `TranslationContentTranslator`（583行）
+    - `TranslationTableHandler`（384行）
+    - `TranslationOutputGenerator`（446行）
+  - PdfGenerator 渲染逻辑拆分：`PdfTextRenderer`（1070行）+ `PdfTableRenderer`（556行）
+  - LLM OCR 解析器拆分：`LlmOcrResponseParser`（707行）+ `LlmTableParser`（284行）+ 空白页检测 + 超时重试
+  - 术语提取器基类重构：`BaseApiGlossaryExtractor` + `QianfanGlossaryExtractor`
+  - 硬编码参数统一迁移到 Config 实例属性
+  - Bug修复：`glossary_service.py` 中 `cell.strip()` → `cell.text.strip()`
+- **技术实现**：
+  - 规则注册表设计：`rule_registry.merge_into_prompt(prompt, stage, source_lang, target_lang)` 在提示词末尾追加语言专项规则
+  - Config 实例化：`Config()` → `_load()` 从环境变量读取，属性从类级别 `Config.X` 改为实例级别 `self.X`
+  - TranslationService 拆分：主类保留流程编排和 re-export，子模块各司其职
+  - PdfGenerator 委派模式：保留所有公开方法签名，内部委派到 `self.text_renderer` / `self.table_renderer`
+  - LLM OCR 空白页检测：灰度标准差 < 阈值则跳过 OCR，节省 API 调用
+- **影响**：
+  - 新增第三个翻译平台百度千帆，扩大用户选择范围
+  - 藏语 PDF 翻译质量通过专项规则显著提升
+  - 模块拆分提高代码可维护性，单个文件从 1400+ 行降至 500 行以内
+  - CLI 功能更灵活，支持运行时模型覆盖和组合输出
+  - Config 支持运行时刷新，便于 Web 服务动态配置
+- **遇到的问题**：
+  - TranslationService 拆分需维护测试兼容性，通过 re-export 解决
+  - Config 重构从类级别改为实例级别，需全局搜索替换 `Config.X` 为 `config.X`
+- **后续计划**：
+  - 实际运行验证百度千帆翻译效果
+  - 实际运行验证藏语翻译效果
+  - 完善更多语言的专项规则
+  - 优化翻译提示词，减少翻译膨胀
+
+### 2026-06-23
+- **当前状态**：已完成 OCR 配置项清理和 SKILL.md 文档更新
+- **已完成任务**：
+  - OCR 配置项清理：
+    - 删除 `config.py` 中未使用的 `OCR_DPI` 配置项（从未被代码引用）
+    - 重命名 `OCR_RENDER_DPI` → `OCR_PADDLE_DPI`，与 `OCR_LLM_DPI` 命名对称
+    - 更新 `modules/ocr/paddle_extractor.py` 中 3 处引用（2 处代码 + 1 处日志字符串）
+  - SKILL.md 文档更新 — 补充 LLM OCR 功能：
+    - 更新 `--ocr-engine` 参数说明，标注支持 `paddleocr` 和 `llm`
+    - 新增 LLM OCR 引擎功能说明（工作原理、支持模型、响应格式、功能列表）
+    - 新增 LLM OCR 环境变量配置说明
+    - 新增 LLM OCR 使用示例和注意事项
+  - 项目技术文档同步更新：
+    - `docs/ARCHITECTURE.md`：删除 `OCR_DPI` 行，`OCR_RENDER_DPI` → `OCR_PADDLE_DPI`
+    - `docs/DEVELOPMENT_GUIDE.md`：同上
+- **技术实现**：
+  - 两个 OCR 引擎的 DPI 最优值不同：PaddleOCR 默认 120（内存优化防崩溃），LLM OCR 默认 150（节省 token），因此保留两个独立配置
+- **影响**：
+  - 环境变量 `OCR_RENDER_DPI` 需改为 `OCR_PADDLE_DPI`（如有 `.env` 配置需同步修改）
+  - SKILL.md 现在完整覆盖了 LLM OCR 功能文档
+
 ### 2026-06-19
 - **当前状态**：已完成 LLM OCR 模式表格渲染、定位、翻译、进度条等多项修复
 - **已完成任务**：

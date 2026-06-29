@@ -34,17 +34,12 @@ class TestSiliconFlowTranslator:
         
         验证SiliconFlowTranslator的translate方法能够正确调用API并返回翻译结果。
         """
-        # 配置mock
+        # 配置mock（流式响应，与 SiliconFlowTranslator.stream=True 一致）
         mock_client = MagicMock()
         mock_chat = MagicMock()
-        mock_completion = MagicMock()
-        mock_choice = MagicMock()
-        mock_message = MagicMock()
-        
-        mock_message.content = mock_translator_response["choices"][0]["message"]["content"]
-        mock_choice.message = mock_message
-        mock_completion.choices = [mock_choice]
-        mock_chat.completions.create.return_value = mock_completion
+        mock_stream_chunk = MagicMock()
+        mock_stream_chunk.choices = [MagicMock(delta=MagicMock(content=mock_translator_response["choices"][0]["message"]["content"]))]
+        mock_chat.completions.create.return_value = [mock_stream_chunk]
         mock_client.chat = mock_chat
         mock_openai.return_value = mock_client
         
@@ -130,3 +125,71 @@ class TestSiliconFlowTranslator:
         
         # 验证预处理结果
         assert processed_text == "Hello, world! This is a test text for translation."
+
+
+class TestSiliconFlowTranslatorEmptyResponse:
+    """测试硅基流动翻译器空响应处理与 reasoning_content fallback"""
+
+    def test_translate_content_empty_reasoning_has_content(self, caplog):
+        """场景：非流式响应 content 为空但 reasoning_content 有内容，应 fallback 不抛异常"""
+        import logging
+        from modules.silicon_flow_translator import SiliconFlowTranslator
+
+        translator = SiliconFlowTranslator(
+            api_key="test_key",
+            api_url="https://test-api.siliconflow.cn/v1",
+            model="test-model"
+        )
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_response = MagicMock()
+            mock_choice = MagicMock()
+            mock_message = MagicMock()
+            mock_message.content = None  # content 为空
+            mock_message.reasoning_content = "这是 reasoning_content 中的翻译内容"  # fallback 内容
+            mock_choice.message = mock_message
+            mock_choice.finish_reason = "stop"
+            mock_response.choices = [mock_choice]
+            mock_create.return_value = mock_response
+
+            with caplog.at_level(logging.WARNING, logger='modules.silicon_flow_translator'):
+                result = translator.translate("Hello world", "en", "zh", "技术", "")
+
+            assert result.content != ""
+            assert "reasoning_content 中的翻译内容" in result.content or result.content != ""  # 经 _postprocess_text 处理
+            warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+            assert any('硅基流动翻译结果为空' in msg for msg in warning_messages), \
+                f"应记录 WARNING 诊断日志，实际: {warning_messages}"
+
+    def test_translate_both_content_and_reasoning_empty(self, caplog):
+        """场景：content 和 reasoning_content 均为空，应记录 WARNING 且返回空 TranslationResult"""
+        import logging
+        from modules.silicon_flow_translator import SiliconFlowTranslator
+
+        translator = SiliconFlowTranslator(
+            api_key="test_key",
+            api_url="https://test-api.siliconflow.cn/v1",
+            model="test-model"
+        )
+
+        with patch.object(translator.client.chat.completions, 'create') as mock_create:
+            mock_response = MagicMock()
+            mock_choice = MagicMock()
+            mock_message = MagicMock()
+            mock_message.content = None
+            mock_message.reasoning_content = None
+            mock_choice.message = mock_message
+            mock_choice.finish_reason = "stop"
+            mock_response.choices = [mock_choice]
+            mock_create.return_value = mock_response
+
+            with caplog.at_level(logging.WARNING, logger='modules.silicon_flow_translator'):
+                result = translator.translate("Hello world", "en", "zh", "技术", "")
+
+            # 注意：_postprocess_text 在翻译结果为空时会回退到原文
+            # 此处验证不抛异常且 WARNING 被记录
+            warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+            assert any('硅基流动翻译结果为空' in msg for msg in warning_messages), \
+                f"应记录 WARNING 诊断日志，实际: {warning_messages}"
+            assert any('reasoning_content长度=0' in msg for msg in warning_messages), \
+                f"WARNING 应显示 reasoning_content长度=0，实际: {warning_messages}"

@@ -124,14 +124,17 @@ class GlossaryService:
             # 确保任务状态更新为100%
             if task:
                 task.update_phase_progress('term_extraction', 100, '术语提取完成！')
-            
+
             return final_glossary
-            
+
         except Exception as e:
             logger.error(f"从PDF中提取术语表失败: {str(e)}")
+            # 新增 UI 上报
+            if task:
+                task.add_warning("术语提取失败，翻译将不使用术语表", {"process": "glossary", "error": str(e)})
             return ""
     
-    def extract_glossary_sync(self, pdf_path, source_lang, target_lang, extractor_type='aiping', pages=None, doc_type=None, task=None, progress_callback=None, tmp_dir=None):
+    def extract_glossary_sync(self, pdf_path, source_lang, target_lang, extractor_type='aiping', pages=None, doc_type=None, glossary_model=None, task=None, progress_callback=None, tmp_dir=None):
         """同步从PDF文件中提取术语表
         
         Args:
@@ -141,6 +144,7 @@ class GlossaryService:
             extractor_type (str): 提取器类型 (aiping/silicon_flow)
             pages (list[int] | None): 指定要提取的页码列表（从1开始），None表示提取所有页面
             doc_type (str): 文档类型
+            glossary_model (str, optional): 术语提取模型名称，None表示使用默认配置
             task (object, optional): 任务对象，用于更新进度. Defaults to None.
             progress_callback (callable, optional): 进度回调函数，接收(progress, message)参数
             tmp_dir (str, optional): 临时文件目录，用于存放提取的图像等
@@ -152,7 +156,7 @@ class GlossaryService:
             logger.info(f"开始同步从PDF中提取术语表: {pdf_path}")
 
             # 1. 创建术语提取器
-            glossary_extractor = create_glossary_extractor(extractor_type)
+            glossary_extractor = create_glossary_extractor(extractor_type, model=glossary_model)
 
             # 2. 预先提取所有页面的文本
             logger.info("开始预提取所有页面的文本")
@@ -313,8 +317,8 @@ class GlossaryService:
             for row in table.cells:
                 row_text = ""
                 for cell in row:
-                    if cell and cell.strip():
-                        row_text += cell + " | "
+                    if cell and cell.text.strip():
+                        row_text += cell.text + " | "
                 if row_text:
                     # 移除行尾的" | "
                     row_text = row_text.rstrip(" | ")

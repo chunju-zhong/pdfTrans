@@ -18,6 +18,32 @@ from modules.extractors.coordinate_utils import detect_text_block_alignment
 logger = logging.getLogger(__name__)
 
 
+def _is_title_like_text(text):
+    """判断文本是否像标题（用于决定是否清理换行符）
+
+    pdf_extractor 没有 PaddleOCR 的布局标签信息，使用文本特征启发式判断：
+    - 行数较少（<=3 行）：标题通常不超过3行
+    - 总长度较短（<=100 字符）：标题通常不长
+
+    用于区分标题（清理换行保持单行）与目录/列表/多行正文（保留换行维持结构），
+    与 paddle_extractor 的 TITLE_LABELS 语义对齐。
+
+    Args:
+        text (str): 待判断的文本
+
+    Returns:
+        bool: True 表示像标题，应清理换行；False 表示像多行结构化文本，应保留换行
+    """
+    if not text:
+        return False
+    lines = text.split('\n')
+    if len(lines) > 3:
+        return False
+    if len(text.strip()) > 100:
+        return False
+    return True
+
+
 class PdfExtractor:
     """PDF文本提取类
     
@@ -26,7 +52,8 @@ class PdfExtractor:
     
     def __init__(self, pdf_path=None, table_extractor='pymupdf',
                  ocr_mode=False, ocr_engine='paddleocr', ocr_lang='ch',
-                 translator_type='aiping'):
+                 translator_type='aiping', source_lang='en',
+                 ocr_llm_model=None):
         """初始化PdfExtractor对象
 
         Args:
@@ -36,6 +63,8 @@ class PdfExtractor:
             ocr_engine (str, optional): OCR引擎类型. Defaults to 'paddleocr'.
             ocr_lang (str, optional): OCR识别语言. Defaults to 'ch'.
             translator_type (str, optional): 翻译引擎类型. Defaults to 'aiping'.
+            source_lang (str, optional): 源语言代码，用于LLM OCR提示. Defaults to 'en'.
+            ocr_llm_model (str, optional): LLM OCR模型名称. Defaults to None.
         """
         self.pdf_path = pdf_path
         self.metadata = None
@@ -46,6 +75,8 @@ class PdfExtractor:
         self.ocr_engine = ocr_engine
         self.ocr_lang = ocr_lang
         self.translator_type = translator_type
+        self.source_lang = source_lang
+        self.ocr_llm_model = ocr_llm_model
         self._ocr_extractor = None
 
         if pdf_path:
@@ -96,6 +127,9 @@ class PdfExtractor:
             }
             if self.ocr_engine == 'llm':
                 ocr_kwargs['translator_type'] = self.translator_type
+                ocr_kwargs['source_lang'] = self.source_lang
+                if self.ocr_llm_model:
+                    ocr_kwargs['model'] = self.ocr_llm_model
             self._ocr_extractor = create_ocr_extractor(
                 self.ocr_engine,
                 **ocr_kwargs
@@ -443,8 +477,9 @@ class PdfExtractor:
                         block_type=block_type,
                         page_num=current_page_num
                     )
-                    # 删除换行符
-                    if '\n' in text:
+                    # 仅对标题类文本清理换行符保持单行；
+                    # 目录/列表/多行正文保留换行维持多行结构
+                    if '\n' in text and _is_title_like_text(text):
                         text_block.block_text = text_block.block_text.replace('\n', ' ')
                     # 检测文本块对齐方式
                     page_width = page.rect.width

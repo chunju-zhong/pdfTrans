@@ -1,5 +1,6 @@
 from .semantic_analyzer import SemanticAnalyzer
 from config import config
+from modules.llm_error_handler import classify_llm_error
 
 class AipingSemanticAnalyzer(SemanticAnalyzer):
     """aiping语义分析器实现
@@ -21,12 +22,12 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
         self.client = OpenAI(
             base_url=self.api_url,
             api_key=self.api_key,
-            timeout=30.0,  # 添加超时设置，30秒
+            timeout=config.SEMANTIC_ANALYSIS_TIMEOUT,
         )
-        # 设置max_tokens属性，默认值为1024（用于单个语义分析）
-        self.max_tokens = 1024
-        # 设置batch_max_tokens属性，默认值为2048（用于批量语义分析）
-        self.batch_max_tokens = 2048
+        # 设置max_tokens属性（使用config的常量）
+        self.max_tokens = config.SEMANTIC_ANALYSIS_SINGLE_MAX_TOKENS
+        # 设置batch_max_tokens属性
+        self.batch_max_tokens = config.SEMANTIC_ANALYSIS_BATCH_MAX_TOKENS
     
     def analyze_semantic_relationship(self, text1, text2, source_lang):
         """分析两个文本块之间的语义关系，判断是否应该合并
@@ -58,8 +59,8 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=True,  # 保持流式调用
-                    temperature=0.1,  # 降低温度，提高分析准确性
-                    top_p=0.9,  # 核采样参数
+                    temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                    top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                     max_tokens=self.max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
@@ -76,34 +77,54 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
 
                 # 处理响应 - stream=True时直接处理流式响应
                 analysis_result = ""
+                reasoning_content_accumulated = ""
+                finish_reason = ""
                 for chunk in response:
                     if hasattr(chunk, "choices") and len(chunk.choices) > 0:
                         delta = chunk.choices[0].delta
                         if hasattr(delta, "content") and delta.content:
                             analysis_result += delta.content
-                        elif hasattr(delta, "reasoning_content"):
-                            # 跳过思考内容
-                            continue
+                        elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                            # 累积思考内容（用于诊断和 fallback）
+                            reasoning_content_accumulated += delta.reasoning_content
+
+                    # 捕获 finish_reason（用于诊断）
+                    if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                        choice = chunk.choices[0]
+                        if hasattr(choice, "finish_reason") and choice.finish_reason:
+                            finish_reason = choice.finish_reason
+
+                # content 为空时记录诊断日志并尝试从 reasoning_content 提取 JSON
+                if not analysis_result:
+                    logger.warning(
+                        f"语义分析结果 content 为空: reasoning_content长度={len(reasoning_content_accumulated)}, "
+                        f"finish_reason={finish_reason}, 块1前100字符='{text1[:100]}', 块2前100字符='{text2[:100]}'"
+                    )
+                    if reasoning_content_accumulated:
+                        analysis_result = reasoning_content_accumulated
 
                 logger.info(f"LLM返回的原始分析结果: '{analysis_result}'")
 
                 # 解析LLM的分析结果
-                analysis_json = json.loads(analysis_result)
+                analysis_json = self._extract_json_from_response(analysis_result)
+                if analysis_json is None:
+                    raise json.JSONDecodeError("无法从响应中提取JSON", analysis_result, 0)
                 logger.info(f"解析后的JSON结果: {analysis_json}")
-                
+
                 should_merge = analysis_json.get("merge", False)
                 logger.info(f"最终合并决策: {should_merge}，块1='{text1}', 块2='{text2}'")
                 return bool(should_merge)
 
             except Exception as e:
+                error_info = classify_llm_error(e)
                 if attempt < max_retries - 1:
                     # 不是最后一次尝试，记录错误并重试
-                    logger.error(f"aiping语义分析API请求失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}，将在 {retry_delay} 秒后重试...")
+                    logger.error(f"aiping语义分析API请求失败 (尝试 {attempt + 1}/{max_retries}): {error_info['user_message']}，将在 {retry_delay} 秒后重试...")
                     logger.error(f"失败时的文本块: 块1='{text1}', 块2='{text2}'")
                     time.sleep(retry_delay)
                 else:
                     # 最后一次尝试失败，返回默认值
-                    logger.error(f"aiping语义分析API请求最终失败: {str(e)}，返回默认值False")
+                    logger.error(f"aiping语义分析API请求最终失败: {error_info['user_message']}，返回默认值False")
                     logger.error(f"失败时的文本块: 块1='{text1}', 块2='{text2}'")
                     return False
     
@@ -149,8 +170,8 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     stream=True,  # 保持流式调用
-                    temperature=0.1,  # 降低温度，提高分析准确性
-                    top_p=0.9,  # 核采样参数
+                    temperature=config.SEMANTIC_ANALYSIS_TEMPERATURE,
+                    top_p=config.SEMANTIC_ANALYSIS_TOP_P,
                     max_tokens=self.batch_max_tokens,  # 使用类属性作为最大token数
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
@@ -167,6 +188,8 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
 
                 # 处理响应 - stream=True时直接处理流式响应
                 analysis_result = ""
+                reasoning_content_accumulated = ""
+                finish_reason = ""
                 chunk_count = 0
                 logger.info("开始处理流式响应")
                 for chunk in response:
@@ -176,18 +199,35 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                         if hasattr(delta, "content") and delta.content:
                             analysis_result += delta.content
                             logger.debug(f"处理响应块 {chunk_count}: 添加内容长度={len(delta.content)}")
-                        elif hasattr(delta, "reasoning_content"):
-                            # 跳过思考内容
-                            logger.debug(f"处理响应块 {chunk_count}: 跳过思考内容")
-                            continue
+                        elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                            # 累积思考内容（用于诊断和 fallback）
+                            reasoning_content_accumulated += delta.reasoning_content
+                            logger.debug(f"处理响应块 {chunk_count}: 累积思考内容长度={len(reasoning_content_accumulated)}")
+
+                    # 捕获 finish_reason（用于诊断）
+                    if hasattr(chunk, "choices") and len(chunk.choices) > 0:
+                        choice = chunk.choices[0]
+                        if hasattr(choice, "finish_reason") and choice.finish_reason:
+                            finish_reason = choice.finish_reason
                 logger.info(f"完成处理响应，共处理 {chunk_count} 个块，结果长度={len(analysis_result)}")
+
+                # content 为空时记录诊断日志并尝试从 reasoning_content 提取 JSON
+                if not analysis_result:
+                    logger.warning(
+                        f"批量语义分析结果 content 为空: reasoning_content长度={len(reasoning_content_accumulated)}, "
+                        f"finish_reason={finish_reason}, 文本块数量={len(blocks)}, 块1前100字符='{blocks[0][:100] if blocks else ''}'"
+                    )
+                    if reasoning_content_accumulated:
+                        analysis_result = reasoning_content_accumulated
 
                 logger.info(f"LLM返回的原始批量分析结果: '{analysis_result}'")
 
                 # 解析LLM的分析结果
-                analysis_json = json.loads(analysis_result)
+                analysis_json = self._extract_json_from_response(analysis_result)
+                if analysis_json is None:
+                    raise json.JSONDecodeError("无法从响应中提取JSON", analysis_result, 0)
                 logger.info(f"解析后的JSON结果: {analysis_json}")
-                
+
                 merge_results = analysis_json.get("merge", [])
                 logger.info(f"最终批量合并决策: {merge_results}")
                 
@@ -227,13 +267,14 @@ class AipingSemanticAnalyzer(SemanticAnalyzer):
                     logger.error("最终失败，返回默认值列表")
                     return [False] * expected_merge_count
             except Exception as e:
+                error_info = classify_llm_error(e)
                 if attempt < max_retries - 1:
                     # 不是最后一次尝试，记录错误并重试
-                    logger.error(f"aiping批量语义分析API请求失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}，将在 {retry_delay} 秒后重试...")
+                    logger.error(f"aiping批量语义分析API请求失败 (尝试 {attempt + 1}/{max_retries}): {error_info['user_message']}，将在 {retry_delay} 秒后重试...")
                     logger.error(f"失败时的文本块数量: {len(blocks)}")
                     time.sleep(retry_delay)
                 else:
                     # 最后一次尝试失败，返回默认值列表
-                    logger.error(f"aiping批量语义分析API请求最终失败: {str(e)}，返回默认值列表")
+                    logger.error(f"aiping批量语义分析API请求最终失败: {error_info['user_message']}，返回默认值列表")
                     logger.error(f"失败时的文本块数量: {len(blocks)}")
                     return [False] * expected_merge_count

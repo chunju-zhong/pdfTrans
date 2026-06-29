@@ -1,0 +1,7 @@
+- [x] `config.py` 中新增 `OCR_LLM_TIMEOUT` 配置项，默认 300 秒
+- [x] `.env.example` 中新增 `OCR_LLM_TIMEOUT` 环境变量说明
+- [x] `llm_extractor.py` 中 aiping 客户端使用 `config.OCR_LLM_TIMEOUT` 和 `max_retries=0`
+- [x] `llm_extractor.py` 中 silicon_flow 客户端使用 `config.OCR_LLM_TIMEOUT` 和 `max_retries=0`
+- [x] `_extract_page` 超时时记录详细日志（耗时、模型、页码）
+- [x] 使用 GLM-4.6V 处理藏文页面不再出现无限重试
+- [x] `OCR_LLM_EXTRA_BODY` 中 `provider.sort` 改为 `latency`，优先路由低延迟供应商

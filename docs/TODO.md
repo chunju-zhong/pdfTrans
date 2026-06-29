@@ -23,6 +23,18 @@
 - [x] Code quality improvements (translation fallback, font estimation fix, resource release protection)
 - [x] Fix OCR formula recognition failure across all output formats (memory tier uses physical memory, DPI/inference params raised, log corrected)
 - [x] Further optimize glossary extraction accuracy and efficiency
+- [x] Added Baidu Qianfan translation service (qianfan) support
+- [x] Added Tibetan (bo) source and target language support
+- [x] Added language-specific rule system (prompts/rule_registry.py + language_rules/)
+- [x] Added CLI model override parameters (--translation-model/--layout-model/--glossary-model/--ocr-llm-model)
+- [x] Added combined output formats (pdf_docx/all)
+- [x] TranslationService major split (5 sub-modules)
+- [x] PdfGenerator rendering logic split (PdfTextRenderer + PdfTableRenderer)
+- [x] LLM OCR parser split (LlmOcrResponseParser + LlmTableParser)
+- [x] Glossary extractor base class refactoring (BaseApiGlossaryExtractor)
+- [x] Config refactored to instance-level + _load() method
+- [x] Translation system prompt rewrite to 4-section structure
+- [x] Unified hardcoded parameters migrated to Config instance attributes
 - [ ] Fix split logic not cleaning title newlines issue
   - Add title recognition and newline cleaning in `split_translated_result` function
   - Add `_is_title_block` function to determine if original block is a title
@@ -56,6 +68,10 @@
 - [x] PDF and Word table alignment matching original PDF (alignment inferred from character positions at extraction layer)
 - [ ] Markdown merged cell support (needs placeholder protection to prevent LLM from overwriting HTML tables)
 - [ ] Fix table caption/footnote incorrectly merged into cells (post-processing separation)
+- [x] Fix 3 translator tests with stale non-streaming mocks after streaming switch
+  - Affected tests: `test_translator.py::TestTranslatorImplementations::test_silicon_flow_translate`, `test_silicon_flow_translator.py::TestSiliconFlowTranslator::test_translate`, `test_qianfan_translator.py::TestQianfanTranslator::test_translate`
+  - Reason: `silicon_flow_translator.py` and `qianfan_translator.py` switched to streaming calls (`stream=True`, reading `chunk.choices[0].delta.content`), but tests still mock non-streaming response (`mock_response.choices[0].message.content`), causing the streaming loop to read empty content and fall back to original text
+  - Solution: Update all 3 tests' mocks to streaming response format, following `test_aiping_translate`'s mock pattern (`mock_stream_chunk.choices = [MagicMock(delta=MagicMock(content='你好'))]`, `mock_create.return_value = [mock_stream_chunk]`)
 
 ## Medium Priority
 - [x] Fix test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages
@@ -88,7 +104,7 @@
 - [ ] Expand table extraction, support more complex tables and table styles
 
 ## Low Priority
-- [ ] Expand glossary extraction support for more translation platforms
+- [x] Expand glossary extraction support for more translation platforms (added Baidu Qianfan)
 - [ ] Optimize API call strategy, improve translation efficiency
 - [ ] Improve documentation, add user guides
 - [ ] Code refactoring, improve maintainability

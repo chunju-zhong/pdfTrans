@@ -1,0 +1,23 @@
+- [x] Issue 1: sentinel 数据损坏修复
+  - [x] `_parse_format_result` 失败分支返回 `[]` 而非 `["fallback_invalid_format"]`
+  - [x] 单块+空响应场景测试通过（不写入哨兵字符串）
+  - [x] 多块+无标记+行数不足场景测试通过（回退到原文）
+- [x] Issue 2: 删除 _build_short_english_hint 死代码
+  - [x] `_SOURCE_LANG_ENGLISH_NAMES` 字典已删除
+  - [x] `_build_short_english_hint` 方法已删除
+  - [x] `_extract_page` DeepSeek-OCR 分支直接使用 `DEEPSEEK_OCR_PROMPT`
+  - [x] 无其他代码引用被删除的符号
+- [x] Issue 3: format_blocks 异常上报 UI
+  - [x] `format_blocks` 内部无 try/except 包裹 API 调用
+  - [x] 调用方 `translation_content.py` 的 `task.add_warning` 在 API 失败时触发
+- [x] Issue 4: 删除未使用导入
+  - [x] `llm_response_parser.py` 不再导入 `numpy`/`PIL`
+  - [x] `llm_extractor.py` 的 `numpy`/`PIL` 导入不受影响
+- [x] Issue 5: target_lang 注入提示词
+  - [x] `format_blocks` user_prompt 包含目标语言名称
+  - [x] `target_lang="zh"` 时提示词含"中文"
+- [x] Issue 6: classify_llm_error 一致性
+  - [x] `format_blocks` 路径的异常消息使用 `classify_llm_error` 友好消息（在调用方 `translation_content.py` 实现）
+- [x] 语法检查：`python3 -m py_compile` 所有修改的文件无错误
+- [x] 测试通过：`pytest tests/test_translator.py`（24/25 通过；1 个 `test_silicon_flow_translate` 失败为先前 streaming 切换遗留，与本轮修改无关）
+- [x] 测试通过：`pytest tests/test_semantic_analyzer_json_extraction.py`（15/15 通过）

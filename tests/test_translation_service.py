@@ -56,6 +56,67 @@ class TestTranslationService:
         # 测试获取硅基流动翻译器
         translator = translation_service.get_translator('silicon_flow')
         assert translator is not None
+        
+        # 测试获取百度千帆翻译器
+        translator = translation_service.get_translator('qianfan')
+        assert translator is not None
+    
+    def test_get_translator_with_model(self):
+        """测试获取翻译器时指定模型参数"""
+        from modules.aiping_translator import AipingTranslator
+        from modules.silicon_flow_translator import SiliconFlowTranslator
+        from modules.qianfan_translator import QianfanTranslator
+        
+        # 测试指定模型名称
+        translator = translation_service.get_translator('aiping', model='custom-model')
+        assert translator is not None
+        assert translator.model == 'custom-model'
+        
+        translator = translation_service.get_translator('silicon_flow', model='custom-model')
+        assert translator is not None
+        assert translator.model == 'custom-model'
+        
+        translator = translation_service.get_translator('qianfan', model='custom-model')
+        assert translator is not None
+        assert translator.model == 'custom-model'
+    
+    def test_get_translator_invalid(self):
+        """测试获取不支持的翻译器类型"""
+        with pytest.raises(ValueError, match="不支持的翻译服务类型"):
+            translation_service.get_translator('invalid_type')
+    
+    def test_get_semantic_analyzer(self):
+        """测试获取语义分析器
+        
+        验证get_semantic_analyzer方法能够正确返回不同类型的分析器
+        """
+        # 测试获取aiping分析器
+        analyzer = translation_service.get_semantic_analyzer('aiping')
+        assert analyzer is not None
+        
+        # 测试获取硅基流动分析器
+        analyzer = translation_service.get_semantic_analyzer('silicon_flow')
+        assert analyzer is not None
+        
+        # 测试获取百度千帆分析器
+        analyzer = translation_service.get_semantic_analyzer('qianfan')
+        assert analyzer is not None
+    
+    def test_get_semantic_analyzer_with_model(self):
+        """测试获取语义分析器时指定模型参数"""
+        # 测试指定模型名称
+        analyzer = translation_service.get_semantic_analyzer('aiping', model='custom-model')
+        assert analyzer is not None
+        assert analyzer.model == 'custom-model'
+        
+        analyzer = translation_service.get_semantic_analyzer('silicon_flow', model='custom-model')
+        assert analyzer is not None
+        assert analyzer.model == 'custom-model'
+    
+    def test_get_semantic_analyzer_invalid(self):
+        """测试获取不支持的语义分析器类型"""
+        with pytest.raises(ValueError, match="无效的语义分析器类型"):
+            translation_service.get_semantic_analyzer('invalid_type')
     
     def test_process_translation_with_semantic_merge(self, test_pdf_path):
         """测试翻译服务处理函数（启用语义合并）

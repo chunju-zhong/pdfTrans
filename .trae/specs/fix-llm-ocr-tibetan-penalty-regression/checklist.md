@@ -1,0 +1,21 @@
+- [x] `config.py` 中 `OCR_LLM_FREQUENCY_PENALTY` 默认值为 `0.0`
+- [x] `config.py` 中 `OCR_LLM_PRESENCE_PENALTY` 默认值为 `0.0`
+- [x] `config.py` 中 `OCR_LLM_TEMPERATURE` 默认值为 `0.1`
+- [x] `config.py` 中 `OCR_LLM_MAX_TOKENS` 默认值为 `8000`
+- [x] `modules/ocr/llm_extractor.py` 中 `DEEPSEEK_OCR_PROMPT` 仅包含 `"<image>\n<|grounding|>Convert the document to markdown."`
+- [x] `DEEPSEEK_OCR_PROMPT` 不包含 "Only transcribe text actually visible in the image"
+- [x] `DEEPSEEK_OCR_PROMPT` 不包含 "Do not repeat the same phrase"
+- [x] `DEEPSEEK_OCR_PROMPT` 不包含 "Output length must match the visible text amount"
+- [x] `LlmOcrExtractor` 新增私有方法 `_build_lang_hint(self) -> str`，根据 `self.source_lang` 从 `prompts.rule_registry` 加载 `task_type="ocr"` 规则
+- [x] DeepSeek-OCR 分支调用 `_build_lang_hint()` 并将结果追加到 user 消息文本末尾（`DEEPSEEK_OCR_PROMPT + lang_hint`）
+- [x] VLM 分支调用 `_build_lang_hint()` 替换原有内联加载逻辑（共享逻辑，无重复实现）
+- [x] `ImportError` 时 `_build_lang_hint()` 返回空字符串（向后兼容）
+- [x] `source_lang="bo"` 时 `lang_hint` 包含藏文 OCR 规则内容（bbox 行宽、易混淆字形、藏文数字、藏文标点、分隔符保留）
+- [x] `source_lang="bo"` 时 `lang_hint` 包含通用 OCR 规则内容（逐行提取、多行不合并）
+- [x] `.env.example` 中 `OCR_LLM_MAX_TOKENS` 注释值为 `8000`
+- [x] `.env.example` 中 `OCR_LLM_TEMPERATURE` 注释值为 `0.1`
+- [x] `.env.example` 中 `OCR_LLM_FREQUENCY_PENALTY` 注释值为 `0.0`，并附"OCR 转录任务不应使用频率惩罚"说明
+- [x] `.env.example` 中 `OCR_LLM_PRESENCE_PENALTY` 注释值为 `0.0`，并附"OCR 转录任务不应使用存在惩罚"说明
+- [x] `prompts/language_rules/bo_to_zh.py` 中 OCR 规则不再包含"不要重复输出同一短语"条目
+- [x] `prompts/language_rules/bo_to_zh.py` 中 OCR 规则不再包含"输出长度应与图像实际文字量匹配"条目
+- [x] `prompts/language_rules/bo_to_zh.py` 中 OCR 规则保留原第 1-5 条（bbox 行宽、易混淆字形、藏文数字、藏文标点、分隔符保留）

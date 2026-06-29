@@ -23,6 +23,18 @@
 - [x] 代码质量提升（翻译回退、字体估算修正、资源释放保护）
 - [x] 修复OCR公式识别三端输出失败（内存分级改用物理内存、DPI/推理参数提升、日志修正）
 - [x] 进一步优化术语提取的准确性和效率
+- [x] 新增百度千帆翻译服务（qianfan）支持
+- [x] 新增藏语（bo）源语言和目标语言支持
+- [x] 新增语言专项规则系统（prompts/rule_registry.py + language_rules/）
+- [x] 新增 CLI 模型覆盖参数（--translation-model/--layout-model/--glossary-model/--ocr-llm-model）
+- [x] 新增组合输出格式（pdf_docx/all）
+- [x] TranslationService 大规模拆分（5个子模块）
+- [x] PdfGenerator 渲染逻辑拆分（PdfTextRenderer + PdfTableRenderer）
+- [x] LLM OCR 解析器拆分（LlmOcrResponseParser + LlmTableParser）
+- [x] 术语提取器基类重构（BaseApiGlossaryExtractor）
+- [x] Config 重构为实例级别 + _load() 方法
+- [x] 翻译系统提示词重写为四段式结构
+- [x] 硬编码参数统一迁移到 Config 实例属性
 - [ ] 修复拆分逻辑未清理标题换行符的问题
   - 在 `split_translated_result` 函数中添加标题识别和换行符清理
   - 添加 `_is_title_block` 函数判断原始块是否是标题
@@ -56,6 +68,10 @@
 - [x] PDF 和 Word 表格对齐方式匹配原文（提取层从字符位置推断对齐）
 - [ ] Markdown 合并单元格支持（需实现占位符保护机制，防止 LLM 覆盖 HTML 表格）
 - [ ] 修复表格标题/脚注被错误合并进单元格（后处理分离方案）
+- [x] 修复流式切换导致的 3 个翻译器测试 mock 失效
+  - 涉及测试：`test_translator.py::TestTranslatorImplementations::test_silicon_flow_translate`、`test_silicon_flow_translator.py::TestSiliconFlowTranslator::test_translate`、`test_qianfan_translator.py::TestQianfanTranslator::test_translate`
+  - 原因：`silicon_flow_translator.py` 和 `qianfan_translator.py` 切换为流式调用（`stream=True`，读取 `chunk.choices[0].delta.content`），但测试仍 mock 非流式响应（`mock_response.choices[0].message.content`），导致流式循环读不到内容，`translated_text_raw` 为空，回退到原文
+  - 解决方案：更新 3 个测试的 mock 为流式响应格式，参考 `test_aiping_translate` 的 mock 模式（`mock_stream_chunk.choices = [MagicMock(delta=MagicMock(content='你好'))]`，`mock_create.return_value = [mock_stream_chunk]`）
 
 ## 中优先级
 - [x] 修复 test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages
@@ -88,7 +104,7 @@
 - [ ] 扩展表格提取功能，支持更多复杂表格和表格样式
 
 ## 低优先级
-- [ ] 扩展支持更多翻译平台的术语提取
+- [x] 扩展支持更多翻译平台的术语提取（已新增百度千帆）
 - [ ] 优化API调用策略，提高翻译效率
 - [ ] 完善文档，添加使用指南
 - [ ] 代码重构，提高代码可维护性

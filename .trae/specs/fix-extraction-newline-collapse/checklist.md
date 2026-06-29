@@ -1,0 +1,13 @@
+- [x] `_build_text_from_textlines` 恢复 `is_title` 参数作用：仅 is_title=True 时清理换行符
+- [x] is_title=False 时保留 `result` 的 `\n`，不执行 `replace('\n', ' ')`
+- [x] 调用处 paddle_extractor.py:805 与 :950 已正确传 `is_title=(label in TITLE_LABELS)`，无需改动
+- [x] 标题类文本（paragraph_title/title/section_title/document_title/doc_title）仍清理换行保持单行
+- [x] 非标题类文本（目录、列表、多行正文）保留换行符
+- [x] pdf_extractor.py:454-456 区分标题与正文，仅对标题类清理换行
+- [x] 不回退 `restore-newline-cleanup-in-text-extraction` 修复的标题渲染问题
+- [x] 不改动翻译 prompt `_generate_system_prompt`、排版 prompt `_FORMAT_SYSTEM_PROMPT`
+- [x] 不改动 `split_translated_result` 的按长度切分逻辑
+- [x] LLM OCR 路径（llm_response_parser.py）已确认保留换行，无需改动
+- [x] 表格单元格换行清理已移除：coordinate_utils.py:390 / llm_table_parser.py:235 / paddle_extractor.py:1557 三处 `replace('\n', ' ')` 均已改为保留 `\n`（用户后续要求表格单元格也保留换行符，PyMuPDF `insert_textbox` 支持 `\n` 作为显式换行）
+- [x] 提取相关测试全部通过
+- [ ] 修复后目录页提取的 block_text 保留目录行的 `\n` 换行结构（需实际提取流程验证，PaddleOCR 与非 OCR 两条路径）

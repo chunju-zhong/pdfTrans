@@ -400,8 +400,8 @@ class PaddleOcrExtractor(OcrExtractor):
                 - img_height_px: 渲染图像高度（像素）
         """
         page_images = {}
-        dpi = self.render_dpi if self.render_dpi is not None else config.OCR_RENDER_DPI
-        logger.info(f"OCR 渲染 DPI: {dpi} (profiler={self.render_dpi}, config={config.OCR_RENDER_DPI})")
+        dpi = self.render_dpi if self.render_dpi is not None else config.OCR_PADDLE_DPI
+        logger.info(f"OCR 渲染 DPI: {dpi} (profiler={self.render_dpi}, config={config.OCR_PADDLE_DPI})")
         for page_num in target_pages:
             page_idx = page_num - 1
             page = doc[page_idx]
@@ -579,7 +579,8 @@ class PaddleOcrExtractor(OcrExtractor):
             block_bbox: 布局区域 bbox (x1,y1,x2,y2) 像素坐标
             textline_boxes: textline bbox 列表
             textline_texts: textline 文本列表
-            is_title: 保留参数（不再使用）
+            is_title: 是否为标题类文本。标题类文本清理换行符保持单行；
+                      非标题类（目录/列表/多行正文）保留换行维持结构
 
         Returns:
             str | None: 构建的文本，或 None（无法构建时）
@@ -613,12 +614,13 @@ class PaddleOcrExtractor(OcrExtractor):
             lines.append(' '.join(current_parts))
         result = '\n'.join(lines)
 
-        # 统一删除换行符
-        if result and '\n' in result:
+        # 仅对标题类文本清理换行符，保持标题单行；
+        # 非标题类（目录/列表/多行正文）保留换行维持多行结构
+        if is_title and result and '\n' in result:
             original_text = result
             result = result.replace('\n', ' ')
             newline_count = original_text.count('\n')
-            logger.info(f"[换行符清理] 文本删除换行符: '{original_text[:30]}' -> '{result[:30]}', 换行符数量={newline_count}")
+            logger.info(f"[换行符清理] 标题文本删除换行符: '{original_text[:30]}' -> '{result[:30]}', 换行符数量={newline_count}")
 
         return result if result.strip() else None
 
@@ -1175,7 +1177,7 @@ class PaddleOcrExtractor(OcrExtractor):
             pages_to_process = [p for p in target_pages if p not in skip_pages_set]
 
             logger.info(f"开始OCR提取PDF: {pdf_path}, 共{len(target_pages)}页, 跳过{len(skip_pages_set)}页, 需处理{len(pages_to_process)}页")
-            logger.info(f"OCR内存优化配置: OCR_SKIP_TABLE={self._skip_table}, OCR_SKIP_FORMULA={self._skip_formula}, OCR_RENDER_DPI={config.OCR_RENDER_DPI}")
+            logger.info(f"OCR内存优化配置: OCR_SKIP_TABLE={self._skip_table}, OCR_SKIP_FORMULA={self._skip_formula}, OCR_PADDLE_DPI={config.OCR_PADDLE_DPI}")
             if self._skip_table or self._skip_formula:
                 logger.info("提示: 部分OCR功能已跳过，若需完整功能请调整参数")
 
@@ -1551,8 +1553,9 @@ class PaddleOcrExtractor(OcrExtractor):
                     break
 
                 # 在起始位置放置 PdfCell
+                # 保留换行符：单元格内的多行结构需要保留 \n
                 cell = PdfCell(
-                    text=text.replace('\n', ' '),
+                    text=text,
                     bbox=(0, 0, 0, 0),
                     row_idx=row_idx,
                     col_idx=col_idx,

@@ -22,6 +22,12 @@ pdftrans是一个支持多翻译API的PDF翻译命令行工具，你必须根据
 - pdf：生成PDF格式输出
 - docx：生成Word文档格式输出
 - markdown：生成Markdown格式输出（打包为zip文件）
+- pdf_docx：同时生成PDF和Word两种格式
+- all：同时生成PDF、Word和Markdown三种格式
+
+## 组合格式说明
+
+使用 `pdf_docx` 或 `all` 格式时，工具会同时生成多种格式的输出文件。`-o` 参数被视作输出目录前缀。不带 `-o` 时文件默认输出到配置的输出目录。
 
 ## 智能后缀处理
 工具会根据输出格式自动添加正确的文件后缀：
@@ -49,9 +55,10 @@ pdftrans是一个支持多翻译API的PDF翻译命令行工具，你必须根据
 
 ## API密钥配置
 
-pdftrans工具需要配置翻译API的API密钥才能正常工作。目前支持两种翻译服务：
+pdftrans工具需要配置翻译API的API密钥才能正常工作。目前支持三种翻译服务：
 1. **aiping API** （默认）
 2. **硅基流动 API**
+3. **百度千帆 API**
 
 **配置步骤：**
 1. 复制 `.env.example` 文件为 `.env`
@@ -65,9 +72,27 @@ AIPING_API_KEY=your_aiping_api_key
 
 # 硅基流动 API 配置
 SILICON_FLOW_API_KEY=your_silicon_flow_api_key
+
+# 百度千帆 API 配置
+QIANFAN_API_KEY=your_qianfan_api_key
 ```
 
-**注意：** 只需配置其中一种翻译服务的API密钥即可使用。
+**注意：** 只需配置至少一种翻译服务的API密钥即可使用。
+
+**LLM OCR 配置（可选）：**
+
+使用 `--ocr-engine llm` 时，可通过以下环境变量自定义模型和行为：
+
+```bash
+# LLM OCR 模型配置
+AIPING_OCR_LLM_MODEL=DeepSeek-OCR-2           # aiping服务的OCR模型
+SILICON_FLOW_OCR_LLM_MODEL=deepseek-ai/DeepSeek-OCR  # 硅基流动服务的OCR模型
+
+# LLM OCR 参数配置
+OCR_LLM_MAX_TOKENS=8192    # 最大输出token数
+OCR_LLM_TEMPERATURE=0.1    # 生成温度（越低越确定）
+OCR_LLM_DPI=150            # 渲染DPI（越低token消耗越少，识别精度略降）
+```
 
 ## 命令行使用
 
@@ -94,9 +119,25 @@ pdftrans translate document.pdf -f markdown -c
 # 启用OCR模式
 pdftrans translate document.pdf --ocr -o output.pdf
 
-# 指定OCR引擎和识别语言
+# 指定OCR引擎和识别语言（PaddleOCR引擎）
 pdftrans translate document.pdf --ocr --ocr-engine paddleocr --ocr-lang en -o output.pdf
-```
+
+# 使用LLM视觉模型OCR引擎
+pdftrans translate document.pdf --ocr --ocr-engine llm -o output.pdf
+
+# 使用LLM OCR引擎并指定翻译服务
+
+# 使用千帆翻译服务
+pdftrans translate document.pdf -T qianfan -o output.pdf
+
+# 藏语翻译
+pdftrans translate document.pdf -s bo -t zh -o output.pdf
+
+# 同时生成PDF和Word
+pdftrans translate document.pdf -f pdf_docx -o output/
+
+# 同时生成PDF、Word和Markdown
+pdftrans translate document.pdf -f all -o output/
 
 ### OCR模式说明
 
@@ -104,10 +145,14 @@ OCR模式通过OCR技术提取PDF文本内容后翻译，支持版面分析、�
 
 **OCR参数：**
 - `--ocr` - 启用OCR模式
-- `--ocr-engine` - OCR引擎类型（默认：paddleocr）
+- `--ocr-engine` - OCR引擎类型，可选值：`paddleocr`（默认）、`llm`
 - `--ocr-lang` - OCR识别语言（默认：根据源语言自动选择）
 
-**OCR支持的功能：**
+#### PaddleOCR引擎
+
+PaddleOCR是默认的OCR引擎，基于PP-StructureV3模型，本地运行，无需额外API调用。
+
+**支持的功能：**
 - 文本识别：提取扫描文档中的文字
 - 公式识别：识别数学公式并转换为LaTeX格式
 - 表格识别：识别表格结构并保留格式
@@ -116,6 +161,30 @@ OCR模式通过OCR技术提取PDF文本内容后翻译，支持版面分析、�
 - OCR模式会增加处理时间
 - 公式和表格识别需要额外内存
 - OCR识别质量取决于原始文档的清晰度
+
+#### LLM视觉模型OCR引擎
+
+LLM OCR引擎通过OpenAI兼容API调用视觉模型（如DeepSeek-OCR、Qwen3-VL等），将PDF页面图像发送给模型进行识别。
+
+**支持的功能：**
+- 文本识别：提取扫描文档和图片型PDF中的文字
+- 表格识别：识别表格结构并转换为HTML格式
+- 图表识别：识别图表区域并提取描述信息
+- 版面分析：识别标题、正文、页眉、页脚、脚注等结构
+
+**支持的模型：**
+- aiping服务：DeepSeek-OCR-2（默认）
+- 硅基流动服务：deepseek-ai/DeepSeek-OCR（默认）
+
+**响应格式：**
+- **JSON格式**：通用VLM模型（如Qwen3-VL）使用，输出结构化JSON包含文本块、坐标、表格和图表
+- **Markdown/<|ref|>格式**：DeepSeek-OCR原生格式，自动解析为结构化数据
+
+**注意事项：**
+- LLM OCR需要调用API，会产生API费用和token消耗
+- 处理速度取决于API响应速度，网络延迟会影响整体耗时
+- 每页PDF会渲染为图像发送给模型，大文件token消耗较高
+- 需要配置对应翻译服务的API密钥
 
 ### 提取术语表使用示例
 
@@ -146,12 +215,14 @@ pdftrans list-languages
 - de（德语）
 - es（西班牙语）
 - ru（俄语）
+- bo（藏文）
 
 
 ## 支持的翻译服务
 
 - aiping：使用aiping翻译API
 - silicon_flow：使用硅基流动翻译API
+- qianfan：使用百度千帆翻译API
 
 
 ## 注意事项
@@ -160,7 +231,9 @@ pdftrans list-languages
 2. 翻译服务需要配置相应的API密钥
 3. 大文件翻译可能需要较长时间
 4. 语义合并和LLM合并会增加翻译时间，但能提高翻译质量
-5. 按章节拆分功能只在选择Markdown输出格式时起作用
+5. 按章节拆分功能只在选择Markdown输出格式或者 `all`（包含Markdown）时起作用
+6. LLM OCR引擎（`--ocr-engine llm`）会产生API调用费用，大文件token消耗较高
+7. LLM OCR引擎依赖网络连接，API响应速度影响整体耗时
 
 ## 错误处理
 

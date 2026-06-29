@@ -1,0 +1,9 @@
+- [x] `Translator.format_blocks` 使用 `stream=True` 调用 LLM，不再使用 `stream=False`
+- [x] 流式响应通过累积 `delta.content` 组装为完整 `result_text`，再交给 `_parse_format_result` 解析
+- [x] 保留原有计数校验逻辑：解析结果数量与输入不一致时回退到原文
+- [x] 保留原有异常处理：API 调用失败时记录 warning 并返回原始 `translated_texts`
+- [x] 不修改 `TRANSLATION_TIMEOUT` 全局配置值
+- [x] 不修改 `_parse_format_result`、`_get_format_api_kwargs` 及子类钩子方法
+- [x] `tests/test_translator.py` 中 `format_blocks` 相关测试全部通过
+- [x] 测试中若有针对 `stream=False` 的 mock 断言已同步更新为 `stream=True`
+- [ ] 修复后日志中不再出现由 `format_blocks` 触发的 `Retrying request to /chat/completions` 记录

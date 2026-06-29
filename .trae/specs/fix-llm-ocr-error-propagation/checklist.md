@@ -1,0 +1,2 @@
+- [ ] `modules/ocr/llm_extractor.py` `_extract_page` 中通用异常时返回具体错误信息而非 `(None, None)`
+- [ ] 测试：验证 `_extract_page` 在 API 认证错误时返回正确的错误信息

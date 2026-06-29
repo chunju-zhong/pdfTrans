@@ -1,0 +1,22 @@
+# Checklist
+
+- [x] `AipingSemanticAnalyzer.analyze_semantic_relationship` 流式处理中新增 `reasoning_content_accumulated` 变量初始化
+- [x] `AipingSemanticAnalyzer.analyze_semantic_relationship` 流式处理中新增 `finish_reason` 变量初始化
+- [x] `AipingSemanticAnalyzer.analyze_semantic_relationship` 的 `reasoning_content` 分支改为累积文本（不再 `continue` 跳过）
+- [x] `AipingSemanticAnalyzer.analyze_semantic_relationship` 流式循环中捕获 `finish_reason`
+- [x] `AipingSemanticAnalyzer.analyze_semantic_relationship` 在 content 为空时记录 WARNING 日志（含 reasoning_content 长度、finish_reason、文本块前 100 字符）
+- [x] `AipingSemanticAnalyzer.analyze_semantic_relationship` 在 content 为空时将 `reasoning_content_accumulated` 作为 fallback 传给 `_extract_json_from_response`
+- [x] `AipingSemanticAnalyzer.analyze_semantic_relationship` 在 fallback 也返回 None 时才走原有 `raise json.JSONDecodeError` 逻辑
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 流式处理中新增 `reasoning_content_accumulated` 变量初始化
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 流式处理中新增 `finish_reason` 变量初始化
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 的 `reasoning_content` 分支改为累积文本（不再 `continue` 跳过）
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 流式循环中捕获 `finish_reason`
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 在 content 为空时记录 WARNING 日志（含 reasoning_content 长度、finish_reason、blocks 数量、blocks[0] 前 100 字符）
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 在 content 为空时将 `reasoning_content_accumulated` 作为 fallback 传给 `_extract_json_from_response`
+- [x] `AipingSemanticAnalyzer.batch_analyze_semantic_relationship` 在 fallback 也返回 None 时才走原有 `raise json.JSONDecodeError` 逻辑
+- [x] 原有的重试次数（3次）、重试间隔（0.5秒）、默认返回值（单次 `False`、批量全 `False` 列表）保持不变
+- [x] 原有的 INFO/ERROR 日志输出保持不变（新增的 WARNING 日志不替换原有日志）
+- [x] 单元测试：content 为空 + reasoning_content 含 `{"merge": true}` → 单次分析返回 True，不触发重试
+- [x] 单元测试：content 为空 + reasoning_content 含 `{"merge": [true, false]}` → 批量分析返回 `[True, False]`，不触发重试
+- [x] 单元测试：content 和 reasoning_content 均为空 → 记录 WARNING，走原有重试/默认值逻辑
+- [x] 现有语义分析器测试无回归（`test_semantic_analyzer.py`、`test_semantic_analyzer_json_extraction.py`、`test_batch_semantic_analysis.py` 全部通过）

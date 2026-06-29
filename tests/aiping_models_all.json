@@ -1,0 +1,3519 @@
+{
+  "total": 144,
+  "vision_count": 26,
+  "models": [
+    {
+      "id": "DeepSeek-V3",
+      "object": "model",
+      "created": 1750216288,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2
+        ],
+        "output_price_range": [
+          8,
+          8
+        ]
+      },
+      "context_length_range": [
+        65536,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-32B",
+      "object": "model",
+      "created": 1750216415,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.8,
+          2.9
+        ],
+        "output_price_range": [
+          2,
+          20
+        ]
+      },
+      "context_length_range": [
+        32768,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-V3-0324",
+      "object": "model",
+      "created": 1750217046,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2
+        ],
+        "output_price_range": [
+          8,
+          8
+        ]
+      },
+      "context_length_range": [
+        32768,
+        163840
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-R1-0528",
+      "object": "model",
+      "created": 1750218767,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        65536,
+        163840
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen2.5-32B-Instruct",
+      "object": "model",
+      "created": 1750241861,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1.26,
+          2
+        ],
+        "output_price_range": [
+          1.26,
+          6
+        ]
+      },
+      "context_length_range": [
+        32768,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen2.5-72B-Instruct",
+      "object": "model",
+      "created": 1750241948,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.75,
+          4.13
+        ],
+        "output_price_range": [
+          2.88,
+          12
+        ]
+      },
+      "context_length_range": [
+        32768,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Kimi-K2-Instruct",
+      "object": "model",
+      "created": 1753689768,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "MiniMax-M1-80k",
+      "object": "model",
+      "created": 1753689768,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.8,
+          4
+        ],
+        "output_price_range": [
+          8,
+          16
+        ]
+      },
+      "context_length_range": [
+        131072,
+        1024000
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-R1",
+      "object": "model",
+      "created": 1753690966,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        65536,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-14B",
+      "object": "model",
+      "created": 1753693240,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.5,
+          5
+        ],
+        "output_price_range": [
+          1.6,
+          5
+        ]
+      },
+      "context_length_range": [
+        32768,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-235B-A22B",
+      "object": "model",
+      "created": 1753693287,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          5
+        ],
+        "output_price_range": [
+          8,
+          40
+        ]
+      },
+      "context_length_range": [
+        65536,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "QwQ-32B",
+      "object": "model",
+      "created": 1753693326,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          2
+        ],
+        "output_price_range": [
+          4,
+          6
+        ]
+      },
+      "context_length_range": [
+        32768,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-R1-Distill-Qwen-32B",
+      "object": "model",
+      "created": 1753693619,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1.26,
+          2.9
+        ],
+        "output_price_range": [
+          1.26,
+          6
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-R1-Distill-Qwen-7B",
+      "object": "model",
+      "created": 1753693674,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.5
+        ],
+        "output_price_range": [
+          0,
+          1
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-R1-Distill-Llama-70B",
+      "object": "model",
+      "created": 1753696110,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4.1,
+          4.1
+        ],
+        "output_price_range": [
+          4.1,
+          4.1
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-R1-Distill-Qwen-14B",
+      "object": "model",
+      "created": 1753699300,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          1
+        ],
+        "output_price_range": [
+          0,
+          3
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-30B-A3B",
+      "object": "model",
+      "created": 1753699475,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.75,
+          2.2
+        ],
+        "output_price_range": [
+          3,
+          8.7
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-8B",
+      "object": "model",
+      "created": 1753700065,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.5
+        ],
+        "output_price_range": [
+          0,
+          2
+        ]
+      },
+      "context_length_range": [
+        32768,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Hunyuan-A13B-Instruct",
+      "object": "model",
+      "created": 1753760575,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          1
+        ],
+        "output_price_range": [
+          4,
+          4
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4-32B-0414",
+      "object": "model",
+      "created": 1753762673,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1.89,
+          1.89
+        ],
+        "output_price_range": [
+          1.89,
+          1.89
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4-9B-0414",
+      "object": "model",
+      "created": 1753762865,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen2.5-14B-Instruct",
+      "object": "model",
+      "created": 1753769865,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.99,
+          0.99
+        ],
+        "output_price_range": [
+          0.99,
+          0.99
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen2.5-7B-Instruct",
+      "object": "model",
+      "created": 1753770025,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.35,
+          0.5
+        ],
+        "output_price_range": [
+          0.35,
+          1
+        ]
+      },
+      "context_length_range": [
+        32768,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4.5",
+      "object": "model",
+      "created": 1753781696,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          4
+        ],
+        "output_price_range": [
+          8,
+          16
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4.5-Air",
+      "object": "model",
+      "created": 1753781738,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.6,
+          2
+        ],
+        "output_price_range": [
+          2,
+          8
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-R1-Distill-Llama-8B",
+      "object": "model",
+      "created": 1754034878,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "ERNIE-4.5-21B-A3B",
+      "object": "model",
+      "created": 1754041503,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        122880,
+        122880
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-30B-A3B-Instruct-2507",
+      "object": "model",
+      "created": 1755163634,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          1.07
+        ],
+        "output_price_range": [
+          2.8,
+          4.29
+        ]
+      },
+      "context_length_range": [
+        32768,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-Coder-30B-A3B-Instruct",
+      "object": "model",
+      "created": 1755495494,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          1.5
+        ],
+        "output_price_range": [
+          2.8,
+          6
+        ]
+      },
+      "context_length_range": [
+        32768,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-Coder-480B-A35B-Instruct",
+      "object": "model",
+      "created": 1755498549,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          15
+        ],
+        "output_price_range": [
+          16,
+          60
+        ]
+      },
+      "context_length_range": [
+        65536,
+        268288
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-V3.1",
+      "object": "model",
+      "created": 1755848470,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          4
+        ],
+        "output_price_range": [
+          8,
+          16
+        ]
+      },
+      "context_length_range": [
+        131072,
+        163840
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-Next-80B-A3B-Instruct",
+      "object": "model",
+      "created": 1758008209,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          1
+        ],
+        "output_price_range": [
+          4,
+          4
+        ]
+      },
+      "context_length_range": [
+        65536,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-Next-80B-A3B-Thinking",
+      "object": "model",
+      "created": 1758008259,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          1
+        ],
+        "output_price_range": [
+          10,
+          10
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-V3.1-Terminus",
+      "object": "model",
+      "created": 1756107670,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          12,
+          12
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Kimi-K2-0905",
+      "object": "model",
+      "created": 1758612573,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4.5,
+          4.5
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-V3.2-Exp",
+      "object": "model",
+      "created": 1759199183,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2
+        ],
+        "output_price_range": [
+          3,
+          3
+        ]
+      },
+      "context_length_range": [
+        131072,
+        163840
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4.6",
+      "object": "model",
+      "created": 1759302253,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          7.2
+        ],
+        "output_price_range": [
+          8,
+          16
+        ]
+      },
+      "context_length_range": [
+        204800,
+        206848
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Ling-1T",
+      "object": "model",
+      "created": 1759659376,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Ring-1T",
+      "object": "model",
+      "created": 1760509211,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4.5V",
+      "object": "model",
+      "created": 1760684241,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          4.57
+        ],
+        "output_price_range": [
+          6,
+          13.71
+        ]
+      },
+      "context_length_range": [
+        65536,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3-VL-235B-A22B-Instruct",
+      "object": "model",
+      "created": 1760687585,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2.85
+        ],
+        "output_price_range": [
+          8,
+          11.43
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3-VL-235B-A22B-Thinking",
+      "object": "model",
+      "created": 1760687961,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2.85
+        ],
+        "output_price_range": [
+          20,
+          28.57
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen2.5-VL-72B-Instruct",
+      "object": "model",
+      "created": 1760690407,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4.13,
+          16
+        ],
+        "output_price_range": [
+          4.13,
+          48
+        ]
+      },
+      "context_length_range": [
+        8192,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen2.5-VL-32B-Instruct",
+      "object": "model",
+      "created": 1760694420,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          8
+        ],
+        "output_price_range": [
+          2,
+          24
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen2.5-VL-7B-Instruct",
+      "object": "model",
+      "created": 1760695458,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.5,
+          2
+        ],
+        "output_price_range": [
+          0.5,
+          5
+        ]
+      },
+      "context_length_range": [
+        131072,
+        131072
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3-30B-A3B-Thinking-2507",
+      "object": "model",
+      "created": 1761295760,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          1.07
+        ],
+        "output_price_range": [
+          2.8,
+          10.71
+        ]
+      },
+      "context_length_range": [
+        129024,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-235B-A22B-Instruct-2507",
+      "object": "model",
+      "created": 1761295812,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1.45,
+          2.86
+        ],
+        "output_price_range": [
+          5.8,
+          11.43
+        ]
+      },
+      "context_length_range": [
+        131072,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-235B-A22B-Thinking-2507",
+      "object": "model",
+      "created": 1761295931,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2.86
+        ],
+        "output_price_range": [
+          20,
+          28.57
+        ]
+      },
+      "context_length_range": [
+        131072,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-OCR",
+      "object": "model",
+      "created": 1761532773,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.3
+        ],
+        "output_price_range": [
+          0,
+          1.2
+        ]
+      },
+      "context_length_range": [
+        8192,
+        8192
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "MiniMax-M2",
+      "object": "model",
+      "created": 1761550804,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.1,
+          2.1
+        ],
+        "output_price_range": [
+          8.4,
+          8.4
+        ]
+      },
+      "context_length_range": [
+        204800,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-Embedding-8B",
+      "object": "model",
+      "created": 1762395492,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.5
+        ],
+        "output_price_range": [
+          0,
+          0.35
+        ]
+      },
+      "context_length_range": [
+        8192,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "embedding"
+    },
+    {
+      "id": "Qwen3-Embedding-0.6B",
+      "object": "model",
+      "created": 1762395591,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.5
+        ],
+        "output_price_range": [
+          0,
+          0.07
+        ]
+      },
+      "context_length_range": [
+        8192,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "embedding"
+    },
+    {
+      "id": "Qwen3-Reranker-0.6B",
+      "object": "model",
+      "created": 1762395843,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.8
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        8192,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "reranker"
+    },
+    {
+      "id": "bge-reranker-v2-m3",
+      "object": "model",
+      "created": 1762395934,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.2
+        ],
+        "output_price_range": [
+          0,
+          0.07
+        ]
+      },
+      "context_length_range": [
+        4096,
+        8192
+      ],
+      "is_foreign": false,
+      "model_type": "reranker"
+    },
+    {
+      "id": "Qwen3-Embedding-4B",
+      "object": "model",
+      "created": 1762395537,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.5
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        8192,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "embedding"
+    },
+    {
+      "id": "Qwen3-Reranker-8B",
+      "object": "model",
+      "created": 1762395717,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0.8
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        8192,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "reranker"
+    },
+    {
+      "id": "Kimi-K2-Thinking",
+      "object": "model",
+      "created": 1762494593,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-VL-30B-A3B-Thinking",
+      "object": "model",
+      "created": 1762770455,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          1.07
+        ],
+        "output_price_range": [
+          2.8,
+          10.71
+        ]
+      },
+      "context_length_range": [
+        131072,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3-VL-30B-A3B-Instruct",
+      "object": "model",
+      "created": 1762770423,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          1.07
+        ],
+        "output_price_range": [
+          2.8,
+          4.29
+        ]
+      },
+      "context_length_range": [
+        131072,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen-Image",
+      "object": "model",
+      "created": 1763448415,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.145,
+          0.3
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "DeepSeek-V3.2",
+      "object": "model",
+      "created": 1759199183,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          2
+        ],
+        "output_price_range": [
+          1.5,
+          3
+        ]
+      },
+      "context_length_range": [
+        131072,
+        167936
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Kolors",
+      "object": "model",
+      "created": 1763448522,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "Wan2.5-T2I-Preview",
+      "object": "model",
+      "created": 1763450529,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "Wan2.5-I2I-Preview",
+      "object": "model",
+      "created": 1763450619,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "image2image"
+    },
+    {
+      "id": "即梦文生图 3.0",
+      "object": "model",
+      "created": 1763453016,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "即梦文生图 3.1",
+      "object": "model",
+      "created": 1763453085,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "Doubao-Seedream-4.0",
+      "object": "model",
+      "created": 1763453148,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "image2image",
+        "text2image"
+      ]
+    },
+    {
+      "id": "Qwen-Image-Edit",
+      "object": "model",
+      "created": 1763448465,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.145,
+          0.3
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "image2image"
+    },
+    {
+      "id": "即梦图片生成 4.0",
+      "object": "model",
+      "created": 1764315554,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.22,
+          0.22
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "Kling-V1.5",
+      "object": "model",
+      "created": 1764319997,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.1,
+          0.1
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "Kling-V2",
+      "object": "model",
+      "created": 1764320054,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.1,
+          0.1
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "Kling-V2.1",
+      "object": "model",
+      "created": 1764320245,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.1,
+          0.1
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "Qwen-Image-Plus",
+      "object": "model",
+      "created": 1763450392,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "Qwen-Image-Edit-Plus",
+      "object": "model",
+      "created": 1763450461,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "image2image"
+    },
+    {
+      "id": "HunyuanImage-3.0",
+      "object": "model",
+      "created": 1763453711,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.725,
+          0.725
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "Kling-V1",
+      "object": "model",
+      "created": 1764319915,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.025,
+          0.025
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "Kling-V2-New",
+      "object": "model",
+      "created": 1764320158,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "image2image"
+    },
+    {
+      "id": "Qwen3-Max",
+      "object": "model",
+      "created": 1764833765,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          3.2,
+          3.2
+        ],
+        "output_price_range": [
+          12.8,
+          12.8
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4.6V",
+      "object": "model",
+      "created": 1765201882,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          2.29
+        ],
+        "output_price_range": [
+          3,
+          6.86
+        ]
+      },
+      "context_length_range": [
+        131072,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen-Max",
+      "object": "model",
+      "created": 1764833765,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.4,
+          2.4
+        ],
+        "output_price_range": [
+          9.6,
+          9.6
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "text-embedding-v1",
+      "object": "model",
+      "created": 1764834064,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          0.7
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        2048,
+        2048
+      ],
+      "is_foreign": false,
+      "model_type": "embedding"
+    },
+    {
+      "id": "gte-rerank",
+      "object": "model",
+      "created": 1764834167,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.8,
+          0.8
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        30720,
+        30720
+      ],
+      "is_foreign": false,
+      "model_type": "reranker"
+    },
+    {
+      "id": "Doubao-Seedream-4.5",
+      "object": "model",
+      "created": 1764917714,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.25,
+          0.25
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "MiMo-V2-Flash",
+      "object": "model",
+      "created": 1766385793,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          2.1
+        ],
+        "output_price_range": [
+          2.1,
+          8.4
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-4.7",
+      "object": "model",
+      "created": 1766458427,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          4
+        ],
+        "output_price_range": [
+          8,
+          16
+        ]
+      },
+      "context_length_range": [
+        131072,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "MiniMax-M2.1",
+      "object": "model",
+      "created": 1766471354,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.1,
+          2.1
+        ],
+        "output_price_range": [
+          8.4,
+          8.4
+        ]
+      },
+      "context_length_range": [
+        98304,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3-4B",
+      "object": "model",
+      "created": 1767168892,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        32768,
+        32768
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Doubao-Seed-1.8",
+      "object": "model",
+      "created": 1768375055,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.8,
+          0.8
+        ],
+        "output_price_range": [
+          2,
+          2
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "即梦视频生成 3.0 Pro",
+      "object": "model",
+      "created": 1768386917,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2video",
+        "image2video"
+      ]
+    },
+    {
+      "id": "Kling-V2.6",
+      "object": "model",
+      "created": 1768392408,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2video",
+        "image2video",
+        "video2video"
+      ]
+    },
+    {
+      "id": "Kling-Video-O1",
+      "object": "model",
+      "created": 1768392674,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2video",
+        "image2video",
+        "video2video"
+      ]
+    },
+    {
+      "id": "MiniMax-Hailuo-02",
+      "object": "model",
+      "created": 1768444123,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2video",
+        "image2video"
+      ]
+    },
+    {
+      "id": "GLM-Image",
+      "object": "model",
+      "created": 1768447601,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.1,
+          0.1
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2image"
+    },
+    {
+      "id": "Wan2.6-I2V",
+      "object": "model",
+      "created": 1768535864,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "image2video"
+    },
+    {
+      "id": "Wan2.6-T2V",
+      "object": "model",
+      "created": 1768535809,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "text2video"
+    },
+    {
+      "id": "Kimi-K2.5",
+      "object": "model",
+      "created": 1769485963,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          21,
+          21
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "DeepSeek-OCR-2",
+      "object": "model",
+      "created": 1769522245,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          2.8
+        ],
+        "output_price_range": [
+          0,
+          2.8
+        ]
+      },
+      "context_length_range": [
+        8192,
+        8192
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "MiniMax-Hailuo-2.3",
+      "object": "model",
+      "created": 1770274247,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2video",
+        "image2video"
+      ]
+    },
+    {
+      "id": "GLM-4.7-Flash",
+      "object": "model",
+      "created": 1768907279,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          1
+        ],
+        "output_price_range": [
+          0,
+          3
+        ]
+      },
+      "context_length_range": [
+        131072,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-5",
+      "object": "model",
+      "created": 1770828540,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          6
+        ],
+        "output_price_range": [
+          18,
+          22
+        ]
+      },
+      "context_length_range": [
+        202752,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "MiniMax-M2.5",
+      "object": "model",
+      "created": 1770829249,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.1,
+          2.1
+        ],
+        "output_price_range": [
+          8.4,
+          8.4
+        ]
+      },
+      "context_length_range": [
+        131072,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Doubao-Seed-2.0-pro",
+      "object": "model",
+      "created": 1771049285,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          3.2,
+          3.2
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3.5-Plus",
+      "object": "model",
+      "created": 1771234154,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.8,
+          0.8
+        ],
+        "output_price_range": [
+          4.8,
+          4.8
+        ]
+      },
+      "context_length_range": [
+        1024000,
+        1024000
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3.5-397B-A17B",
+      "object": "model",
+      "created": 1771233718,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.8,
+          1.2
+        ],
+        "output_price_range": [
+          4.8,
+          7.2
+        ]
+      },
+      "context_length_range": [
+        131072,
+        268288
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Doubao-Seedream-5.0-lite",
+      "object": "model",
+      "created": 1771928844,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.22,
+          0.22
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "Qwen3.5-27B",
+      "object": "model",
+      "created": 1771991569,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.6,
+          0.6
+        ],
+        "output_price_range": [
+          4.8,
+          4.8
+        ]
+      },
+      "context_length_range": [
+        65536,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3.5-122B-A10B",
+      "object": "model",
+      "created": 1771991374,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.8,
+          0.8
+        ],
+        "output_price_range": [
+          6.4,
+          6.4
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3.5-35B-A3B",
+      "object": "model",
+      "created": 1771991486,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.4,
+          0.4
+        ],
+        "output_price_range": [
+          3.2,
+          3.2
+        ]
+      },
+      "context_length_range": [
+        65536,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Kling-V3-Omni",
+      "object": "model",
+      "created": 1772178028,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2video",
+        "image2video",
+        "video2video"
+      ]
+    },
+    {
+      "id": "Qwen3.5-9B",
+      "object": "model",
+      "created": 1772764618,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.5,
+          0.5
+        ],
+        "output_price_range": [
+          4,
+          4
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "MiniMax-M2.7",
+      "object": "model",
+      "created": 1773992056,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.1,
+          2.1
+        ],
+        "output_price_range": [
+          8.4,
+          8.4
+        ]
+      },
+      "context_length_range": [
+        204800,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-5.1",
+      "object": "model",
+      "created": 1775630158,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          6,
+          8
+        ],
+        "output_price_range": [
+          24,
+          28
+        ]
+      },
+      "context_length_range": [
+        196608,
+        206848
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3.6-Plus",
+      "object": "model",
+      "created": 1776673830,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2
+        ],
+        "output_price_range": [
+          12,
+          12
+        ]
+      },
+      "context_length_range": [
+        1024000,
+        1024000
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-V4-Pro",
+      "object": "model",
+      "created": 1777012736,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          3,
+          12
+        ],
+        "output_price_range": [
+          6,
+          24
+        ]
+      },
+      "context_length_range": [
+        1024000,
+        1048576
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "DeepSeek-V4-Flash",
+      "object": "model",
+      "created": 1777012820,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          1,
+          1
+        ],
+        "output_price_range": [
+          2,
+          2
+        ]
+      },
+      "context_length_range": [
+        1024000,
+        1048576
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Kimi-K2.6",
+      "object": "model",
+      "created": 1776741110,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          6.5,
+          6.5
+        ],
+        "output_price_range": [
+          27,
+          27
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3.7-Max",
+      "object": "model",
+      "created": 1779437133,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          12,
+          12
+        ],
+        "output_price_range": [
+          36,
+          36
+        ]
+      },
+      "context_length_range": [
+        1024000,
+        1024000
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "MiniMax-M3",
+      "object": "model",
+      "created": 1780283520,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.1,
+          4.2
+        ],
+        "output_price_range": [
+          8.4,
+          16.8
+        ]
+      },
+      "context_length_range": [
+        524288,
+        1024000
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "ViduQ3-Pro",
+      "object": "model",
+      "created": 1780629440,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    },
+    {
+      "id": "ViduQ2-Pro",
+      "object": "model",
+      "created": 1780631714,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    },
+    {
+      "id": "Kimi-K2.7-Code",
+      "object": "model",
+      "created": 1781666343,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          6.5,
+          6.5
+        ],
+        "output_price_range": [
+          27,
+          27
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-5.2",
+      "object": "model",
+      "created": 1781677650,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          8,
+          8
+        ],
+        "output_price_range": [
+          28,
+          28
+        ]
+      },
+      "context_length_range": [
+        1048576,
+        1048576
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Doubao-Seed-2.1-pro",
+      "object": "model",
+      "created": 1782186132,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          6,
+          6
+        ],
+        "output_price_range": [
+          30,
+          30
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Doubao-Seed-2.1-turbo",
+      "object": "model",
+      "created": 1782186508,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          3,
+          3
+        ],
+        "output_price_range": [
+          15,
+          15
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Wan2.6-R2V",
+      "object": "model",
+      "created": 1768536304,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": "video2video"
+    },
+    {
+      "id": "Doubao-Seed-2.0-lite",
+      "object": "model",
+      "created": 1771049086,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.6,
+          0.6
+        ],
+        "output_price_range": [
+          3.6,
+          3.6
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Doubao-Seed-2.0-mini",
+      "object": "model",
+      "created": 1771049513,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.2,
+          0.2
+        ],
+        "output_price_range": [
+          2,
+          2
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Doubao-Seed-2.0-Code",
+      "object": "model",
+      "created": 1771049745,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          3.2,
+          3.2
+        ],
+        "output_price_range": [
+          16,
+          16
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Kling-V3",
+      "object": "model",
+      "created": 1772178163,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2video",
+        "image2video",
+        "video2video"
+      ]
+    },
+    {
+      "id": "Qwen-Image-2.0",
+      "object": "model",
+      "created": 1772595446,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.2,
+          0.2
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "MiniMax-Speech-2.8-hd",
+      "object": "model",
+      "created": 1772703046,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          3.5,
+          3.5
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    },
+    {
+      "id": "MiniMax-Speech-02-hd",
+      "object": "model",
+      "created": 1773022812,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          3.5,
+          3.5
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    },
+    {
+      "id": "GLM-5-Turbo",
+      "object": "model",
+      "created": 1773721084,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          5,
+          5
+        ],
+        "output_price_range": [
+          22,
+          22
+        ]
+      },
+      "context_length_range": [
+        204800,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "ViduQ2",
+      "object": "model",
+      "created": 1780630171,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    },
+    {
+      "id": "Qwen3-Max-Thinking",
+      "object": "model",
+      "created": 1769442613,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2.5,
+          2.5
+        ],
+        "output_price_range": [
+          10,
+          10
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "GLM-5-fast",
+      "object": "model",
+      "created": 1770951291,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          4,
+          4
+        ],
+        "output_price_range": [
+          18,
+          18
+        ]
+      },
+      "context_length_range": [
+        204800,
+        204800
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Step-3.5-Flash",
+      "object": "model",
+      "created": 1770979595,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.7,
+          0.7
+        ],
+        "output_price_range": [
+          2.1,
+          2.1
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "Qwen3.5-Flash",
+      "object": "model",
+      "created": 1771991686,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0.2,
+          0.2
+        ],
+        "output_price_range": [
+          2,
+          2
+        ]
+      },
+      "context_length_range": [
+        1024000,
+        1024000
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen-Image-2.0-Pro",
+      "object": "model",
+      "created": 1772595555,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0.5,
+          0.5
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": [
+        "text2image",
+        "image2image"
+      ]
+    },
+    {
+      "id": "Qwen3.5-4B",
+      "object": "model",
+      "created": 1772764661,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        262144,
+        262144
+      ],
+      "is_foreign": false,
+      "model_type": "vlm"
+    },
+    {
+      "id": "Qwen3.7-Plus",
+      "object": "model",
+      "created": 1780458343,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          2,
+          2
+        ],
+        "output_price_range": [
+          8,
+          8
+        ]
+      },
+      "context_length_range": [
+        1024000,
+        1024000
+      ],
+      "is_foreign": false,
+      "model_type": "llm"
+    },
+    {
+      "id": "ViduQ3-Turbo",
+      "object": "model",
+      "created": 1780627372,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    },
+    {
+      "id": "ViduQ2-Turbo",
+      "object": "model",
+      "created": 1780630965,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    },
+    {
+      "id": "ViduQ3-Pro-Fast",
+      "object": "model",
+      "created": 1780670554,
+      "owned_by": "system",
+      "status": true,
+      "price": {
+        "input_price_range": [
+          0,
+          0
+        ],
+        "output_price_range": [
+          0,
+          0
+        ]
+      },
+      "context_length_range": [
+        0,
+        0
+      ],
+      "is_foreign": false,
+      "model_type": ""
+    }
+  ],
+  "type_map": {
+    "DeepSeek-V3": "其他",
+    "Qwen3-32B": "其他",
+    "DeepSeek-V3-0324": "其他",
+    "DeepSeek-R1-0528": "其他",
+    "Qwen2.5-32B-Instruct": "其他",
+    "Qwen2.5-72B-Instruct": "其他",
+    "Kimi-K2-Instruct": "其他",
+    "MiniMax-M1-80k": "其他",
+    "DeepSeek-R1": "其他",
+    "Qwen3-14B": "其他",
+    "Qwen3-235B-A22B": "其他",
+    "QwQ-32B": "其他",
+    "DeepSeek-R1-Distill-Qwen-32B": "其他",
+    "DeepSeek-R1-Distill-Qwen-7B": "其他",
+    "DeepSeek-R1-Distill-Llama-70B": "其他",
+    "DeepSeek-R1-Distill-Qwen-14B": "其他",
+    "Qwen3-30B-A3B": "其他",
+    "Qwen3-8B": "其他",
+    "Hunyuan-A13B-Instruct": "其他",
+    "GLM-4-32B-0414": "其他",
+    "GLM-4-9B-0414": "其他",
+    "Qwen2.5-14B-Instruct": "其他",
+    "Qwen2.5-7B-Instruct": "其他",
+    "GLM-4.5": "其他",
+    "GLM-4.5-Air": "其他",
+    "DeepSeek-R1-Distill-Llama-8B": "其他",
+    "ERNIE-4.5-21B-A3B": "其他",
+    "Qwen3-30B-A3B-Instruct-2507": "其他",
+    "Qwen3-Coder-30B-A3B-Instruct": "其他",
+    "Qwen3-Coder-480B-A35B-Instruct": "其他",
+    "DeepSeek-V3.1": "其他",
+    "Qwen3-Next-80B-A3B-Instruct": "其他",
+    "Qwen3-Next-80B-A3B-Thinking": "其他",
+    "DeepSeek-V3.1-Terminus": "其他",
+    "Kimi-K2-0905": "其他",
+    "DeepSeek-V3.2-Exp": "其他",
+    "GLM-4.6": "其他",
+    "Ling-1T": "其他",
+    "Ring-1T": "其他",
+    "GLM-4.5V": "视觉语言 (GLM-V)",
+    "Qwen3-VL-235B-A22B-Instruct": "视觉语言 (VL)",
+    "Qwen3-VL-235B-A22B-Thinking": "视觉语言 (VL)",
+    "Qwen2.5-VL-72B-Instruct": "视觉语言 (VL)",
+    "Qwen2.5-VL-32B-Instruct": "视觉语言 (VL)",
+    "Qwen2.5-VL-7B-Instruct": "视觉语言 (VL)",
+    "Qwen3-30B-A3B-Thinking-2507": "其他",
+    "Qwen3-235B-A22B-Instruct-2507": "其他",
+    "Qwen3-235B-A22B-Thinking-2507": "其他",
+    "DeepSeek-OCR": "OCR",
+    "MiniMax-M2": "其他",
+    "Qwen3-Embedding-8B": "其他",
+    "Qwen3-Embedding-0.6B": "其他",
+    "Qwen3-Reranker-0.6B": "其他",
+    "bge-reranker-v2-m3": "其他",
+    "Qwen3-Embedding-4B": "其他",
+    "Qwen3-Reranker-8B": "其他",
+    "Kimi-K2-Thinking": "其他",
+    "Qwen3-VL-30B-A3B-Thinking": "视觉语言 (VL)",
+    "Qwen3-VL-30B-A3B-Instruct": "视觉语言 (VL)",
+    "Qwen-Image": "图像生成/理解",
+    "DeepSeek-V3.2": "其他",
+    "Kolors": "图像生成 (即梦/Kolors)",
+    "Wan2.5-T2I-Preview": "其他",
+    "Wan2.5-I2I-Preview": "其他",
+    "即梦文生图 3.0": "图像生成 (即梦/Kolors)",
+    "即梦文生图 3.1": "图像生成 (即梦/Kolors)",
+    "Doubao-Seedream-4.0": "图像生成 (豆包)",
+    "Qwen-Image-Edit": "图像生成/理解",
+    "即梦图片生成 4.0": "图像生成 (即梦/Kolors)",
+    "Kling-V1.5": "其他",
+    "Kling-V2": "其他",
+    "Kling-V2.1": "其他",
+    "Qwen-Image-Plus": "图像生成/理解",
+    "Qwen-Image-Edit-Plus": "图像生成/理解",
+    "HunyuanImage-3.0": "图像生成/理解",
+    "Kling-V1": "其他",
+    "Kling-V2-New": "其他",
+    "Qwen3-Max": "其他",
+    "GLM-4.6V": "视觉语言 (GLM-V)",
+    "Qwen-Max": "其他",
+    "text-embedding-v1": "其他",
+    "gte-rerank": "其他",
+    "Doubao-Seedream-4.5": "图像生成 (豆包)",
+    "MiMo-V2-Flash": "其他",
+    "GLM-4.7": "其他",
+    "MiniMax-M2.1": "其他",
+    "Qwen3-4B": "其他",
+    "Doubao-Seed-1.8": "其他",
+    "即梦视频生成 3.0 Pro": "其他",
+    "Kling-V2.6": "其他",
+    "Kling-Video-O1": "其他",
+    "MiniMax-Hailuo-02": "其他",
+    "GLM-Image": "图像生成/理解",
+    "Wan2.6-I2V": "其他",
+    "Wan2.6-T2V": "其他",
+    "Kimi-K2.5": "其他",
+    "DeepSeek-OCR-2": "OCR",
+    "MiniMax-Hailuo-2.3": "其他",
+    "GLM-4.7-Flash": "其他",
+    "GLM-5": "其他",
+    "MiniMax-M2.5": "其他",
+    "Doubao-Seed-2.0-pro": "其他",
+    "Qwen3.5-Plus": "其他",
+    "Qwen3.5-397B-A17B": "其他",
+    "Doubao-Seedream-5.0-lite": "图像生成 (豆包)",
+    "Qwen3.5-27B": "其他",
+    "Qwen3.5-122B-A10B": "其他",
+    "Qwen3.5-35B-A3B": "其他",
+    "Kling-V3-Omni": "其他",
+    "Qwen3.5-9B": "其他",
+    "MiniMax-M2.7": "其他",
+    "GLM-5.1": "其他",
+    "Qwen3.6-Plus": "其他",
+    "DeepSeek-V4-Pro": "其他",
+    "DeepSeek-V4-Flash": "其他",
+    "Kimi-K2.6": "其他",
+    "Qwen3.7-Max": "其他",
+    "MiniMax-M3": "其他",
+    "ViduQ3-Pro": "其他",
+    "ViduQ2-Pro": "其他",
+    "Kimi-K2.7-Code": "其他",
+    "GLM-5.2": "其他",
+    "Doubao-Seed-2.1-pro": "其他",
+    "Doubao-Seed-2.1-turbo": "其他",
+    "Wan2.6-R2V": "其他",
+    "Doubao-Seed-2.0-lite": "其他",
+    "Doubao-Seed-2.0-mini": "其他",
+    "Doubao-Seed-2.0-Code": "其他",
+    "Kling-V3": "其他",
+    "Qwen-Image-2.0": "图像生成/理解",
+    "MiniMax-Speech-2.8-hd": "其他",
+    "MiniMax-Speech-02-hd": "其他",
+    "GLM-5-Turbo": "其他",
+    "ViduQ2": "其他",
+    "Qwen3-Max-Thinking": "其他",
+    "GLM-5-fast": "其他",
+    "Step-3.5-Flash": "其他",
+    "Qwen3.5-Flash": "其他",
+    "Qwen-Image-2.0-Pro": "图像生成/理解",
+    "Qwen3.5-4B": "其他",
+    "Qwen3.7-Plus": "其他",
+    "ViduQ3-Turbo": "其他",
+    "ViduQ2-Turbo": "其他",
+    "ViduQ3-Pro-Fast": "其他"
+  }
+}

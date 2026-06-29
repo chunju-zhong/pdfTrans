@@ -17,6 +17,7 @@ If you have any questions or suggestions during use, welcome to leave a message 
 - **Multiple Translation API Support**:
   - aiping Model API
   - Silicon Flow Model API
+  - Baidu Qianfan Model API
 - **Document Generation**:
   - PDF Generation: Generates translated PDF based on the original PDF, preserving original layout and formatting
   - Word Generation: Generates Word documents based on merged translation results, preserving original fonts and styles
@@ -24,7 +25,7 @@ If you have any questions or suggestions during use, welcome to leave a message 
 - **Web Interface**: Provides a clean and easy-to-use web interface for file upload, translation service selection, and result download
 - **Page-specific Translation**: Supports translating specific page numbers or page ranges to improve translation efficiency
 - **Output Format Selection**: Supports selecting output as PDF, Word, Markdown, or any combination
-- **Automatic Glossary Extraction**: Automatically extracts glossaries from uploaded PDFs, supporting both aiping and Silicon Flow platforms
+- **Automatic Glossary Extraction**: Automatically extracts glossaries from uploaded PDFs, supporting aiping, Silicon Flow, and Baidu Qianfan platforms
 
 ### Technical Features
 
@@ -47,7 +48,7 @@ If you have any questions or suggestions during use, welcome to leave a message 
   - PaddlePaddle 3.0+: Deep learning framework (CPU/GPU auto-detection)
 - **Document Processing**:
   - python-docx: Used for Word document generation
-- **Translation APIs**: aiping Translation API, Silicon Flow Translation API
+- **Translation APIs**: aiping Translation API, Silicon Flow Translation API, Baidu Qianfan Translation API
 - **API Client**: openai: Used for calling translation APIs
 - **Testing Framework**: pytest
 - **Version Control**: Git + Gitee
@@ -77,8 +78,10 @@ conda activate pdfTrans
 ### 3. Configure Environment Variables
 
 - Copy `.env.example` file to `.env`
-- Register for an Aiping account: https://aiping.cn
-- Or, register for a Silicon Flow account: https://cloud.siliconflow.cn/i/OFUfQfNj
+- Register for a platform account (choose one of three):
+  - Aiping: https://aiping.cn/#?invitation_code=UVSZ6QWRRK
+  - Silicon Flow: https://cloud.siliconflow.cn/i/OFUfQfNj
+  - Baidu Qianfan: https://cloud.baidu.com/product-s/qianfan_home
 - Obtain your API key
 - Configure platform model names and API keys in the `.env` file
 
@@ -109,8 +112,18 @@ SILICON_FLOW_MODEL_LAYOUT=Qwen/Qwen3-32B
 # Specify glossary extraction model
 SILICON_FLOW_MODEL_GLOSSARY=Qwen/Qwen3-32B
 
+# Baidu Qianfan API configuration
+QIANFAN_API_KEY=your-secret-key
+QIANFAN_API_URL=https://qianfan.baidubce.com/v1
+# Specify translation model
+QIANFAN_MODEL_TRANSLATION=ernie-4.0-8k
+# Specify Markdown layout model
+QIANFAN_MODEL_LAYOUT=ernie-4.0-8k
+# Specify glossary extraction model
+QIANFAN_MODEL_GLOSSARY=ernie-4.0-8k
+
 # LLM OCR configuration (reuses translation engine API Key, only need to specify model)
-AIPING_OCR_LLM_MODEL=DeepSeek-OCR-2
+AIPING_OCR_LLM_MODEL=DeepSeek-OCR
 SILICON_FLOW_OCR_LLM_MODEL=deepseek-ai/DeepSeek-OCR
 ```
 
@@ -138,7 +151,7 @@ pip install paddlepaddle>=3.0.0
 pip install paddlepaddle-gpu>=3.0.0
 ```
 
-> **Note**: OCR requires PaddlePaddle (for PaddleOCR engine) or LLM OCR model configuration (for LLM OCR engine). If neither is configured, only non-scanned PDFs can be processed.
+> **Note**: OCR requires PaddlePaddle (for PaddleOCR engine) or LLM OCR model configuration (for LLM OCR engine). If neither is configured, OCR extraction will be unavailable.
 
 ### 6. Install LaTeX (Optional, for High-Quality Formula Rendering)
 
@@ -217,6 +230,9 @@ pdftrans translate document.pdf -o translated.pdf
 # Specify source and target languages
 pdftrans translate document.pdf -s en -t zh -o output.pdf
 
+# Translate Tibetan document (bo is the Tibetan language code)
+pdftrans translate document.pdf -s bo -t zh -o output.pdf
+
 # Use specific translation service, such as silicon_flow
 pdftrans translate document.pdf -T silicon_flow -o output.pdf
 
@@ -269,7 +285,7 @@ pdftrans list-languages
 
 **Translate Command Options:**
 - `-o, --output` - Output file path (auto-generated if not specified)
-- `-f, --format` - Output format (pdf/docx/markdown, default: pdf)
+- `-f, --format` - Output format (pdf/docx/markdown/pdf_docx/all, default: pdf)
 - `-g, --glossary` - Glossary file path
 - `-m, --semantic-merge` - Enable semantic merge
 - `-l, --llm-merge` - Use LLM semantic judgment
@@ -277,6 +293,10 @@ pdftrans list-languages
 - `--ocr` - Enable OCR mode
 - `--ocr-engine` - OCR engine type: `paddleocr` (local, requires PaddlePaddle) or `llm` (cloud, requires API Key), default: paddleocr
 - `--ocr-lang` - OCR recognition language (default: auto-detect from source language)
+- `--translation-model` - Override translation model
+- `--layout-model` - Override Markdown layout model
+- `--glossary-model` - Override glossary extraction model
+- `--ocr-llm-model` - Override LLM OCR model
 
 ---
 

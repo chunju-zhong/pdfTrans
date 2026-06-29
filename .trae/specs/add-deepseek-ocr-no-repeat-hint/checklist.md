@@ -1,0 +1,15 @@
+- [x] `_build_short_english_hint()` 方法已重构为 `parts` 列表 + `" ".join(parts)` 模式
+- [x] `source_lang == "bo"` 时 `parts` 包含藏文专项提示
+- [x] `parts` 总是追加通用提示 `"Do not repeat the same sentence."`
+- [x] 藏文最终返回值为 `"For Tibetan: ... retain ||| separators. Do not repeat the same sentence."`
+- [x] 其他语言最终返回值为 `"Do not repeat the same sentence."`
+- [x] 提示内容仅包含 ASCII 字符（不含藏文 Unicode）
+- [x] DeepSeek-OCR 分支调用逻辑未变（仍为 `f"{DEEPSEEK_OCR_PROMPT} {short_hint}"`）
+- [x] DeepSeek-OCR 分支 short_hint 为空时仍回退到 `DEEPSEEK_OCR_PROMPT`
+- [x] VLM 分支（else 分支）保持不变，仍使用 `_build_lang_hint()` 加载中文规则
+- [x] `_build_lang_hint()` 方法保留未删除
+- [x] `DEEPSEEK_OCR_PROMPT` 常量未修改
+- [x] `bo_to_zh.py` OCR 规则未修改
+- [x] config.py 中 OCR 参数未修改
+- [ ] 实际运行藏文 OCR 任务（page 6-10），不再出现大量重复句子
+- [ ] 实际运行 API 请求仍成功返回（HTTP 200）

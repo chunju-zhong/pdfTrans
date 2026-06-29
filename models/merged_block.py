@@ -44,6 +44,8 @@ class MergedBlock(CopyableMixin):
             self.bold = False
             self.italic = False
             self.page_num = 0
+        # 翻译失败标记：与 TextBlock 保持一致，便于下游统一判断
+        self.translation_failed = False
     
     def to_dict(self):
         """转换为字典格式
@@ -63,5 +65,6 @@ class MergedBlock(CopyableMixin):
             'flags': self.flags,
             'bold': self.bold,
             'italic': self.italic,
-            'page_num': self.page_num
+            'page_num': self.page_num,
+            'translation_failed': self.translation_failed
         }

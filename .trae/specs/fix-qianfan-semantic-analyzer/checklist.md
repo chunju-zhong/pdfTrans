@@ -1,0 +1,3 @@
+- [x] `get_semantic_analyzer('qianfan')` 返回 `SemanticAnalyzer` 实例，不抛出 `ValueError`
+- [x] `config.QIANFAN_API_KEY` 未配置时抛出含"百度千帆"的 `ValueError`
+- [x] `process_translation` 和 `process_translation_sync` 使用 qianfan 时均能正常创建语义分析器
