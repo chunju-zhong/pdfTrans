@@ -78,8 +78,10 @@ conda activate pdfTrans
 ### 3. Configure Environment Variables
 
 - Copy `.env.example` file to `.env`
-- Register for an Aiping account: https://aiping.cn
-- Or, register for a Silicon Flow account: https://cloud.siliconflow.cn/i/OFUfQfNj
+- Register for a platform account (choose one of three):
+  - Aiping: https://aiping.cn/#?invitation_code=UVSZ6QWRRK
+  - Silicon Flow: https://cloud.siliconflow.cn/i/OFUfQfNj
+  - Baidu Qianfan: https://cloud.baidu.com/product-s/qianfan_home
 - Obtain your API key
 - Configure platform model names and API keys in the `.env` file
 
@@ -149,7 +151,7 @@ pip install paddlepaddle>=3.0.0
 pip install paddlepaddle-gpu>=3.0.0
 ```
 
-> **Note**: OCR requires PaddlePaddle (for PaddleOCR engine) or LLM OCR model configuration (for LLM OCR engine). If neither is configured, only non-scanned PDFs can be processed.
+> **Note**: OCR requires PaddlePaddle (for PaddleOCR engine) or LLM OCR model configuration (for LLM OCR engine). If neither is configured, OCR extraction will be unavailable.
 
 ### 6. Install LaTeX (Optional, for High-Quality Formula Rendering)
 

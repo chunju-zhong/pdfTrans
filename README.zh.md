@@ -78,9 +78,11 @@ conda activate pdfTrans
 ### 3. 配置环境变量
 
 - 复制`.env.example`文件为`.env`
-- 注册Aiping账号：https://aiping.cn
-- 或者，注册硅基流动账号：https://cloud.siliconflow.cn/i/OFUfQfNj
-- 获得成API密钥
+- 注册平台的账号（三选一）
+  - Aiping账号：https://aiping.cn/#?invitation_code=UVSZ6QWRRK
+  - 硅基流动账号：https://cloud.siliconflow.cn/i/OFUfQfNj
+  - 百度千帆账号：https://cloud.baidu.com/product-s/qianfan_home
+- 获得平台成API密钥
 - 在`.env`文件中配置平台模型名称及API的密钥
 
 ```bash
