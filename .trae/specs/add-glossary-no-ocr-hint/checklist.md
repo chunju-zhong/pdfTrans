@@ -1,0 +1,5 @@
+- [x] `templates/index.html` 术语提取区块的 `form-hint` 中包含"不支持 OCR 识别图片"的说明
+- [x] 原"使用当前选择的页码范围，从上传的PDF中提取术语表"文案保留
+- [x] 提示文案在浏览器中显示正常，未破坏页面布局
+- [x] 未修改任何后端代码（`modules/glossary_extractor.py`、`services/glossary_service.py`、`app.py` 等）
+- [x] 未修改任何 JS 行为（`static/js/main.js` 等）
