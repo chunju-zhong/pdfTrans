@@ -6,6 +6,72 @@ from modules.llm_error_handler import classify_llm_error
 logger = logging.getLogger(__name__)
 
 
+GLOSSARY_CORE_REQUIREMENT_DOMAIN = (
+    "核心要求：只提取{doc_type_text}领域中真正的专业术语，"
+    "具有行业或专业领域的特定含义"
+)
+
+GLOSSARY_CORE_REQUIREMENT_EXCLUDE_COMMON = (
+    "核心要求：专业术语必须是{doc_type_text}领域中被广泛认可的、"
+    "具有特定专业含义的词汇，严格排除普通词汇、日常用语、"
+    "通用表达和生活词汇"
+)
+
+GLOSSARY_CORE_REQUIREMENT_ANALYZE = (
+    "核心要求：深入分析文本内容，只识别{doc_type_text}领域中真正的"
+    "专业术语，绝对避免提取与该领域无关的词汇和普通词汇"
+)
+
+GLOSSARY_CORE_REQUIREMENT_NO_TERMS = (
+    "核心要求：如果文本中只有普通词汇、日常用语或与{doc_type_text}领域"
+    "无关的词汇，应视为没有专业术语，返回空字符串"
+)
+
+GLOSSARY_CORE_REQUIREMENT_NO_GLOSSARY = (
+    "核心要求：如果文本中没有{doc_type_text}领域的专业术语需要提取，"
+    "请严格返回\"NO_GLOSSARY\"标识，绝对不要返回任何其他文本，"
+    "包括\"无专业术语需要提取\"、\"没有专业术语\"、\"（空字符串）\"等"
+    "任何类似内容。直接返回\"NO_GLOSSARY\"，不要有任何其他输出。"
+)
+
+GLOSSARY_CORE_REQUIREMENT_UNCERTAIN = (
+    "核心要求：即使不确定是否有专业术语，只要认为没有符合要求的"
+    "{doc_type_text}领域专业术语，就必须返回\"NO_GLOSSARY\"标识，"
+    "不要返回任何解释或说明，也不要返回任何占位符。"
+)
+
+GLOSSARY_CORE_REQUIREMENT_STRICT_NO_GLOSSARY = (
+    "核心要求：当返回\"NO_GLOSSARY\"标识时，确保输出结果只包含"
+    "\"NO_GLOSSARY\"这一个词，不要有任何其他字符。"
+)
+
+GLOSSARY_CORE_REQUIREMENT_OUTPUT_FORMAT = (
+    "核心要求：\n"
+    "- 只返回纯粹的术语列表，严格按照\"术语: 翻译\"格式，每行一个术语\n"
+    "- 绝对不要返回任何中间过程、思考过程、注释、说明或其他任何文本\n"
+    "- 绝对不要返回\"（注：...）\"、\"修正后输出：\"等任何形式的"
+    "注释或说明\n"
+    "- 只返回最终的术语列表，不要有任何其他内容"
+)
+
+GLOSSARY_IMPORTANT_SOURCE_LANG = (
+    "重要：只提取{source_lang_name}源语言中的术语，"
+    "绝对不要提取其他语言的术语"
+)
+
+GLOSSARY_IMPORTANT_SOURCE_LANG_VERIFY = (
+    "重要：确保所有提取的术语都是{source_lang_name}源语言中的词汇，"
+    "并且严格属于{doc_type_text}领域的专业术语"
+)
+
+GLOSSARY_IMPORTANT_KEEP_ORIGINAL = (
+    "重要：约定俗成的词汇必须完全保持原样，不进行任何翻译，例如：\n"
+    "  - AI相关：AI、ML、LLM、LLMs\n"
+    "  - 模型名称：ChatGPT、Gemini、Midjourney\n"
+    "  - 其他技术缩写和约定俗成术语"
+)
+
+
 class GlossaryExtractor(ABC):
     """术语提取器抽象基类"""
 
@@ -62,43 +128,42 @@ class BaseApiGlossaryExtractor(GlossaryExtractor):
         """
         try:
             logger.info(f"使用{self.provider_name}提取术语表")
+            prompt = self._build_prompt(text, source_lang, target_lang, doc_type)
+            response = self._call_api(prompt)
+            return self._process_response(response)
+        except Exception as e:
+            error_info = classify_llm_error(e)
+            logger.error(f"{self.provider_name}术语提取失败: {error_info['user_message']}")
+            return ""
 
-            # 构建提示词
-            doc_type_text = f"，文档类型为{doc_type}" if doc_type else ""
-            prompt = f"""
-请从以下文本中提取专业术语，并根据以下规则处理：
+    def _build_prompt(self, text, source_lang, target_lang, doc_type=None):
+        """构建术语提取提示词
 
-1. 源语言：{source_lang}
-2. 目标语言：{target_lang}
+        Args:
+            text (str): 要提取术语的文本
+            source_lang (str): 源语言代码
+            target_lang (str): 目标语言代码
+            doc_type (str): 文档类型
+
+        Returns:
+            str: 完整的提示词
+        """
+        source_lang_name = config.SUPPORTED_LANGUAGES.get(source_lang, source_lang)
+        target_lang_name = config.SUPPORTED_LANGUAGES.get(target_lang, target_lang)
+        rules_text = self._build_rules_text(source_lang, target_lang, doc_type)
+
+        prompt = f"""请从以下文本中提取专业术语，并根据以下规则处理：
+
+1. 源语言：{source_lang_name}
+2. 目标语言：{target_lang_name}
 
 提取规则：
-- 核心要求：只提取{doc_type_text}领域中真正的专业术语，具有行业或专业领域的特定含义
-- 重要：只提取{source_lang}源语言中的术语，绝对不要提取其他语言的术语
-- 重要：确保所有提取的术语都是{source_lang}源语言中的词汇，并且严格属于{doc_type_text}领域的专业术语
-- 严格按照源语言和目标语言进行提取和翻译，只处理{source_lang}源语言中的术语
-- 核心要求：专业术语必须是{doc_type_text}领域中被广泛认可的、具有特定专业含义的词汇，严格排除普通词汇、日常用语、通用表达和生活词汇
-- 核心要求：深入分析文本内容，只识别{doc_type_text}领域中真正的专业术语，绝对避免提取与该领域无关的词汇和普通词汇
-- 核心要求：如果文本中只有普通词汇、日常用语或与{doc_type_text}领域无关的词汇，应视为没有专业术语，返回空字符串
-- 排除普通词汇、日常用语和通用表达
-- 排除人名、地名、公司名等普通专有名词
-- 如果源语言和目标语言相同，不要提供翻译
-- 每个术语只提取一次，不要重复
-- 重要：约定俗成的词汇必须完全保持原样，不进行任何翻译，例如：
-  - AI相关：AI、ML、LLM、LLMs
-  - 模型名称：ChatGPT、Gemini、Midjourney
-  - 其他技术缩写和约定俗成术语
-- 核心要求：如果文本中没有{doc_type_text}领域的专业术语需要提取，请严格返回"NO_GLOSSARY"标识，绝对不要返回任何其他文本，包括"无专业术语需要提取"、"没有专业术语"、"（空字符串）"等任何类似内容。直接返回"NO_GLOSSARY"，不要有任何其他输出。
-- 核心要求：即使不确定是否有专业术语，只要认为没有符合要求的{doc_type_text}领域专业术语，就必须返回"NO_GLOSSARY"标识，不要返回任何解释或说明，也不要返回任何占位符。
-- 核心要求：当返回"NO_GLOSSARY"标识时，确保输出结果只包含"NO_GLOSSARY"这一个词，不要有任何其他字符。
+{rules_text}
 
 输出格式：
 术语: 翻译
 
-核心要求：
-- 只返回纯粹的术语列表，严格按照"术语: 翻译"格式，每行一个术语
-- 绝对不要返回任何中间过程、思考过程、注释、说明或其他任何文本
-- 绝对不要返回"（注：...）"、"修正后输出："等任何形式的注释或说明
-- 只返回最终的术语列表，不要有任何其他内容
+{GLOSSARY_CORE_REQUIREMENT_OUTPUT_FORMAT}
 
 例如：
 
@@ -112,57 +177,122 @@ autonomous problem-solving: 自主问题解决
 
 文本：
 
-{text[:5000]}
-            """
+{text[:5000]}"""
 
-            # 追加语言专项规则
-            try:
-                from prompts import rule_registry
-                prompt = rule_registry.merge_into_prompt(
-                    prompt, "glossary", source_lang, target_lang
-                )
-            except ImportError:
-                pass  # prompts 模块不存在时保持原有行为
+        return self._apply_language_rules(prompt, source_lang, target_lang)
 
-            # 调用API
-            import openai
-            client = openai.OpenAI(
-                api_key=self.api_key,
-                base_url=self.api_url
+    def _build_rules_text(self, source_lang, target_lang, doc_type=None):
+        """构建规则文本
+
+        Args:
+            source_lang (str): 源语言代码
+            target_lang (str): 目标语言代码
+            doc_type (str): 文档类型
+
+        Returns:
+            str: 格式化后的规则文本
+        """
+        doc_type_text = f"，文档类型为{doc_type}" if doc_type else ""
+        source_lang_name = config.SUPPORTED_LANGUAGES.get(source_lang, source_lang)
+
+        rules = [
+            GLOSSARY_CORE_REQUIREMENT_DOMAIN.format(doc_type_text=doc_type_text),
+            GLOSSARY_IMPORTANT_SOURCE_LANG.format(source_lang_name=source_lang_name),
+            GLOSSARY_IMPORTANT_SOURCE_LANG_VERIFY.format(
+                source_lang_name=source_lang_name, doc_type_text=doc_type_text
+            ),
+            (
+                f"严格按照源语言和目标语言进行提取和翻译，"
+                f"只处理{source_lang_name}源语言中的术语"
+            ),
+            GLOSSARY_CORE_REQUIREMENT_EXCLUDE_COMMON.format(doc_type_text=doc_type_text),
+            GLOSSARY_CORE_REQUIREMENT_ANALYZE.format(doc_type_text=doc_type_text),
+            GLOSSARY_CORE_REQUIREMENT_NO_TERMS.format(doc_type_text=doc_type_text),
+            "排除普通词汇、日常用语和通用表达",
+            "排除人名、地名、公司名等普通专有名词",
+            "如果源语言和目标语言相同，不要提供翻译",
+            "每个术语只提取一次，不要重复",
+            GLOSSARY_IMPORTANT_KEEP_ORIGINAL,
+            GLOSSARY_CORE_REQUIREMENT_NO_GLOSSARY.format(doc_type_text=doc_type_text),
+            GLOSSARY_CORE_REQUIREMENT_UNCERTAIN.format(doc_type_text=doc_type_text),
+            GLOSSARY_CORE_REQUIREMENT_STRICT_NO_GLOSSARY,
+        ]
+
+        return "\n".join(f"- {rule}" for rule in rules)
+
+    def _apply_language_rules(self, prompt, source_lang, target_lang):
+        """应用语言规则
+
+        Args:
+            prompt (str): 基础提示词
+            source_lang (str): 源语言代码
+            target_lang (str): 目标语言代码
+
+        Returns:
+            str: 应用规则后的提示词
+        """
+        try:
+            from prompts import rule_registry
+            return rule_registry.merge_into_prompt(
+                prompt, "glossary", source_lang, target_lang
             )
+        except ImportError:
+            return prompt
 
-            # 构建请求参数
-            messages = [
-                {"role": "system", "content": "你是一个专业的术语提取工具，擅长从文本中识别特定领域的真正专业术语并提供准确的翻译。你严格遵循提取规则，只提取指定领域中具有行业特定含义的专业术语，排除普通词汇和日常用语。"},
-                {"role": "user", "content": prompt}
-            ]
+    def _call_api(self, prompt):
+        """调用翻译API
 
-            # 添加额外参数
-            extra_params = {}
-            if self.extra_body:
-                extra_params["extra_body"] = self.extra_body
+        Args:
+            prompt (str): 提示词
 
-            # 发送请求，设置超时时间为30秒
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=config.GLOSSARY_TEMPERATURE,
-                max_tokens=config.GLOSSARY_MAX_TOKENS,
-                timeout=config.GLOSSARY_TIMEOUT,
-                **extra_params
-            )
+        Returns:
+            openai.ChatCompletion: API响应
+        """
+        import openai
 
-            # 处理响应
-            glossary_text = response.choices[0].message.content.strip()
-            logger.info(f"{self.provider_name}术语提取结果: {glossary_text}")
+        client = openai.OpenAI(
+            api_key=self.api_key,
+            base_url=self.api_url
+        )
 
-            # 确保返回格式正确
-            return self._format_glossary(glossary_text)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是一个专业的术语提取工具，擅长从文本中识别特定领域"
+                    "的真正专业术语并提供准确的翻译。你严格遵循提取规则，"
+                    "只提取指定领域中具有行业特定含义的专业术语，"
+                    "排除普通词汇和日常用语。"
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
 
-        except Exception as e:
-            error_info = classify_llm_error(e)
-            logger.error(f"{self.provider_name}术语提取失败: {error_info['user_message']}")
-            return ""
+        extra_params = {}
+        if self.extra_body:
+            extra_params["extra_body"] = self.extra_body
+
+        return client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=config.GLOSSARY_TEMPERATURE,
+            max_tokens=config.GLOSSARY_MAX_TOKENS,
+            timeout=config.GLOSSARY_TIMEOUT,
+            **extra_params,
+        )
+
+    def _process_response(self, response):
+        """处理API响应
+
+        Args:
+            response (openai.ChatCompletion): API响应
+
+        Returns:
+            str: 格式化后的术语表
+        """
+        glossary_text = response.choices[0].message.content.strip()
+        logger.info(f"{self.provider_name}术语提取结果: {glossary_text}")
+        return self._format_glossary(glossary_text)
 
     def _format_glossary(self, glossary_text):
         """格式化术语表
@@ -179,13 +309,10 @@ autonomous problem-solving: 自主问题解决
         for line in lines:
             line = line.strip()
             if line:
-                # 跳过包含NO_GLOSSARY的行
                 if 'NO_GLOSSARY' in line:
                     continue
-                # 如果包含冒号，直接添加
                 if ': ' in line:
                     formatted_lines.append(line)
-                # 否则，作为术语本身添加（当源语言和目标语言相同时）
                 else:
                     formatted_lines.append(f"{line}: {line}")
 
