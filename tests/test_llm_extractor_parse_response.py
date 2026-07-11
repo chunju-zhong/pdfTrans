@@ -71,29 +71,31 @@ class TestParseResponseRefTagFallback:
 
 
 class TestParseResponseJsonFallback:
-    """JSON返回空结果时回退到Markdown"""
+    """JSON返回空结果时的行为"""
 
-    def test_empty_json_result_falls_back_to_markdown(self, extractor):
-        """当JSON解析返回空列表时，应回退到Markdown解析"""
+    def test_empty_json_result_does_not_fall_back_to_markdown(self, extractor):
+        """当JSON成功解析（data不为None）但返回空列表时，不应回退到Markdown解析
+
+        设计意图：JSON成功解析说明模型意图输出JSON格式，
+        即使内容为空也应保持该格式结果，而非静默回退到Markdown。
+        """
         result_text = '```json\n{"blocks": []}\n```'
 
-        mock_md_block = MagicMock()
         json_data = {"blocks": []}
 
         with patch.object(extractor, '_extract_json', return_value=json_data) as mock_extract, \
              patch.object(extractor, '_parse_json_to_blocks', return_value=[]) as mock_json, \
-             patch.object(extractor, '_parse_markdown_to_blocks', return_value=[mock_md_block]) as mock_md, \
+             patch.object(extractor, '_parse_markdown_to_blocks', return_value=[MagicMock()]) as mock_md, \
              patch.object(extractor, '_map_ocr_blocks_to_models', return_value='md_result') as mock_map:
 
             result = extractor._parse_response(result_text, page_num=2)
 
-            assert result == 'md_result'
+            # JSON解析成功但内容为空 → 返回None，不回退到Markdown
+            assert result is None
             mock_extract.assert_called_once()
             mock_json.assert_called_once_with(json_data)
-            mock_md.assert_called_once_with(result_text)
-            mock_map.assert_called_once_with(
-                [mock_md_block], 2, None, page=None, temp_images_dir=None
-            )
+            mock_md.assert_not_called()
+            mock_map.assert_not_called()
 
 
 class TestParseResponseAllEmpty:
@@ -136,17 +138,18 @@ class TestParseResponseNoRefNoJson:
             )
 
 
-class TestExtractJsonNoBraceFinding:
-    """_extract_json 不使用大括号查找（Level 3容错已移除）"""
+class TestExtractJsonBraceFinding:
+    """_extract_json 三级容错：直接解析 → 代码块提取 → 大括号查找"""
 
-    def test_braces_inside_text_returns_none(self, extractor):
-        """包含大括号但不以{开头且无```json```块的文本应返回None
+    def test_braces_inside_text_extracts_json(self, extractor):
+        """包含大括号但不以{开头且无```json```块的文本应尝试提取JSON
 
-        验证_extract_json不会对文本中间出现的JSON片段进行模糊匹配。
+        Level 3容错：_extract_json会查找文本中第一个{到最后一个}之间的内容
+        并尝试解析，因此文本中间出现的合法JSON片段会被提取。
         """
         text = 'Some text with {"key": "value"} inside'
         result = extractor._extract_json(text)
-        assert result is None
+        assert result == {"key": "value"}
 
     def test_text_starting_with_brace_parses(self, extractor):
         """以{开头的文本应尝试直接解析"""

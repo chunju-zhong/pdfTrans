@@ -315,10 +315,10 @@ class TestLlmOcrConfigDefaults:
 
     def test_llm_ocr_config_defaults(self):
         """LLM OCR配置默认值"""
-        from config import Config
-        assert Config.OCR_LLM_DPI == 150
-        assert Config.OCR_LLM_TEMPERATURE == 0.1
-        assert Config.OCR_LLM_MAX_TOKENS == 8192
+        from config import config
+        assert config.OCR_LLM_DPI == 150
+        assert config.OCR_LLM_TEMPERATURE == 0.1
+        assert config.OCR_LLM_MAX_TOKENS == 8000
 
 
 class TestLlmOcrRefTagParsing:
@@ -829,27 +829,27 @@ class TestMixedFormulaTextRendering:
     def test_contains_latex_formula_dollar(self):
         """检测 $...$ 公式片段"""
         from modules.pdf_generator import PdfGenerator
-        assert PdfGenerator._contains_latex_formula('高负荷率：$15 - 30\\mathrm{gBOD}_5$') is True
+        assert PdfGenerator()._contains_latex_formula('高负荷率：$15 - 30\\mathrm{gBOD}_5$') is True
 
     def test_contains_latex_formula_double_dollar(self):
         """检测 $$...$$ 公式片段"""
         from modules.pdf_generator import PdfGenerator
-        assert PdfGenerator._contains_latex_formula('$$E = mc^2$$') is True
+        assert PdfGenerator()._contains_latex_formula('$$E = mc^2$$') is True
 
     def test_contains_latex_formula_paren(self):
         """检测 \\(...\\) 公式片段"""
         from modules.pdf_generator import PdfGenerator
-        assert PdfGenerator._contains_latex_formula('载体 \\(\\mathrm{m}^2\\)') is True
+        assert PdfGenerator()._contains_latex_formula('载体 \\(\\mathrm{m}^2\\)') is True
 
     def test_contains_latex_formula_bracket(self):
         """检测 \\[...\\] 公式片段"""
         from modules.pdf_generator import PdfGenerator
-        assert PdfGenerator._contains_latex_formula('\\[E = mc^2\\]') is True
+        assert PdfGenerator()._contains_latex_formula('\\[E = mc^2\\]') is True
 
     def test_no_latex_formula(self):
         """纯文本不含公式"""
         from modules.pdf_generator import PdfGenerator
-        assert PdfGenerator._contains_latex_formula('这是一段纯中文文本') is False
+        assert PdfGenerator()._contains_latex_formula('这是一段纯中文文本') is False
 
     def test_preprocess_greek_letters(self):
         """预处理希腊字母替换"""

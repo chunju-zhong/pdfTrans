@@ -39,6 +39,10 @@
   - Add title recognition and newline cleaning in `split_translated_result` function
   - Add `_is_title_block` function to determine if original block is a title
   - Cleaning strategy: Replace `\n` with space, clean extra spaces
+- [x] Added post-translation format blocks toggle (ENABLE_FORMAT_BLOCKS: false/true/auto)
+- [x] Dynamic max_tokens calculation for translators (replaces fixed value, reduces truncation and waste)
+- [x] Enhanced untranslated detection with automatic retry (similarity + target language char detection, retry mechanism)
+- [x] Translation garbage output detection with fallback (expansion detection >5x, repetition pattern >10 times)
 - [ ] Improve LaTeX formula syntax repair capability, handle model output syntax errors
 - [x] Fix PaddleOCR table bbox not added to processed_pixel_bboxes causing content not displaying
 - [x] Fix PaddleOCR _compute_table_grid() not setting estimated_lines
@@ -74,6 +78,12 @@
   - Solution: Update all 3 tests' mocks to streaming response format, following `test_aiping_translate`'s mock pattern (`mock_stream_chunk.choices = [MagicMock(delta=MagicMock(content='你好'))]`, `mock_create.return_value = [mock_stream_chunk]`)
 
 ## Medium Priority
+- [x] Fix test_llm_extractor_multi_bbox.py (6 cases): OcrBlock refactored, return values don't match test expectations
+- [x] Fix test_llm_extractor_parse_response.py (2 cases): JSON parsing logic refactored to llm_response_parser.py
+- [x] Fix test_llm_ocr.py::TestMixedFormulaTextRendering (5 cases): text_renderer attribute access changed
+- [x] Fix test_ocr_extractor.py::TestTableHtmlParser::test_parse_simple_table: Table parsing return format changed (tuple vs string)
+- [x] Fix test_output_filename.py::test_process_translation_sync_passes_output_filename: _generate_outputs doesn't accept layout_model parameter
+- [x] Fix test_python_review_fixes.py (3 cases): Code structure checks based on old file structure (parsing logic refactored to llm_response_parser.py)
 - [x] Fix test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages
   - Reason: Mock verification failed, update_progress call count incorrect
   - Solution: Update mock verification logic in tests

@@ -247,18 +247,18 @@ class TestParseHtmlTableReturnCheck:
 
     def test_cells_is_not_none_check(self):
         """使用 is not None 而非 truthy 检查"""
-        from modules.ocr.llm_extractor import LlmOcrExtractor
+        from modules.ocr.llm_response_parser import LlmOcrResponseParser
         import inspect
 
-        source = inspect.getsource(LlmOcrExtractor._map_ocr_blocks_to_models)
+        source = inspect.getsource(LlmOcrResponseParser._map_ocr_blocks_to_models)
         assert 'if cells is not None:' in source, "Should use 'if cells is not None:' check"
 
     def test_cells_truthy_check_not_used(self):
         """不应使用 if cells: 检查"""
-        from modules.ocr.llm_extractor import LlmOcrExtractor
+        from modules.ocr.llm_response_parser import LlmOcrResponseParser
         import inspect
 
-        source = inspect.getsource(LlmOcrExtractor._map_ocr_blocks_to_models)
+        source = inspect.getsource(LlmOcrResponseParser._map_ocr_blocks_to_models)
         # 确保没有使用 "if cells:" (但 "if cells is not None:" 是允许的)
         # 移除所有 "is not None" 后检查是否还有 "if cells:"
         cleaned = source.replace('is not None', '___OK___')
@@ -270,17 +270,17 @@ class TestComputeTableLayoutSideEffects:
 
     def test_docstring_mentions_side_effects(self):
         """docstring 标注了副作用"""
-        from modules.ocr.llm_extractor import LlmOcrExtractor
+        from modules.ocr.llm_table_parser import LlmTableParser
 
-        doc = LlmOcrExtractor._compute_table_layout.__doc__
+        doc = LlmTableParser._compute_table_layout.__doc__
         assert doc is not None
         assert 'Side Effects' in doc or 'side effect' in doc.lower()
 
     def test_docstring_mentions_estimated_lines(self):
         """docstring 提及 estimated_lines 属性"""
-        from modules.ocr.llm_extractor import LlmOcrExtractor
+        from modules.ocr.llm_table_parser import LlmTableParser
 
-        doc = LlmOcrExtractor._compute_table_layout.__doc__
+        doc = LlmTableParser._compute_table_layout.__doc__
         assert 'estimated_lines' in doc
 
 
@@ -328,7 +328,7 @@ class TestImportOrder:
 
     def test_constant_after_imports(self):
         """常量定义在 import 之后"""
-        from modules.ocr import llm_extractor as m
+        from modules.ocr import llm_response_parser as m
         import inspect
 
         source = inspect.getsource(m)
@@ -351,7 +351,7 @@ class TestImportOrder:
 
     def test_no_import_after_constant(self):
         """常量之后不应有新的 import"""
-        from modules.ocr import llm_extractor as m
+        from modules.ocr import llm_response_parser as m
         import inspect
 
         source = inspect.getsource(m)

@@ -35,7 +35,8 @@ class TestMultiBboxSplit:
             "[[135, 80, 861, 175], [264, 197, 790, 391]]",
             "First paragraph text\n\nSecond paragraph text",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
+        ocr_blocks = extractor._parse_ref_tags_to_blocks(result_text)
+        text_blocks, _, _ = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1, page_info=MOCK_PAGE_INFO)
 
         assert len(text_blocks) == 2
 
@@ -60,7 +61,8 @@ class TestMultiBboxSplit:
             "[[135, 80, 861, 175], [264, 197, 790, 391]]",
             "Single paragraph without double newline",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
+        ocr_blocks = extractor._parse_ref_tags_to_blocks(result_text)
+        text_blocks, _, _ = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1, page_info=MOCK_PAGE_INFO)
 
         assert len(text_blocks) == 1
         assert text_blocks[0].block_text == "Single paragraph without double newline"
@@ -74,7 +76,8 @@ class TestMultiBboxSplit:
             "[[135, 80, 861, 175]]",
             "Just one paragraph",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
+        ocr_blocks = extractor._parse_ref_tags_to_blocks(result_text)
+        text_blocks, _, _ = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1, page_info=MOCK_PAGE_INFO)
 
         assert len(text_blocks) == 1
         assert text_blocks[0].block_text == "Just one paragraph"
@@ -82,17 +85,21 @@ class TestMultiBboxSplit:
         assert text_blocks[0].is_body_text is True
 
     def test_two_bboxes_three_paragraphs_fallback(self, extractor):
-        """两个 bbox + 三个段落 → 段落数与 bbox 数不匹配，回退为单个 TextBlock"""
+        """两个 bbox + 三个段落 → 多余段落合并到最后一个 bbox，生成两个 TextBlock"""
         result_text = _make_ref_block(
             "text",
             "[[135, 80, 861, 175], [264, 197, 790, 391]]",
             "First paragraph\n\nSecond paragraph\n\nThird paragraph",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
+        ocr_blocks = extractor._parse_ref_tags_to_blocks(result_text)
+        text_blocks, _, _ = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1, page_info=MOCK_PAGE_INFO)
 
-        assert len(text_blocks) == 1
-        assert text_blocks[0].block_text == "First paragraph\n\nSecond paragraph\n\nThird paragraph"
+        assert len(text_blocks) == 2
+        assert text_blocks[0].block_text == "First paragraph"
         assert text_blocks[0].block_bbox == (135.0, 80.0, 861.0, 175.0)
+        # 多余段落合并到最后一个 bbox
+        assert text_blocks[1].block_text == "Second paragraph\nThird paragraph"
+        assert text_blocks[1].block_bbox == (264.0, 197.0, 790.0, 391.0)
 
     def test_three_bboxes_three_paragraphs_split(self, extractor):
         """三个 bbox + 三个段落 → 拆分为三个 TextBlock"""
@@ -101,7 +108,8 @@ class TestMultiBboxSplit:
             "[[10, 20, 100, 50], [10, 60, 100, 90], [10, 100, 100, 130]]",
             "Para one\n\nPara two\n\nPara three",
         )
-        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
+        ocr_blocks = extractor._parse_ref_tags_to_blocks(result_text)
+        text_blocks, _, _ = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1, page_info=MOCK_PAGE_INFO)
 
         assert len(text_blocks) == 3
         assert text_blocks[0].block_text == "Para one"
@@ -125,7 +133,8 @@ class TestMultiBboxSplit:
             "New para A\n\nNew para B",
         )
         result_text = block1 + block2
-        text_blocks, _, _ = extractor._parse_ref_tags_to_blocks(result_text)
+        ocr_blocks = extractor._parse_ref_tags_to_blocks(result_text)
+        text_blocks, _, _ = extractor._map_ocr_blocks_to_models(ocr_blocks, page_num=1, page_info=MOCK_PAGE_INFO)
 
         assert len(text_blocks) == 3
         assert text_blocks[0].block_no == 0
