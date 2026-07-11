@@ -635,6 +635,12 @@ class Config:
 | `OCR_LLM_TEMPERATURE` | `OCR_LLM_TEMPERATURE` | float | 0.1 | LLM OCR 温度 |
 | `OCR_LLM_DPI` | `OCR_LLM_DPI` | int | 150 | LLM OCR 渲染 DPI |
 
+#### 翻译质量控制配置
+
+| 环境变量 | 配置属性 | 类型 | 默认值 | 说明 |
+|----------|----------|------|--------|------|
+| `ENABLE_FORMAT_BLOCKS` | `ENABLE_FORMAT_BLOCKS` | str | `false` | 翻译后 LLM 格式排版开关（`false`/`true`/`auto`） |
+
 #### 按模块 API 参数
 
 | 环境变量 | 配置属性 | 类型 | 默认值 | 说明 |

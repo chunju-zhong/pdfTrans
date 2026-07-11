@@ -213,7 +213,7 @@ When memory usage exceeds 85% or load average exceeds CPU cores ×0.8, high-load
 | SiliconFlow | `SiliconFlowTranslator` | `stream=True` | `max_retries=0` | `config.SILICON_FLOW_EXTRA_BODY` |
 | Baidu Qianfan | `QianfanTranslator` | `stream=True` | `max_retries=0` | `config.QIANFAN_EXTRA_BODY` |
 
-All three share the base class `Translator` (`modules/translator.py`), with common parameters: `temperature=0.1`, `top_p=0.9`, `max_tokens=8192`. `QianfanTranslator` uses the Baidu Qianfan OpenAI-compatible API (default URL `https://qianfan.baidubce.com/v2`), authenticated via `QIANFAN_API_KEY`.
+All three share the base class `Translator` (`modules/translator.py`), with common parameters: `temperature=0.1`, `top_p=0.9`, `max_tokens` dynamically calculated (see 2.6). `QianfanTranslator` uses the Baidu Qianfan OpenAI-compatible API (default URL `https://qianfan.baidubce.com/v2`), authenticated via `QIANFAN_API_KEY`.
 
 ### 2.2 Four-Section Structured System Prompt
 
@@ -252,6 +252,74 @@ if hasattr(chunk.choices[0].delta, 'reasoning_content') and chunk.choices[0].del
 ```
 
 The `format_blocks` typography call also uses streaming, but exceptions are not caught internally — they propagate to the caller `translation_content.py`, which reports to the UI via `task.add_warning` (see 11.3).
+
+### 2.6 Dynamic max_tokens Calculation
+
+Translators and layout models no longer use a fixed `max_tokens`; instead, it is dynamically calculated based on input text length:
+
+```python
+# Translator base class instance method
+def _calculate_max_tokens(self, input_text, max_ceiling=None):
+    estimated_tokens = len(input_text) / CHARS_PER_TOKEN  # CHARS_PER_TOKEN=3
+    dynamic = max(MIN_OUTPUT_TOKENS, int(estimated_tokens * EXPANSION_FACTOR))  # EXPANSION_FACTOR=3, MIN_OUTPUT_TOKENS=256
+    ceiling = max_ceiling if max_ceiling is not None else self.max_tokens
+    return min(dynamic, ceiling)
+
+# Standalone function (for non-Translator subclasses)
+def calculate_max_tokens(input_text, max_ceiling, chars_per_token=3, expansion_factor=3, min_output_tokens=256):
+    ...
+```
+
+- **Translation calls**: All three translators use `self._calculate_max_tokens(text)`, with ceiling of `self.max_tokens` (default 8192)
+- **Layout calls**: `format_blocks` uses `self._calculate_max_tokens(blocks_text, max_ceiling=config.LAYOUT_MAX_TOKENS)`; `MarkdownGenerator` uses `calculate_max_tokens(user_prompt, self.max_tokens)`
+
+### 2.7 Translation Quality Detection and Retry
+
+#### 2.7.1 Untranslated Detection
+
+`_is_translation_unchanged` uses a dual strategy to detect when the LLM has not translated the text:
+
+1. **Original strategy**: `|||` segment detection — splits the translation by `|||` and checks whether all segments come from the original text
+2. **New strategy**: High similarity + no target language characters — after removing hyphenation markers, calculates normalized similarity >85% and the translation contains no target language (default: Chinese CJK) characters
+
+Helper methods:
+- `_normalize_for_comparison`: Removes soft hyphenation markers and excess whitespace
+- `_calculate_similarity`: Uses LCS for short text (≤500 characters), character set intersection approximation for long text
+- `_contains_target_language_chars`: Detects whether text contains CJK Unified Ideographs (U+4E00-U+9FFF)
+
+#### 2.7.2 Garbage Output Detection
+
+`_is_translation_garbage` detects abnormal LLM output:
+
+- **Expansion detection**: Translation length > original length × 5
+- **Repetition pattern detection**: Same substring (2-50 characters) repeated consecutively > 10 times
+
+#### 2.7.3 Automatic Retry
+
+In merged and original block translation flows, when untranslated text is detected, an automatic retry is performed once:
+
+```python
+if self._is_translation_unchanged(translated_text, original_text):
+    retry_result = translator.translate(original_text, ...)
+    if not self._is_translation_unchanged(retry_result.content, original_text):
+        translated_text = retry_result.content  # Retry succeeded
+    else:
+        translated_text = original_text  # Retry failed, fall back to original text
+```
+
+Garbage output detection runs after truncation detection, covering both normal and truncated scenarios; when detected, it falls back to original text directly.
+
+### 2.8 Format Blocks Toggle
+
+Post-translation LLM format blocks is controlled by the `ENABLE_FORMAT_BLOCKS` configuration:
+
+| Value | Behavior |
+|-------|----------|
+| `false` (default) | No format blocks |
+| `true` | Always execute format blocks |
+| `auto` | Execute format blocks only when output includes PDF (`output_format` is `pdf`/`pdf_docx`/`all`) |
+
+The `_translate_content` method receives an `output_format` parameter, combined with `config.ENABLE_FORMAT_BLOCKS` to determine whether to execute the format blocks step.
 
 ---
 

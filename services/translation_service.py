@@ -233,7 +233,7 @@ class TranslationService:
                 return
 
             # 翻译文本内容
-            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums)
+            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums, output_format)
             if not translated_content:
                 return
 
@@ -345,7 +345,7 @@ class TranslationService:
                 progress_callback(task.progress, task.message)
 
             # 翻译文本内容
-            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums)
+            translated_content = self._translate_content(task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums, output_format)
             if not translated_content:
                 logger.error(f"任务 {task.task_id} 文本翻译失败")
                 return None
@@ -480,9 +480,9 @@ class TranslationService:
             task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary
         )
 
-    def _translate_content(self, task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums):
+    def _translate_content(self, task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums, output_format='pdf'):
         return self.content_translator._translate_content(
-            task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums
+            task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums, output_format
         )
 
     def translate_merged_block(self, task, merged_block, index, translator, source_lang, target_lang, doc_type, glossary, total_blocks):
@@ -542,7 +542,7 @@ class TranslationService:
     # 委派方法 - 输出生成
     # ======================================================================
 
-    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True, output_path=None, output_filename=None, tmp_dir=None, target_pages=None):
+    def generate_output_files(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type='aiping', chapters=None, chapter_split=True, output_path=None, output_filename=None, tmp_dir=None, target_pages=None, layout_model=None):
         """生成输出文件（重写为调用委派方法以确保测试@patch生效）
 
         NOTE: 此方法保持于TranslationService中以维护测试backward compatibility。
@@ -591,7 +591,7 @@ class TranslationService:
 
         return output_files
 
-    def _generate_outputs(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path=None, output_filename=None, tmp_dir=None, target_pages=None):
+    def _generate_outputs(self, task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path=None, output_filename=None, tmp_dir=None, target_pages=None, layout_model=None):
         """生成输出文件（调用委派方法以确保测试@patch生效）
 
         NOTE: 此方法保持于TranslationService中以维护测试backward compatibility。
@@ -602,7 +602,7 @@ class TranslationService:
 
         logger.info(f"任务 {task.task_id} 开始调用 generate_output_files 方法")
         output_files = self.generate_output_files(
-            task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir, target_pages
+            task, input_filepath, unique_id, filename, output_format, translated_content, extracted_images, target_lang, translator_type, chapters, chapter_split, output_path, output_filename, tmp_dir, target_pages, layout_model
         )
         logger.info(f"任务 {task.task_id} generate_output_files 方法执行完成，返回 {len(output_files)} 个输出文件")
 

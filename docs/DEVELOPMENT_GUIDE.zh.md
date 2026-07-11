@@ -188,6 +188,7 @@ vim .env
 | `USE_TWO_PHASE_MERGE` | 是否使用两阶段并行合并 | `true` | 否 |
 | `MERGE_MAX_WORKERS` | 并行合并的最大线程数 | `5` | 否 |
 | `MERGE_BATCH_SIZE` | 每批处理的文本对数量 | `20` | 否 |
+| `ENABLE_FORMAT_BLOCKS` | 翻译后 LLM 格式排版开关（`false`/`true`/`auto`） | `false` | 否 |
 
 ### 2.8 LLM OCR 配置
 

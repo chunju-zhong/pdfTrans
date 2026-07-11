@@ -213,7 +213,7 @@ GPU 可用时，模型级别自动提升一级。
 | SiliconFlow | `SiliconFlowTranslator` | `stream=True` | `max_retries=0` | `config.SILICON_FLOW_EXTRA_BODY` |
 | 百度千帆 | `QianfanTranslator` | `stream=True` | `max_retries=0` | `config.QIANFAN_EXTRA_BODY` |
 
-三者共享基类 `Translator`（`modules/translator.py`），通用参数：`temperature=0.1`，`top_p=0.9`，`max_tokens=8192`。`QianfanTranslator` 使用百度千帆 OpenAI 兼容 API（默认地址 `https://qianfan.baidubce.com/v2`），通过 `QIANFAN_API_KEY` 认证。
+三者共享基类 `Translator`（`modules/translator.py`），通用参数：`temperature=0.1`，`top_p=0.9`，`max_tokens` 动态计算（见 2.6）。`QianfanTranslator` 使用百度千帆 OpenAI 兼容 API（默认地址 `https://qianfan.baidubce.com/v2`），通过 `QIANFAN_API_KEY` 认证。
 
 ### 2.2 四节结构系统提示词
 
@@ -252,6 +252,74 @@ if hasattr(chunk.choices[0].delta, 'reasoning_content') and chunk.choices[0].del
 ```
 
 `format_blocks` 排版调用同样使用流式，但异常不内部捕获，向上抛出由调用方 `translation_content.py` 通过 `task.add_warning` 上报 UI（详见 10.3）。
+
+### 2.6 动态 max_tokens 计算
+
+翻译器和排版模型不再使用固定 `max_tokens`，而是根据输入文本长度动态计算：
+
+```python
+# Translator 基类实例方法
+def _calculate_max_tokens(self, input_text, max_ceiling=None):
+    estimated_tokens = len(input_text) / CHARS_PER_TOKEN  # CHARS_PER_TOKEN=3
+    dynamic = max(MIN_OUTPUT_TOKENS, int(estimated_tokens * EXPANSION_FACTOR))  # EXPANSION_FACTOR=3, MIN_OUTPUT_TOKENS=256
+    ceiling = max_ceiling if max_ceiling is not None else self.max_tokens
+    return min(dynamic, ceiling)
+
+# 独立函数（供非 Translator 子类使用）
+def calculate_max_tokens(input_text, max_ceiling, chars_per_token=3, expansion_factor=3, min_output_tokens=256):
+    ...
+```
+
+- **翻译调用**：三个翻译器均使用 `self._calculate_max_tokens(text)`，上限为 `self.max_tokens`（默认 8192）
+- **排版调用**：`format_blocks` 使用 `self._calculate_max_tokens(blocks_text, max_ceiling=config.LAYOUT_MAX_TOKENS)`；`MarkdownGenerator` 使用 `calculate_max_tokens(user_prompt, self.max_tokens)`
+
+### 2.7 翻译质量检测与重试
+
+#### 2.7.1 未翻译检测
+
+`_is_translation_unchanged` 采用双重策略检测 LLM 未翻译的情况：
+
+1. **原有策略**：`|||` 分段检测 — 将译文按 `|||` 分段，判断所有分段是否均来自原文
+2. **新增策略**：高相似度 + 无目标语言字符 — 去除断字标记后计算归一化相似度 >85% 且译文不含目标语言（默认中文 CJK）字符
+
+辅助方法：
+- `_normalize_for_comparison`：去除软连字符断字标记和多余空白
+- `_calculate_similarity`：短文本（≤500字符）使用 LCS，长文本使用字符集交集近似
+- `_contains_target_language_chars`：检测是否包含 CJK 统一汉字（U+4E00-U+9FFF）
+
+#### 2.7.2 垃圾输出检测
+
+`_is_translation_garbage` 检测 LLM 输出异常：
+
+- **膨胀检测**：译文长度 > 原文长度 × 5
+- **重复模式检测**：同一子串（2-50字符）连续重复 > 10 次
+
+#### 2.7.3 自动重试
+
+合并块和原始块翻译流程中，检测到未翻译时自动重试一次：
+
+```python
+if self._is_translation_unchanged(translated_text, original_text):
+    retry_result = translator.translate(original_text, ...)
+    if not self._is_translation_unchanged(retry_result.content, original_text):
+        translated_text = retry_result.content  # 重试成功
+    else:
+        translated_text = original_text  # 重试失败，回退原文
+```
+
+垃圾输出检测在截断检测之后执行，覆盖正常和截断两种场景，检测到时直接回退原文。
+
+### 2.8 格式排版开关
+
+翻译后 LLM 格式排版通过 `ENABLE_FORMAT_BLOCKS` 配置控制：
+
+| 值 | 行为 |
+|----|------|
+| `false`（默认） | 不执行格式排版 |
+| `true` | 始终执行格式排版 |
+| `auto` | 仅当输出格式包含 PDF 时执行（`output_format` 为 `pdf`/`pdf_docx`/`all`） |
+
+`_translate_content` 方法接收 `output_format` 参数，结合 `config.ENABLE_FORMAT_BLOCKS` 判断是否执行排版步骤。
 
 ---
 

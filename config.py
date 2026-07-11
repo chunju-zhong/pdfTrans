@@ -147,6 +147,9 @@ class Config:
         self.LAYOUT_TEMPERATURE = float(os.environ.get('LAYOUT_TEMPERATURE', '0.1'))
         self.LAYOUT_MAX_TOKENS = int(os.environ.get('LAYOUT_MAX_TOKENS', '8192'))
 
+        # 翻译后格式排版开关
+        self.ENABLE_FORMAT_BLOCKS = os.environ.get('ENABLE_FORMAT_BLOCKS', 'false')
+
         # LLM OCR配置
         self.AIPING_OCR_LLM_MODEL = os.environ.get('AIPING_OCR_LLM_MODEL') or 'DeepSeek-OCR'
         self.SILICON_FLOW_OCR_LLM_MODEL = os.environ.get('SILICON_FLOW_OCR_LLM_MODEL') or 'deepseek-ai/DeepSeek-OCR'
