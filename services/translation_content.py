@@ -91,7 +91,7 @@ class TranslationContentTranslator:
                 task, text_blocks, translator, source_lang, target_lang, doc_type, glossary
             )
 
-    def _translate_content(self, task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums):
+    def _translate_content(self, task, text_blocks, semantic_merge, use_llm_merging, translator, semantic_analyzer, source_lang, target_lang, doc_type, glossary, all_page_nums, output_format='pdf'):
         """翻译文本内容（内部封装，返回字典格式）
 
         Args:
@@ -106,6 +106,7 @@ class TranslationContentTranslator:
             doc_type: 文档类型
             glossary: 术语表
             all_page_nums: 所有页码列表（包括没有文本块的页面）
+            output_format: 输出格式（默认'pdf'），用于判断是否执行格式排版
 
         Returns:
             dict: 翻译后的内容
@@ -140,7 +141,15 @@ class TranslationContentTranslator:
 
         # === LLM格式排版步骤 ===
         # 对每个有翻译块的页面，调用LLM优化格式排版（标点规范、间距清理等）
-        if translator is not None:
+        should_format = False
+        if config.ENABLE_FORMAT_BLOCKS == 'true':
+            should_format = True
+        elif config.ENABLE_FORMAT_BLOCKS == 'auto':
+            # 仅输出格式包含 PDF 时执行格式排版
+            if output_format in ('pdf', 'pdf_docx', 'all'):
+                should_format = True
+
+        if should_format and translator is not None:
             for page_blocks in translated_content['blocks']:
                 if not page_blocks.text_blocks:
                     continue
@@ -174,6 +183,9 @@ class TranslationContentTranslator:
                         f"排版失败：{error_info['user_message']}，已回退到未排版译文",
                         {"process": "format", "error": error_info['original_message']}
                     )
+
+        if not should_format:
+            logger.info(f"格式排版已跳过 (ENABLE_FORMAT_BLOCKS={config.ENABLE_FORMAT_BLOCKS}, output_format={output_format})")
 
         logger.info(f"任务 {task.task_id} 翻译完成，总翻译块数量: {translated_blocks}")
 
@@ -240,8 +252,26 @@ class TranslationContentTranslator:
         )
         merged_translation = translation_result.content
         logger.info(f'合并翻译结果: 结果前200字符="{merged_translation[:200]}", 长度={len(merged_translation)}')
+
+        # 检测未翻译并重试
         if self._is_translation_unchanged(merged_translation, merged_text):
-            logger.warning(f'合并翻译结果与原文实质相同（可能未翻译）: 原文前100字符="{merged_text[:100]}", 结果前200字符="{merged_translation[:200]}"')
+            logger.warning(f"任务 {task.task_id} 合并块 {index+1} 翻译结果与原文实质相同，尝试重试翻译: 原文前100字符=\"{merged_text[:100]}\"")
+            retry_result = translator.translate(
+                merged_text,
+                source_lang,
+                target_lang,
+                doc_type=doc_type,
+                glossary=glossary
+            )
+            retry_translation = retry_result.content
+
+            if not self._is_translation_unchanged(retry_translation, merged_text):
+                merged_translation = retry_translation
+                logger.info(f"任务 {task.task_id} 合并块 {index+1} 重试翻译成功: {merged_translation[:100]}")
+            else:
+                merged_translation = merged_text
+                logger.warning(f"任务 {task.task_id} 合并块 {index+1} 重试翻译仍未成功，回退使用原文: 原文长度={len(merged_text)}, 译文长度={len(merged_translation)}")
+
         logger.info(f"任务 {task.task_id} 合并块 {index+1} 翻译结果: {merged_translation}")
 
         # 检查是否被截断
@@ -254,6 +284,12 @@ class TranslationContentTranslator:
                 "token_usage": translation_result.token_usage,
                 "finish_reason": translation_result.finish_reason
             })
+
+        # 检测翻译结果是否为垃圾输出（覆盖正常和截断两种场景）
+        is_garbage, garbage_reason = self._is_translation_garbage(merged_translation, merged_text)
+        if is_garbage:
+            logger.warning(f"任务 {task.task_id} 合并块 {index+1} 翻译输出异常，回退使用原文: {garbage_reason}")
+            merged_translation = merged_text
 
         # 保存合并后的翻译结果
         from models.merged_block import MergedBlock
@@ -409,6 +445,25 @@ class TranslationContentTranslator:
 
         return page_translated_blocks_dict, merged_translations, translated_blocks
 
+    def _is_translation_garbage(self, translated_text: str, original_text: str) -> tuple:
+        """检测翻译结果是否为垃圾输出（异常膨胀或重复模式）
+
+        Returns:
+            tuple: (is_garbage: bool, reason: str)
+        """
+        # 长度膨胀检测：译文长度 > 原文长度 × 5
+        if len(original_text) > 0 and len(translated_text) > len(original_text) * 5:
+            return (True, f"译文长度异常膨胀: 译文{len(translated_text)}字符 > 原文{len(original_text)}字符×5")
+
+        # 重复模式检测：同一子串连续重复超过 10 次
+        match = re.search(r'(.{2,50}?)\1{10,}', translated_text)
+        if match:
+            pattern = match.group(1)
+            count = match.group(0).count(pattern)
+            return (True, f"翻译结果包含重复模式: '{pattern}' 连续重复{count}次")
+
+        return (False, "")
+
     def _is_translation_unchanged(self, translated_text: str, original_text: str) -> bool:
         """判断翻译结果是否实质上未翻译（含 LLM 自行添加 ||| 等格式符的情况）
 
@@ -448,7 +503,74 @@ class TranslationContentTranslator:
             # 所有分段都来自原文 → 未翻译（只是被 ||| 分隔了）
             return True
 
+        # 高相似度未翻译检测：去除断字标记后比较，且译文不含目标语言字符
+        norm_original = self._normalize_for_comparison(original_text)
+        norm_translated = self._normalize_for_comparison(translated_text)
+        if norm_original and norm_translated:
+            similarity = self._calculate_similarity(norm_translated, norm_original)
+            if similarity > 0.85 and not self._contains_target_language_chars(translated_text):
+                return True
+
         return False
+
+    @staticmethod
+    def _normalize_for_comparison(text: str) -> str:
+        """去除断字标记和多余空白，用于相似度比较
+
+        处理 PDF 提取中的断字标记，如 "Simi‐\\nlarly" → "Similarly"
+        """
+        # 去除断字标记：软连字符（‐ 或 \u00AD 或 -）后跟换行
+        text = re.sub(r'[\u00AD\-]\s*\n\s*', '', text)
+        # 去除所有换行和多余空白
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    @staticmethod
+    def _calculate_similarity(text_a: str, text_b: str) -> float:
+        """计算两个字符串的字符级相似度（基于最长公共子序列）
+
+        Returns:
+            float: 0.0 ~ 1.0 之间的相似度值
+        """
+        if not text_a or not text_b:
+            return 0.0
+        if text_a == text_b:
+            return 1.0
+
+        len_a, len_b = len(text_a), len(text_b)
+        # 对长文本使用字符集交集近似（避免 O(mn) 的 LCS 复杂度）
+        if len_a > 500 or len_b > 500:
+            set_a = set(text_a)
+            set_b = set(text_b)
+            intersection = len(set_a & set_b)
+            union = len(set_a | set_b)
+            if union == 0:
+                return 0.0
+            # 加权：字符集相似度 60% + 长度比 40%
+            char_sim = intersection / union
+            len_sim = min(len_a, len_b) / max(len_a, len_b)
+            return 0.6 * char_sim + 0.4 * len_sim
+
+        # 短文本使用 LCS
+        # 优化空间：只保留两行
+        prev = [0] * (len_b + 1)
+        curr = [0] * (len_b + 1)
+        for i in range(1, len_a + 1):
+            for j in range(1, len_b + 1):
+                if text_a[i - 1] == text_b[j - 1]:
+                    curr[j] = prev[j - 1] + 1
+                else:
+                    curr[j] = max(prev[j], curr[j - 1])
+            prev, curr = curr, [0] * (len_b + 1)
+
+        lcs_len = prev[len_b] if len_b > 0 else 0
+        max_len = max(len_a, len_b)
+        return lcs_len / max_len if max_len > 0 else 0.0
+
+    @staticmethod
+    def _contains_target_language_chars(text: str) -> bool:
+        """检测文本是否包含目标语言字符（默认检测中文 CJK 统一汉字）"""
+        return bool(re.search(r'[\u4e00-\u9fff]', text))
 
     def translate_original_block(self, task, block_info, index, translator, source_lang, target_lang, doc_type, glossary, total_blocks):
         """翻译单个原始块
@@ -506,8 +628,27 @@ class TranslationContentTranslator:
         )
         translated_text = translation_result.content
         logger.info(f'翻译结果: 结果前200字符="{translated_text[:200]}", 长度={len(translated_text)}')
-        if self._is_translation_unchanged(translated_text, text_block.block_text):
-            logger.warning(f'翻译结果与原文实质相同（可能未翻译）: 原文前100字符="{text_block.block_text[:100]}", 结果前200字符="{translated_text[:200]}"')
+
+        # 检测未翻译并重试
+        original_text = text_block.block_text
+        if self._is_translation_unchanged(translated_text, original_text):
+            logger.warning(f"任务 {task.task_id} 原始块 {index+1} 翻译结果与原文实质相同，尝试重试翻译: 原文前100字符=\"{original_text[:100]}\"")
+            retry_result = translator.translate(
+                original_text,
+                source_lang,
+                target_lang,
+                doc_type=doc_type,
+                glossary=glossary
+            )
+            retry_translation = retry_result.content
+
+            if not self._is_translation_unchanged(retry_translation, original_text):
+                translated_text = retry_translation
+                logger.info(f"任务 {task.task_id} 原始块 {index+1} 重试翻译成功: {translated_text[:100]}")
+            else:
+                translated_text = original_text
+                logger.warning(f"任务 {task.task_id} 原始块 {index+1} 重试翻译仍未成功，回退使用原文: 原文长度={len(original_text)}, 译文长度={len(translated_text)}")
+
         logger.info(f"任务 {task.task_id} 原始块 {index+1} 翻译结果: {translated_text}")
 
         # 检查是否被截断
@@ -520,6 +661,12 @@ class TranslationContentTranslator:
                 "token_usage": translation_result.token_usage,
                 "finish_reason": translation_result.finish_reason
             })
+
+        # 检测翻译结果是否为垃圾输出（覆盖正常和截断两种场景）
+        is_garbage, garbage_reason = self._is_translation_garbage(translated_text, original_text)
+        if is_garbage:
+            logger.warning(f"任务 {task.task_id} 原始块 {index+1} 翻译输出异常，回退使用原文: {garbage_reason}")
+            translated_text = original_text
 
         # 保存翻译结果，用于Word生成
         from models.merged_block import MergedBlock

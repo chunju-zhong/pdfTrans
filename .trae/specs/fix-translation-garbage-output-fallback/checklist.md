@@ -1,0 +1,6 @@
+- [x] `_is_translation_garbage` 方法正确实现长度膨胀检测（译文 > 原文 × 5）
+- [x] `_is_translation_garbage` 方法正确实现重复模式检测（连续重复 > 10 次）
+- [x] `translate_merged_block` 中集成异常检测，垃圾输出回退原文
+- [x] `translate_original_block` 中集成异常检测，垃圾输出回退原文
+- [x] 截断场景下也执行异常检测（不再仅记录 WARNING）
+- [x] 检测到异常时记录 WARNING 日志，包含原文长度、译文长度和异常原因

@@ -92,7 +92,7 @@ class QianfanTranslator(Translator):
                 stream=True,  # 流式调用，避免长请求整体超时
                 temperature=config.TRANSLATION_TEMPERATURE,
                 top_p=config.TRANSLATION_TOP_P,
-                max_tokens=self.max_tokens,
+                max_tokens=self._calculate_max_tokens(text),
                 extra_body=config.QIANFAN_EXTRA_BODY,  # 补传 extra_body（含 enable_thinking 等配置）
                 messages=[
                     {

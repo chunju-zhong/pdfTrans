@@ -1,0 +1,8 @@
+- [x] config.py 中添加 ENABLE_FORMAT_BLOCKS 配置项（默认 'false'，支持 'false'/'true'/'auto'）
+- [x] .env.example 中添加 ENABLE_FORMAT_BLOCKS 配置说明
+- [x] _translate_content 方法接收 output_format 参数
+- [x] 调用 _translate_content 的上层方法正确传递 output_format
+- [x] format_blocks 调用前有条件判断：auto 模式下仅 PDF 包含输出时执行
+- [x] true 模式下始终执行 format_blocks
+- [x] false 模式下始终跳过 format_blocks
+- [x] 跳过时记录 INFO 级别日志

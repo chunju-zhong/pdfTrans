@@ -635,6 +635,12 @@ class Config:
 | `OCR_LLM_TEMPERATURE` | `OCR_LLM_TEMPERATURE` | float | 0.1 | LLM OCR temperature |
 | `OCR_LLM_DPI` | `OCR_LLM_DPI` | int | 150 | LLM OCR render DPI |
 
+#### Translation Quality Control Configuration
+
+| Environment Variable | Config Property | Type | Default | Description |
+|---------------------|-----------------|------|---------|-------------|
+| `ENABLE_FORMAT_BLOCKS` | `ENABLE_FORMAT_BLOCKS` | str | `false` | Post-translation LLM format blocks toggle (`false`/`true`/`auto`) |
+
 #### Per-Module API Parameters
 
 | Environment Variable | Config Property | Type | Default | Description |

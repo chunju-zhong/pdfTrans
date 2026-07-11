@@ -1,0 +1,9 @@
+- [x] `_is_translation_unchanged` 方法正确检测高相似度未翻译场景（去除断字后相似度 > 85% 且不含目标语言字符）
+- [x] `_normalize_for_comparison` 辅助方法正确去除断字标记和多余空白
+- [x] `_calculate_similarity` 辅助方法正确计算字符级相似度
+- [x] `_contains_target_language_chars` 辅助方法正确检测目标语言字符
+- [x] `translate_merged_block` 中检测到未翻译时执行重试翻译
+- [x] 重试时 prompt 追加强调翻译指令
+- [x] 重试仍未翻译时回退使用原文并记录 WARNING 日志
+- [x] `translate_original_block` 中集成与合并块相同的未翻译检测和重试逻辑
+- [x] 正常翻译结果不被误判为未翻译（不含假阳性）

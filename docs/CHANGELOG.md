@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-07-09
+
+- **Added post-translation format blocks toggle (ENABLE_FORMAT_BLOCKS)**:
+  - Added environment variable `ENABLE_FORMAT_BLOCKS`, supporting `false`/`true`/`auto` modes
+  - `false` (default): No format blocks, consistent with previous behavior
+  - `true`: Always execute format blocks
+  - `auto`: Execute format blocks only when output includes PDF (`output_format` is `pdf`/`pdf_docx`/`all`)
+  - `_translate_content` method now accepts `output_format` parameter, passed to `TranslationContentTranslator` for format decision
+  - Files changed: `config.py`, `.env.example`, `services/translation_content.py`, `services/translation_service.py`
+- **Dynamic max_tokens calculation for translators**:
+  - `Translator` base class adds `_calculate_max_tokens()` instance method, dynamically computing `max_tokens` based on input text length
+  - Added standalone function `calculate_max_tokens()` for non-`Translator` subclasses (e.g., `MarkdownGenerator`)
+  - Formula: `min(max(MIN_OUTPUT_TOKENS, estimated_tokens × EXPANSION_FACTOR), max_ceiling)`
+  - Constants: `CHARS_PER_TOKEN=3`, `EXPANSION_FACTOR=3`, `MIN_OUTPUT_TOKENS=256`
+  - All three translators (Aiping/SiliconFlow/Qianfan) switched from fixed to dynamic `max_tokens`
+  - `MarkdownGenerator` and `AipingMarkdownGenerator` layout calls also use dynamic calculation
+  - `format_blocks` layout call uses `config.LAYOUT_MAX_TOKENS` as ceiling
+  - Files changed: `modules/translator.py`, `modules/aiping_translator.py`, `modules/silicon_flow_translator.py`, `modules/qianfan_translator.py`, `modules/markdown_generator.py`
+- **Enhanced untranslated detection and automatic retry**:
+  - `_is_translation_unchanged` adds high-similarity + no-target-language-char detection: determined as untranslated when normalized similarity >85% and translation contains no Chinese characters
+  - Added helper methods: `_normalize_for_comparison` (hyphenation marker cleanup), `_calculate_similarity` (LCS character-level similarity), `_contains_target_language_chars` (CJK character detection)
+  - Merged and original blocks automatically retry translation once when untranslated is detected; use new result on success, otherwise fall back to original text
+  - Files changed: `services/translation_content.py`
+- **Translation garbage output detection**:
+  - Added `_is_translation_garbage` method, detecting abnormal expansion (translation length > original × 5) and repetition patterns (same substring repeated > 10 times consecutively)
+  - Both merged and original block translation results are checked for garbage output; fall back to original text when detected
+  - Files changed: `services/translation_content.py`
+- **Markdown layout prompt optimization**:
+  - Content structure rule improved: added guidance for using different-level subheadings to organize article flow when splitting long paragraphs
+  - Files changed: `modules/markdown_generator.py`
+
 ## 2026-06-28
 
 - **Fixed Qianfan GLM-5.1 thinking mode not disabled**:

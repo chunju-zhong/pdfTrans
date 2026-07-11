@@ -1,5 +1,46 @@
 # AI 开发进度记录
 
+### 2026-07-09
+- **当前状态**：已完成翻译管线多项增强（格式排版开关、动态max_tokens、未翻译检测与重试、垃圾输出检测）
+- **已完成任务**：
+  - 新增翻译后格式排版开关（ENABLE_FORMAT_BLOCKS）：
+    - `config.py` 新增 `ENABLE_FORMAT_BLOCKS` 配置项（`false`/`true`/`auto`）
+    - `.env.example` 添加配置说明
+    - `services/translation_content.py` `_translate_content` 方法新增 `output_format` 参数，根据配置和输出格式判断是否排版
+    - `services/translation_service.py` 传递 `output_format` 参数到翻译内容处理
+  - 翻译器动态 max_tokens 计算：
+    - `modules/translator.py` `Translator` 基类新增 `_calculate_max_tokens()` 实例方法和 `calculate_max_tokens()` 独立函数
+    - 计算公式：`min(max(256, len(input)/3 × 3), ceiling)`
+    - 三个翻译器（Aiping/SiliconFlow/Qianfan）从固定 `self.max_tokens` 改为 `self._calculate_max_tokens(text)`
+    - `MarkdownGenerator` 和 `AipingMarkdownGenerator` 排版调用使用 `calculate_max_tokens()`
+    - `format_blocks` 排版调用使用 `config.LAYOUT_MAX_TOKENS` 作为上限
+  - 翻译未翻译检测增强与自动重试：
+    - `_is_translation_unchanged` 新增高相似度（>85%）+ 无目标语言字符检测
+    - 新增 `_normalize_for_comparison`、`_calculate_similarity`、`_contains_target_language_chars` 辅助方法
+    - 合并块和原始块翻译检测到未翻译时自动重试一次
+  - 翻译垃圾输出检测：
+    - 新增 `_is_translation_garbage` 方法，检测膨胀（>5x）和重复模式（>10次连续重复）
+    - 合并块和原始块翻译结果均检测，检测到时回退原文
+  - Markdown 排版提示词优化：
+    - `modules/markdown_generator.py` 内容结构规则增加子标题组织指导
+- **技术实现**：
+  - 格式排版三模式设计：`false`（默认关闭，向后兼容）/ `true`（始终启用）/ `auto`（智能判断，仅 PDF 输出时启用）
+  - 动态 max_tokens 避免 LLM 短文本过度分配和长文本截断
+  - 未翻译检测采用双重策略：原有 `|||` 分段检测 + 新增高相似度+无目标语言字符检测
+  - 相似度计算对长文本（>500字符）使用字符集交集近似（O(n)），短文本使用 LCS（O(mn)）
+  - 垃圾输出检测覆盖两个典型场景：LLM 异常膨胀和 LLM 重复输出
+- **影响**：
+  - 格式排版默认关闭，减少不必要的 LLM 调用，降低 API 成本和延迟
+  - 动态 max_tokens 提高短文本翻译效率，避免长文本截断
+  - 未翻译自动重试和垃圾输出检测提高翻译质量，减少手动干预
+  - 向后兼容：`ENABLE_FORMAT_BLOCKS=false` 时行为与之前一致
+- **遇到的问题**：
+  - 无重大问题，开发过程顺利
+- **后续计划**：
+  - 运行时验证动态 max_tokens 计算效果
+  - 验证格式排版 auto 模式在不同输出格式下的行为
+  - 监控垃圾输出检测的误报率
+
 ### 2026-06-28
 - **当前状态**：已完成千帆 GLM-5.1 思考模式未关闭问题的修复
 - **已完成任务**：

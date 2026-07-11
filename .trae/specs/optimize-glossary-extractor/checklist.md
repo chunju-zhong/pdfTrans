@@ -1,0 +1,8 @@
+- [x] Checkpoint 1: `extract_glossary()` 函数行数不超过50行
+- [x] Checkpoint 2: `_build_prompt()`、`_call_api()`、`_process_response()` 方法各不超过50行
+- [x] Checkpoint 3: 提示词模板中不存在重复的"核心要求"文本
+- [x] Checkpoint 4: `bo_to_zh.py` 中存在 `TIBETAN_TERMINOLOGY_MAP` 常量
+- [x] Checkpoint 5: 翻译规则和术语提取规则均引用 `TIBETAN_TERMINOLOGY_MAP` 常量
+- [x] Checkpoint 6: `pytest tests/test_glossary_extractor.py` 通过
+- [x] Checkpoint 7: `pytest tests/test_translator.py` 通过
+- [x] Checkpoint 8: 代码符合PEP 8规范

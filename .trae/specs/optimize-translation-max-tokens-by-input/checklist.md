@@ -1,0 +1,11 @@
+- [x] `_calculate_max_tokens` 方法正确实现动态计算逻辑（CHARS_PER_TOKEN=3, EXPANSION_FACTOR=3, MIN_OUTPUT_TOKENS=256）
+- [x] `_calculate_max_tokens` 尊重 max_ceiling 和 self.max_tokens 上限
+- [x] `_calculate_max_tokens` 提取为可复用的独立函数 `calculate_max_tokens`（供 MarkdownGenerator 等非 Translator 子类使用）
+- [x] AipingTranslator.translate 使用动态 max_tokens
+- [x] SiliconFlowTranslator.translate 使用动态 max_tokens
+- [x] QianfanTranslator.translate 使用动态 max_tokens
+- [x] format_blocks 使用动态 max_tokens，上限为 config.LAYOUT_MAX_TOKENS（不再硬编码 4096）
+- [x] MarkdownGenerator 基类 _call_api 使用动态 max_tokens
+- [x] AipingMarkdownGenerator _call_api 使用动态 max_tokens
+- [x] 包含 DEBUG 日志记录估算 tokens 和计算出的 max_tokens
+- [x] 语义分析、术语提取、LLM OCR 保持原有固定 max_tokens 不变

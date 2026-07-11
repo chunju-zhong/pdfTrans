@@ -7,6 +7,7 @@ from openai import OpenAI
 from models.result_types import MarkdownResult, TruncationInfo
 from config import config
 from modules.llm_error_handler import classify_llm_error
+from modules.translator import calculate_max_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,8 @@ class MarkdownGenerator:
 
 1.  **内容结构**：
     * 适当拆分长分段，保持逻辑清晰
-    * 内容跟原文一致，不丢失原文内容，不出现原文没有的内容
+    * 不丢失原文内容，不出现原文没有的内容
+    * 使用不同级别的子标题（如 `##`、`###`）来组织文章脉络，使其逻辑清晰。
 2.  **突出重点 (句子优先)**：
     * 内容要与原文意思一致，不丢失原文内容，不出现原文没有的内容，
     * **有选择性地**使用粗体 (`**`) 来突出你在步骤 A.1 确定的**核心论点**、**关键结论**、**重要定义**或**金句**。
@@ -190,7 +192,7 @@ class MarkdownGenerator:
                 model=self.model,
                 stream=True,  # 启用流式响应
                 temperature=config.LAYOUT_TEMPERATURE,
-                max_tokens=self.max_tokens,  # 使用类属性作为最大token数
+                max_tokens=calculate_max_tokens(user_prompt, self.max_tokens),
                 timeout=60.0,  # 增加超时时间
                 extra_body=config.SILICON_FLOW_EXTRA_BODY,
                 messages=[
@@ -1351,7 +1353,7 @@ class AipingMarkdownGenerator(MarkdownGenerator):
                 model=self.model,
                 stream=True,  # 启用流式响应
                 temperature=config.LAYOUT_TEMPERATURE,
-                max_tokens=self.max_tokens,
+                max_tokens=calculate_max_tokens(user_prompt, self.max_tokens),
                 timeout=60.0,  # 增加超时时间
                 messages=[
                     {

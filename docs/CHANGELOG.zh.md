@@ -1,5 +1,36 @@
 # 更新日志
 
+## 2026-07-09
+
+- **新增翻译后格式排版开关（ENABLE_FORMAT_BLOCKS）**：
+  - 新增环境变量 `ENABLE_FORMAT_BLOCKS`，支持 `false`/`true`/`auto` 三种模式
+  - `false`（默认）：不执行格式排版，与原有行为一致
+  - `true`：始终执行格式排版
+  - `auto`：仅输出 PDF 格式时执行格式排版（`output_format` 为 `pdf`/`pdf_docx`/`all` 时）
+  - `_translate_content` 方法新增 `output_format` 参数，传递到 `TranslationContentTranslator` 用于判断是否排版
+  - 相关文件：`config.py`、`.env.example`、`services/translation_content.py`、`services/translation_service.py`
+- **翻译器动态 max_tokens 计算**：
+  - `Translator` 基类新增 `_calculate_max_tokens()` 实例方法，根据输入文本长度动态计算 `max_tokens`
+  - 新增独立函数 `calculate_max_tokens()`，供非 `Translator` 子类（如 `MarkdownGenerator`）使用
+  - 计算公式：`min(max(MIN_OUTPUT_TOKENS, estimated_tokens × EXPANSION_FACTOR), max_ceiling)`
+  - 常量：`CHARS_PER_TOKEN=3`、`EXPANSION_FACTOR=3`、`MIN_OUTPUT_TOKENS=256`
+  - 三个翻译器（Aiping/SiliconFlow/Qianfan）的 `max_tokens` 从固定值改为动态计算
+  - `MarkdownGenerator` 和 `AipingMarkdownGenerator` 的排版调用同样使用动态计算
+  - `format_blocks` 排版调用使用 `config.LAYOUT_MAX_TOKENS` 作为上限
+  - 相关文件：`modules/translator.py`、`modules/aiping_translator.py`、`modules/silicon_flow_translator.py`、`modules/qianfan_translator.py`、`modules/markdown_generator.py`
+- **翻译未翻译检测增强与自动重试**：
+  - `_is_translation_unchanged` 新增高相似度+无目标语言字符检测：去除断字标记后计算相似度 >85% 且译文不含中文字符时判定为未翻译
+  - 新增辅助方法：`_normalize_for_comparison`（断字标记清理）、`_calculate_similarity`（LCS 字符级相似度）、`_contains_target_language_chars`（CJK 字符检测）
+  - 合并块和原始块翻译检测到未翻译时，自动重试一次翻译；重试成功使用新结果，否则回退原文
+  - 相关文件：`services/translation_content.py`
+- **翻译垃圾输出检测**：
+  - 新增 `_is_translation_garbage` 方法，检测异常膨胀（译文长度 > 原文 × 5）和重复模式（同一子串连续重复 > 10 次）
+  - 合并块和原始块翻译结果均检测垃圾输出，检测到时回退原文
+  - 相关文件：`services/translation_content.py`
+- **Markdown 排版提示词优化**：
+  - 内容结构规则优化：拆分长分段时增加使用不同级别子标题组织文章脉络的指导
+  - 相关文件：`modules/markdown_generator.py`
+
 ## 2026-06-28
 
 - **修复千帆 GLM-5.1 思考模式未关闭**：

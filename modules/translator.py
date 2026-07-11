@@ -1,9 +1,29 @@
 import logging
 import re
 
+from config import config
 from models.result_types import TranslationResult, TruncationInfo
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_max_tokens(input_text, max_ceiling, chars_per_token=3, expansion_factor=3, min_output_tokens=256):
+    """独立函数版本，供非 Translator 子类使用
+
+    Args:
+        input_text: 输入文本
+        max_ceiling: 最大上限
+        chars_per_token: 每个token对应的字符数，默认3
+        expansion_factor: 扩展因子，默认3
+        min_output_tokens: 最小输出token数，默认256
+
+    Returns:
+        int: 计算出的 max_tokens
+    """
+    estimated_tokens = len(input_text) / chars_per_token
+    dynamic = max(min_output_tokens, int(estimated_tokens * expansion_factor))
+    return min(dynamic, max_ceiling)
+
 
 _FORMAT_SYSTEM_PROMPT = """你是一个PDF翻译排版质量检查助手。你的工作是检查并优化文本块的格式排版，
 使内容在格式上更清晰、更美观、更专业。
@@ -42,6 +62,11 @@ class Translator:
     
     定义翻译API的统一接口，具体翻译服务需要继承此类并实现translate方法。
     """
+    
+    # 动态 max_tokens 计算常量
+    CHARS_PER_TOKEN = 3
+    EXPANSION_FACTOR = 3
+    MIN_OUTPUT_TOKENS = 256
     
     def __init__(self, api_key, api_url=None):
         """初始化翻译器
@@ -150,6 +175,23 @@ class Translator:
         """
         return lang_code in self.supported_languages
 
+    def _calculate_max_tokens(self, input_text, max_ceiling=None):
+        """根据输入文本长度动态计算 max_tokens
+
+        Args:
+            input_text: 输入文本
+            max_ceiling: 最大上限，默认使用 self.max_tokens
+
+        Returns:
+            int: 计算出的 max_tokens
+        """
+        estimated_tokens = len(input_text) / self.CHARS_PER_TOKEN
+        dynamic = max(self.MIN_OUTPUT_TOKENS, int(estimated_tokens * self.EXPANSION_FACTOR))
+        ceiling = max_ceiling if max_ceiling is not None else self.max_tokens
+        result = min(dynamic, ceiling)
+        logger.debug(f"动态max_tokens: 输入{len(input_text)}字符, 估算{estimated_tokens:.0f}tokens, 计算={dynamic}, 上限={ceiling}, 最终={result}")
+        return result
+
     def format_blocks(self, translated_texts, target_lang="zh"):
         """使用LLM对翻译后的文本块进行格式排版优化
 
@@ -194,7 +236,7 @@ class Translator:
             model=self.model,
             stream=True,
             temperature=0.1,
-            max_tokens=4096,
+            max_tokens=self._calculate_max_tokens(blocks_text, max_ceiling=config.LAYOUT_MAX_TOKENS),
             messages=[
                 {"role": "system", "content": _FORMAT_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}

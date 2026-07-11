@@ -455,8 +455,8 @@ class TestTableHtmlParser:
         parser.feed(html)
 
         assert len(parser.rows) == 2
-        assert parser.rows[0] == ['A', 'B']
-        assert parser.rows[1] == ['1', '2']
+        assert parser.rows[0] == [('A', 1, 1), ('B', 1, 1)]
+        assert parser.rows[1] == [('1', 1, 1), ('2', 1, 1)]
 
     def test_parse_empty_table(self):
         """测试空表格解析"""

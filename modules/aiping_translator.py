@@ -95,7 +95,7 @@ class AipingTranslator(Translator):
                     stream=True,  # 保持流式调用，兼容现有测试
                     temperature=config.TRANSLATION_TEMPERATURE,
                     top_p=config.TRANSLATION_TOP_P,
-                    max_tokens=self.max_tokens,  # 使用类属性作为最大token数
+                    max_tokens=self._calculate_max_tokens(text),  # 动态计算max_tokens
                     extra_body=config.AIPING_EXTRA_BODY,
                     messages=[
                         {

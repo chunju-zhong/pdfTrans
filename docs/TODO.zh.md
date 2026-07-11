@@ -39,6 +39,10 @@
   - 在 `split_translated_result` 函数中添加标题识别和换行符清理
   - 添加 `_is_title_block` 函数判断原始块是否是标题
   - 清理策略：将 `\n` 替换为空格，清理多余空格
+- [x] 新增翻译后格式排版开关（ENABLE_FORMAT_BLOCKS: false/true/auto）
+- [x] 翻译器动态 max_tokens 计算（替代固定值，减少截断和浪费）
+- [x] 翻译未翻译检测增强与自动重试（相似度+目标语言字符检测，重试机制）
+- [x] 翻译垃圾输出检测与回退（膨胀检测>5x，重复模式>10次）
 - [ ] 优化LaTeX公式语法修复能力，处理模型输出的语法错误
 - [x] 修复 PaddleOCR 表格 bbox 未加入 processed_pixel_bboxes 导致内容不显示
 - [x] 修复 PaddleOCR _compute_table_grid() 未设置 estimated_lines
@@ -74,6 +78,12 @@
   - 解决方案：更新 3 个测试的 mock 为流式响应格式，参考 `test_aiping_translate` 的 mock 模式（`mock_stream_chunk.choices = [MagicMock(delta=MagicMock(content='你好'))]`，`mock_create.return_value = [mock_stream_chunk]`）
 
 ## 中优先级
+- [x] 修复 test_llm_extractor_multi_bbox.py（6个用例）：OcrBlock 重构后返回值与测试预期不一致
+- [x] 修复 test_llm_extractor_parse_response.py（2个用例）：JSON 解析逻辑已重构到 llm_response_parser.py
+- [x] 修复 test_llm_ocr.py::TestMixedFormulaTextRendering（5个用例）：text_renderer 属性访问方式变更
+- [x] 修复 test_ocr_extractor.py::TestTableHtmlParser::test_parse_simple_table：表格解析返回格式变更（元组 vs 字符串）
+- [x] 修复 test_output_filename.py::test_process_translation_sync_passes_output_filename：_generate_outputs 不接受 layout_model 参数
+- [x] 修复 test_python_review_fixes.py（3个用例）：代码结构检查基于旧文件结构（解析逻辑已重构到 llm_response_parser.py）
 - [x] 修复 test_pdf_page_translation.py::TestPdfPageTranslationIntegration::test_process_translation_with_no_matching_pages
   - 原因：mock验证失败，update_progress调用次数不正确
   - 方案：更新测试中的mock验证逻辑

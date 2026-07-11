@@ -188,6 +188,7 @@ All configuration is set via the `.env` file or environment variables, loaded by
 | `USE_TWO_PHASE_MERGE` | Use two-phase parallel merge | `true` | No |
 | `MERGE_MAX_WORKERS` | Maximum threads for parallel merge | `5` | No |
 | `MERGE_BATCH_SIZE` | Number of text pairs per batch | `20` | No |
+| `ENABLE_FORMAT_BLOCKS` | Post-translation LLM format blocks toggle (`false`/`true`/`auto`) | `false` | No |
 
 ### 2.8 LLM OCR Configuration
 
